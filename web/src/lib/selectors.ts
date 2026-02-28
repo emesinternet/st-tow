@@ -227,7 +227,11 @@ function buildPlayerInputModel(
     disabledReason = 'Waiting for host to start the match.';
   } else if (match.phase !== 'InGame' && match.phase !== 'SuddenDeath') {
     disabledReason = 'Submissions are currently closed.';
-  } else if (!playerState || !playerState.currentWord) {
+  }
+
+  const resolvedWord = playerState?.currentWord ?? '';
+
+  if (!disabledReason && !resolvedWord) {
     disabledReason = 'Waiting for your next word.';
   }
 
@@ -236,7 +240,7 @@ function buildPlayerInputModel(
     playerName: player.displayName,
     playerStatus: player.status,
     eliminatedReason: player.eliminatedReason,
-    currentWord: playerState?.currentWord ?? '',
+    currentWord: resolvedWord,
     canSubmit: disabledReason == null,
     disabledReason,
     deadlineAtMicros:

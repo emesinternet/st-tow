@@ -39,7 +39,7 @@ import {
   settingId,
   tugPlayerStateId,
 } from './core/helpers';
-import { pickRandomWord } from './games/tug_of_war/words';
+import { pickRandomWord, pickRandomWordExcluding } from './games/tug_of_war/words';
 
 const lobbyRow = {
   lobby_id: t.string().primaryKey(),
@@ -348,6 +348,73 @@ function listTugPlayerStatesByMatch(
   return rows;
 }
 
+function pickWordForPlayer(
+  ctx: ReducerCtx<any>,
+  matchId: string,
+  playerId: string
+): string {
+  const excluded = new Set<string>();
+  for (const row of listTugPlayerStatesByMatch(ctx, matchId)) {
+    if (row.player_id === playerId) {
+      continue;
+    }
+    if (row.current_word) {
+      excluded.add(row.current_word);
+    }
+  }
+  return pickRandomWordExcluding(ctx, excluded);
+}
+
+function ensureTugPlayerStateForActiveMatch(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  player: PlayerRow
+): void {
+  if (!lobby.active_match_id || lobby.game_type !== GAME_TYPE_TUG_OF_WAR) {
+    return;
+  }
+
+  const match = getMatchById(ctx, lobby.active_match_id);
+  if (!match) {
+    return;
+  }
+
+  if (
+    match.phase !== MATCH_PHASE_IN_GAME &&
+    match.phase !== MATCH_PHASE_SUDDEN_DEATH
+  ) {
+    return;
+  }
+
+  const id = tugPlayerStateId(match.match_id, player.player_id);
+  const existing = getTugPlayerStateById(ctx, id);
+  const tug = getTugStateByMatchId(ctx, match.match_id);
+  const now = nowMicros(ctx);
+  const deadline =
+    match.phase === MATCH_PHASE_SUDDEN_DEATH && tug
+      ? now + msToMicros(tug.elimination_word_time_ms)
+      : 0n;
+
+  if (existing) {
+    replaceRow(ctx.db.tug_player_state, existing, {
+      ...existing,
+      current_word: existing.current_word || pickWordForPlayer(ctx, match.match_id, player.player_id),
+      deadline_at_micros: deadline,
+    });
+    return;
+  }
+
+  ctx.db.tug_player_state.insert({
+    tug_player_state_id: id,
+    match_id: match.match_id,
+    player_id: player.player_id,
+    current_word: pickWordForPlayer(ctx, match.match_id, player.player_id),
+    correct_count: 0,
+    last_submit_at_micros: 0n,
+    deadline_at_micros: deadline,
+  });
+}
+
 function assertHost(ctx: ReducerCtx<any>, lobby: LobbyRow): void {
   if (!lobby.host_identity.equals(ctx.sender)) {
     throw new Error('Only the lobby host can call this reducer');
@@ -575,7 +642,7 @@ function initializeTugState(
       tug_player_state_id: id,
       match_id: match.match_id,
       player_id: player.player_id,
-      current_word: pickRandomWord(ctx),
+      current_word: pickWordForPlayer(ctx, match.match_id, player.player_id),
       correct_count: 0,
       last_submit_at_micros: 0n,
       deadline_at_micros: 0n,
@@ -880,14 +947,16 @@ export const join_lobby = spacetimedb.reducer(
         team = chooseBalancedTeam(listPlayersInLobby(ctx, lobby.lobby_id));
       }
 
-      replaceRow(ctx.db.player, existing, {
+      const reconnectedPlayer: PlayerRow = {
         ...existing,
         display_name: normalizedName,
         status: PLAYER_STATUS_ACTIVE,
         team,
         left_at_micros: 0n,
         eliminated_reason: '',
-      });
+      };
+      replaceRow(ctx.db.player, existing, reconnectedPlayer);
+      ensureTugPlayerStateForActiveMatch(ctx, lobby, reconnectedPlayer);
 
       emitGameEvent(ctx, lobby.lobby_id, lobby.active_match_id, 'player_reconnected', {
         player_id: existing.player_id,
@@ -897,7 +966,7 @@ export const join_lobby = spacetimedb.reducer(
 
     const team = chooseBalancedTeam(listPlayersInLobby(ctx, lobby.lobby_id));
     const playerId = newId(ctx, 'player');
-    ctx.db.player.insert({
+    const newPlayer: PlayerRow = {
       player_id: playerId,
       lobby_id: lobby.lobby_id,
       identity: ctx.sender,
@@ -908,7 +977,9 @@ export const join_lobby = spacetimedb.reducer(
       joined_at: ctx.timestamp,
       left_at_micros: 0n,
       eliminated_reason: '',
-    });
+    };
+    ctx.db.player.insert(newPlayer);
+    ensureTugPlayerStateForActiveMatch(ctx, lobby, newPlayer);
 
     emitGameEvent(ctx, lobby.lobby_id, lobby.active_match_id, 'player_joined', {
       player_id: playerId,
@@ -1154,7 +1225,7 @@ export const tug_submit = spacetimedb.reducer(
 
     if (correct) {
       playerStateNext.correct_count += 1;
-      playerStateNext.current_word = pickRandomWord(ctx);
+      playerStateNext.current_word = pickWordForPlayer(ctx, match_id, player.player_id);
       if (tug.mode === TUG_MODE_ELIMINATION) {
         playerStateNext.deadline_at_micros =
           now + msToMicros(tug.elimination_word_time_ms);

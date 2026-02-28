@@ -94,12 +94,12 @@ Flow:
 ### Current Tug Rules (Important)
 
 - Every active player has their own assigned `current_word` in `tug_player_state`.
-- Words **do not rotate on a timer**.
+- Words do not rotate on a timer.
 - A player gets a new random word only after correctly completing their current one.
 - In sudden death:
   - wrong submit eliminates player immediately
   - deadline timeout eliminates player
-- If both teams reach zero active players in sudden death on the same tick, match now ends (no hang).
+- If both teams reach zero active players in sudden death on the same tick, match ends (no hang).
 
 ### Web Client Structure
 
@@ -138,65 +138,72 @@ Generated bindings:
 - Sticky-focus player input with progressive fill and auto-submit on completion (no Enter required).
 - Event feed from `game_event` telemetry.
 
-## Environment Model (Windows + WSL Split)
+## Environment Model (Windows launcher, WSL runtime)
 
 Use this split consistently:
 
-- **PowerShell**: all `spacetime ...` commands
-- **WSL terminal (VSCode)**: `npm`, `vite`, typecheck/build, editing
+- Windows PowerShell: launch orchestration only
+- WSL: all runtime commands (`spacetime`, `publish`, `generate`, `vite`, `npm`)
 
-Avoid running Windows `spacetime` from WSL unless explicitly needed.
+Never run publish/generate through Windows UNC working directories.
 
 ## Canonical Local Run Sequence
 
-### 1) Start local SpacetimeDB (PowerShell terminal #1)
+### 1) Launch from Windows
 
 ```powershell
-taskkill /F /IM spacetimedb-standalone.exe 2>$null
-taskkill /F /IM spacetimedb-cli.exe 2>$null
-New-Item -ItemType Directory -Force C:\temp\stdb-local\data | Out-Null
-spacetime start --data-dir "C:/temp/stdb-local/data" --listen-addr 127.0.0.1:3000 --in-memory --non-interactive
+cd C:\Users\emesi\Desktop\scripts
+.\launch-local-windows.ps1
 ```
 
-Keep it running.
+This launches 3 windows:
 
-### 2) Publish module (PowerShell terminal #2)
+- `st-tow: server`
+- `st-tow: publish+generate`
+- `st-tow: web`
+
+### 2) Optional helper modes
 
 ```powershell
-cd \\wsl.localhost\Ubuntu\home\tsuda\repos\st-tow\server
-spacetime publish st-tow-dev --server local -p . -y --anonymous
+cd C:\Users\emesi\Desktop\scripts
+.\launch-local-windows.ps1 -FirstRunChecks
+.\launch-local-windows.ps1 -StopOnly
+.\launch-local-windows.ps1 -DatabaseName st-tow-dev-20260228010101
 ```
 
-### 3) Regenerate web bindings only when signatures/schema changed (WSL)
+### 3) Linux-side scripts used by launcher
 
-```bash
-cd ~/repos/st-tow/web
-spacetime generate --lang typescript --out-dir src/module_bindings --module-path "$(wslpath -w ~/repos/st-tow/server)"
-```
+- `scripts/local/doctor.sh`
+- `scripts/local/start_server.sh`
+- `scripts/local/publish_and_generate.sh`
+- `scripts/local/start_web.sh`
 
-### 4) Run web dev server (WSL)
+Notes:
 
-```bash
-cd ~/repos/st-tow/web
-VITE_SPACETIMEDB_DB_NAME=st-tow-dev VITE_SPACETIMEDB_HOST=ws://127.0.0.1:3000 npm run dev -- --host 127.0.0.1 --port 5173
-```
+- `start_server.sh` uses `C:/temp/stdb-local/data` by default to avoid lock errors when WSL invokes the Windows Spacetime binary.
+- `publish_and_generate.sh` publishes via `--js-path server/dist/bundle.js` to avoid UNC build-context failures.
 
-Open `http://127.0.0.1:5173`.
+### 4) Flags and logs for each run
+
+Given DB name `<db>`, launcher writes under:
+
+- `/tmp/sttow/<db>/ready.flag`
+- `/tmp/sttow/<db>/fail.flag`
+- `/tmp/sttow/<db>/publish.log`
+- `/tmp/sttow/<db>/generate.log`
+- `/tmp/sttow/<db>/web.log`
 
 ## Hot Reload Expectations
 
 - `web/` edits: Vite hot reload.
 - `server/` edits: not hot-reloaded.
 
-After any server logic change:
+After server logic changes:
 
-1. republish module (PowerShell)
-2. regenerate bindings if reducer/table signatures changed (WSL)
-3. refresh browser
+1. restart launcher or rerun publish flow
+2. refresh browser
 
-## Build / Check Commands
-
-WSL:
+## Build / Check Commands (WSL)
 
 ```bash
 cd ~/repos/st-tow/server && npm run typecheck
@@ -204,52 +211,61 @@ cd ~/repos/st-tow/web && npm run typecheck
 cd ~/repos/st-tow/web && npm run build
 ```
 
-PowerShell:
-
-```powershell
-cd \\wsl.localhost\Ubuntu\home\tsuda\repos\st-tow\server
-spacetime build
-```
-
 ## Known Failure Modes
 
-### A) `403 ... not authorized to update database`
+### A) `publish failed`
 
-Cause: local DB owned by different identity.
+Cause:
 
-Fix:
-
-- publish to fresh DB name (e.g. `st-tow-dev`)
-- keep publish mode consistent (`--anonymous`)
-
-### B) `spacetime.pid` lock errors (`os error 1`/`33`)
-
-Cause: multiple Windows `spacetime` processes.
+- compile/publish error in module
+- server not ready
+- DB auth mismatch
 
 Fix:
 
-```powershell
-taskkill /F /IM spacetimedb-standalone.exe 2>$null
-taskkill /F /IM spacetimedb-cli.exe 2>$null
-```
+- inspect `/tmp/sttow/<db>/publish.log`
+- confirm server window is running on `127.0.0.1:3000`
+- republish with fresh DB name (default timestamp naming already does this)
+- if log shows `missing bundle`, ensure `server/dist/bundle.js` exists
 
-Then restart server.
+### B) `generate failed`
 
-### C) Connection refused on `127.0.0.1:3000`
+Cause:
 
-Cause: local SpacetimeDB not running.
+- binding generation error after publish
 
-Fix: restart step (1).
+Fix:
 
-### D) Wrong DB name in browser connection
+- inspect `/tmp/sttow/<db>/generate.log`
+- rerun after fixing schema/reducer issues
 
-Cause: published DB and web env mismatch.
+### C) Web window exits with publish/generate failure
 
-Fix: run web with matching `VITE_SPACETIMEDB_DB_NAME`.
+Cause:
+
+- `fail.flag` created by publish step
+
+Fix:
+
+- inspect publish/generate logs for same DB run
+
+### D) Web disconnected from SpacetimeDB
+
+Cause:
+
+- server stopped
+- DB name mismatch
+
+Fix:
+
+- keep server window running
+- verify `VITE_SPACETIMEDB_DB_NAME` matches published DB (launcher sets this automatically)
 
 ### E) Landing/join screen missing unexpectedly
 
-Cause: stale browser auth token auto-rejoins previous identity context.
+Cause:
+
+- stale browser auth token auto-rejoins previous identity context
 
 Fix in browser console:
 

@@ -52,11 +52,13 @@ export function MatchHud({ hud }: MatchHudProps) {
         </div>
 
         <div className="rounded-[12px] border-4 border-neo-ink bg-neo-yellow/40 p-4 shadow-neo-sm">
-          <p className="mb-1 font-display text-xs font-bold uppercase tracking-wide text-neo-muted">Current Word</p>
-          <p className="break-all font-display text-4xl font-black leading-none text-neo-ink sm:text-5xl">
-            {hud.currentWord || '...'}
+          <p className="mb-1 font-display text-xs font-bold uppercase tracking-wide text-neo-muted">Typing Model</p>
+          <p className="font-display text-2xl font-black leading-tight text-neo-ink sm:text-3xl">
+            Per-player random words
           </p>
-          <p className="mt-2 font-mono text-xs text-neo-muted">version={hud.wordVersion}</p>
+          <p className="mt-2 font-body text-xs text-neo-muted">
+            Each active player sees and advances their own target word stream.
+          </p>
         </div>
       </CardContent>
     </Card>

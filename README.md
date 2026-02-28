@@ -14,10 +14,10 @@ Realtime SpacetimeDB tug-of-war game with a React web client.
 - Host creates a lobby and shares a join code.
 - Players join, are balanced into team A/B, and complete words to add team force.
 - Match flow: `Waiting -> InGame -> SuddenDeath -> PostGame`.
-- Words are **per-player**. Each player gets their own random target word stream.
-- Words **do not rotate on a timer**; a new word is assigned only after that player completes the current one.
-- In sudden death, active players must complete their current word before their deadline.
-- If both teams are eliminated at the same tick, the match now ends deterministically (no hang).
+- Words are per-player. Each player gets their own random target stream.
+- Words do not rotate on a timer; a new word is assigned only when that player completes the current word.
+- In sudden death, active players must complete their word before their deadline.
+- If both teams are eliminated on the same tick, the match ends deterministically.
 
 ## Reducers
 
@@ -38,44 +38,61 @@ Tug-of-war:
 - `tug_tick`
 - `tug_tick_scheduled`
 
-## Local Development (Windows CLI + WSL code workflow)
+## Local Development (Windows launcher + WSL runtime)
 
-This project currently assumes:
+This project now uses a WSL-native runtime model:
 
-- `spacetime` CLI is run from **Windows PowerShell**
-- Node/Vite/dev commands are run from **WSL terminal in VSCode**
+- Windows PowerShell only orchestrates terminal windows.
+- `spacetime`, `publish`, `generate`, and `vite` run inside WSL.
+- No UNC working directory execution is used for publish/generate.
 
-### 1) Start local SpacetimeDB (PowerShell)
+### One-time checks
 
-```powershell
-taskkill /F /IM spacetimedb-standalone.exe 2>$null
-taskkill /F /IM spacetimedb-cli.exe 2>$null
-New-Item -ItemType Directory -Force C:\temp\stdb-local\data | Out-Null
-spacetime start --data-dir "C:/temp/stdb-local/data" --listen-addr 127.0.0.1:3000 --in-memory --non-interactive
-```
-
-### 2) Publish module (PowerShell)
+From Windows PowerShell:
 
 ```powershell
-cd \\wsl.localhost\Ubuntu\home\tsuda\repos\st-tow\server
-spacetime publish st-tow-dev --server local -p . -y --anonymous
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+wsl -d Ubuntu -e bash -lc "command -v spacetime && command -v npm && command -v nvm || true"
 ```
 
-### 3) (Optional) Regenerate web bindings after schema/reducer signature changes (WSL)
+### Daily start command
 
-```bash
-cd ~/repos/st-tow/web
-spacetime generate --lang typescript --out-dir src/module_bindings --module-path "$(wslpath -w ~/repos/st-tow/server)"
+From Windows PowerShell:
+
+```powershell
+cd C:\Users\emesi\Desktop\scripts
+.\launch-local-windows.ps1
 ```
 
-### 4) Run web app (WSL)
+What it launches:
 
-```bash
-cd ~/repos/st-tow/web
-VITE_SPACETIMEDB_DB_NAME=st-tow-dev VITE_SPACETIMEDB_HOST=ws://127.0.0.1:3000 npm run dev -- --host 127.0.0.1 --port 5173
+- terminal 1: WSL `spacetime start`
+- terminal 2: WSL publish + bindings generate
+- terminal 3: WSL web dev server (waits for publish/generate success)
+
+Implementation detail:
+
+- local server uses `C:/temp/stdb-local/data` for lock compatibility with the Windows Spacetime binary invoked from WSL.
+- publish uses `--js-path server/dist/bundle.js` to avoid UNC build-context issues.
+
+### Optional launcher commands
+
+```powershell
+cd C:\Users\emesi\Desktop\scripts
+.\launch-local-windows.ps1 -FirstRunChecks
+.\launch-local-windows.ps1 -StopOnly
+.\launch-local-windows.ps1 -DatabaseName st-tow-dev-20260228010101
 ```
 
-Open `http://127.0.0.1:5173`.
+### Run artifacts and logs
+
+All run-state files live in WSL:
+
+- `/tmp/sttow/<db>/ready.flag`
+- `/tmp/sttow/<db>/fail.flag`
+- `/tmp/sttow/<db>/publish.log`
+- `/tmp/sttow/<db>/generate.log`
+- `/tmp/sttow/<db>/web.log`
 
 ## Build and Typecheck
 
@@ -87,19 +104,19 @@ cd ~/repos/st-tow/web && npm run typecheck
 cd ~/repos/st-tow/web && npm run build
 ```
 
-PowerShell:
-
-```powershell
-cd \\wsl.localhost\Ubuntu\home\tsuda\repos\st-tow\server
-spacetime build
-```
-
 ## Common Issues
 
-- `403 not authorized`: publish to a fresh DB name or keep identity mode consistent.
-- `No connection could be made ... 127.0.0.1:3000`: local SpacetimeDB is not running.
-- DB mismatch (`st-tow` vs `st-tow-dev`): launch web with `VITE_SPACETIMEDB_DB_NAME` matching publish target.
-- Old session token causing confusing auto-lobby behavior:
+- `publish failed` in launcher:
+  - open `/tmp/sttow/<db>/publish.log`
+  - validate `spacetime` exists in WSL (`command -v spacetime`)
+- `publish failed` with `missing bundle`:
+  - ensure `/home/tsuda/repos/st-tow/server/dist/bundle.js` exists
+- web terminal exits with publish/generate failure:
+  - inspect `/tmp/sttow/<db>/publish.log` and `/tmp/sttow/<db>/generate.log`
+- web says disconnected:
+  - confirm server terminal is still running on `127.0.0.1:3000`
+  - confirm web DB env matches published DB name
+- auth token confusion (unexpected auto-lobby behavior):
 
 ```js
 localStorage.removeItem('auth_token');
