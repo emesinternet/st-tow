@@ -1009,10 +1009,17 @@ function initGameForMatch(
 export const init = spacetimedb.init(_ctx => {});
 
 export const create_lobby = spacetimedb.reducer(
-  { game_type: t.string() },
-  (ctx, { game_type }) => {
+  {
+    game_type: t.string(),
+    round_seconds: t.i32(),
+  },
+  (ctx, { game_type, round_seconds }) => {
     if (game_type !== GAME_TYPE_TUG_OF_WAR) {
       throw new Error(`Unsupported game type: ${game_type}`);
+    }
+
+    if (round_seconds < 60 || round_seconds > 3600) {
+      throw new Error('round_seconds must be between 60 and 3600');
     }
 
     let joinCode = '';
@@ -1040,9 +1047,16 @@ export const create_lobby = spacetimedb.reducer(
     });
 
     seedDefaultLobbySettings(ctx, lobbyId);
+    upsertLobbySetting(
+      ctx,
+      lobbyId,
+      LOBBY_SETTING_KEYS.round_seconds,
+      JSON.stringify(round_seconds)
+    );
     emitGameEvent(ctx, lobbyId, '', 'lobby_created', {
       join_code: joinCode,
       game_type,
+      round_seconds,
     });
   }
 );

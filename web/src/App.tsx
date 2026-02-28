@@ -42,6 +42,8 @@ export default function App() {
 
   const [displayName, setDisplayName] = useState('Player');
   const [joinCode, setJoinCode] = useState('');
+  const [roundMinutes, setRoundMinutes] = useState(1);
+  const [pendingRoundSeconds, setPendingRoundSeconds] = useState<number | null>(null);
   const [pendingJoinCode, setPendingJoinCode] = useState('');
   const [selectedLobbyId, setSelectedLobbyId] = useState('');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -102,10 +104,54 @@ export default function App() {
 
   const handleCreateLobby = useCallback(async () => {
     setPendingJoinCode('');
+    const roundSeconds = Math.max(1, Math.min(60, Math.trunc(roundMinutes))) * 60;
     await withActionErrorToast('Could not create lobby', () =>
-      actions.createLobby(GAME_TYPE_TUG_OF_WAR)
+      actions.createLobby(GAME_TYPE_TUG_OF_WAR, roundSeconds)
     );
-  }, [actions, withActionErrorToast]);
+    setPendingRoundSeconds(roundSeconds);
+  }, [actions, roundMinutes, withActionErrorToast]);
+
+  useEffect(() => {
+    if (pendingRoundSeconds == null) {
+      return;
+    }
+    if (!ui.lobby || ui.role !== 'host' || ui.lobby.status !== 'Waiting') {
+      return;
+    }
+    if (ui.preMatchSecondsRemaining === pendingRoundSeconds) {
+      setPendingRoundSeconds(null);
+      return;
+    }
+    const lobby = ui.lobby;
+
+    let cancelled = false;
+    void withActionErrorToast('Could not set match length', () =>
+      actions.setLobbySetting(
+        lobby.lobbyId,
+        'round_seconds',
+        JSON.stringify(pendingRoundSeconds)
+      )
+    )
+      .then(() => {
+        if (!cancelled) {
+          setPendingRoundSeconds(null);
+        }
+      })
+      .catch(() => {
+        // Toast is already shown by withActionErrorToast.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    actions,
+    pendingRoundSeconds,
+    ui.lobby,
+    ui.preMatchSecondsRemaining,
+    ui.role,
+    withActionErrorToast,
+  ]);
 
   const handleJoinLobby = useCallback(async () => {
     const code = joinCode.trim().toUpperCase();
@@ -177,15 +223,21 @@ export default function App() {
       <LandingPanel
         displayName={displayName}
         joinCode={joinCode}
+        roundMinutes={roundMinutes}
         onDisplayNameChange={setDisplayName}
         onJoinCodeChange={setJoinCode}
+        onRoundMinutesChange={setRoundMinutes}
         onJoin={handleJoinLobby}
         onCreateLobby={handleCreateLobby}
       />
     ) : (
       <>
         {ui.matchHud || ui.preMatchHud ? (
-          <MatchHud hud={ui.matchHud ?? ui.preMatchHud!} />
+          <MatchHud
+            hud={ui.matchHud ?? ui.preMatchHud!}
+            teamAPlayers={ui.lobby?.teamA ?? []}
+            teamBPlayers={ui.lobby?.teamB ?? []}
+          />
         ) : null}
         {ui.playerInput ? (
           <PlayerInputPanel

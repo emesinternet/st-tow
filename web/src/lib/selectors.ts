@@ -130,7 +130,8 @@ function findLobby(
 
 function buildTeamPlayerViewModel(
   players: NormalizedPlayer[],
-  identity: string
+  identity: string,
+  playerStateByPlayerId: Map<string, NormalizedTugPlayerState>
 ): TeamPlayerViewModel[] {
   return players
     .map(player => ({
@@ -138,6 +139,7 @@ function buildTeamPlayerViewModel(
       displayName: player.displayName,
       team: player.team,
       status: player.status,
+      correctCount: playerStateByPlayerId.get(player.playerId)?.correctCount ?? 0,
       eliminatedReason: player.eliminatedReason,
       isYou: isSameIdentity(player.identity, identity),
     }))
@@ -345,7 +347,8 @@ function buildEventFeed(
 function buildLobbyModel(
   lobby: NormalizedLobby,
   players: NormalizedPlayer[],
-  identity: string
+  identity: string,
+  playerStateByPlayerId: Map<string, NormalizedTugPlayerState>
 ): LobbyViewModel {
   const teamAPlayers = players.filter(player => player.team === 'A');
   const teamBPlayers = players.filter(player => player.team === 'B');
@@ -357,8 +360,8 @@ function buildLobbyModel(
     gameType: lobby.gameType,
     isHost: isSameIdentity(lobby.hostIdentity, identity),
     hostIdentity: lobby.hostIdentity,
-    teamA: buildTeamPlayerViewModel(teamAPlayers, identity),
-    teamB: buildTeamPlayerViewModel(teamBPlayers, identity),
+    teamA: buildTeamPlayerViewModel(teamAPlayers, identity, playerStateByPlayerId),
+    teamB: buildTeamPlayerViewModel(teamBPlayers, identity, playerStateByPlayerId),
     teamACounts: buildTeamCounts(teamAPlayers),
     teamBCounts: buildTeamCounts(teamBPlayers),
   };
@@ -486,6 +489,9 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
   const matchPlayerStates = match
     ? snapshot.tugPlayerStates.filter(item => item.matchId === match.matchId)
     : [];
+  const playerStateByPlayerId = new Map(
+    matchPlayerStates.map(playerState => [playerState.playerId, playerState] as const)
+  );
   const hostState = match
     ? snapshot.tugHostStates.find(item => item.matchId === match.matchId) ?? null
     : null;
@@ -507,7 +513,7 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
     connectionState,
     role,
     phase,
-    lobby: buildLobbyModel(lobby, lobbyPlayers, identity),
+    lobby: buildLobbyModel(lobby, lobbyPlayers, identity, playerStateByPlayerId),
     matchHud: match
       ? buildMatchHudModel(
           match,

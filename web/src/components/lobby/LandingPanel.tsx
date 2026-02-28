@@ -5,8 +5,10 @@ import { Input } from '@/components/shared/ui/input';
 interface LandingPanelProps {
   displayName: string;
   joinCode: string;
+  roundMinutes: number;
   onDisplayNameChange: (next: string) => void;
   onJoinCodeChange: (next: string) => void;
+  onRoundMinutesChange: (next: number) => void;
   onJoin: () => Promise<void>;
   onCreateLobby: () => Promise<void>;
 }
@@ -14,8 +16,10 @@ interface LandingPanelProps {
 export function LandingPanel({
   displayName,
   joinCode,
+  roundMinutes,
   onDisplayNameChange,
   onJoinCodeChange,
+  onRoundMinutesChange,
   onJoin,
   onCreateLobby,
 }: LandingPanelProps) {
@@ -35,6 +39,27 @@ export function LandingPanel({
             maxLength={24}
             onChange={event => onDisplayNameChange(event.target.value)}
             placeholder="Player"
+          />
+        </label>
+
+        <label className="block space-y-1">
+          <span className="font-display text-xs font-bold uppercase tracking-wide">
+            Match Minutes
+          </span>
+          <Input
+            type="number"
+            min={1}
+            max={60}
+            step={1}
+            value={roundMinutes}
+            onChange={event => {
+              const parsed = Number(event.target.value);
+              if (!Number.isFinite(parsed)) {
+                return;
+              }
+              onRoundMinutesChange(Math.max(1, Math.min(60, Math.trunc(parsed))));
+            }}
+            placeholder="1"
           />
         </label>
 

@@ -12,4 +12,5 @@ import {
 
 export default {
   gameType: __t.string(),
+  roundSeconds: __t.i32(),
 };

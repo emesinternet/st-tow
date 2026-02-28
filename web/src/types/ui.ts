@@ -9,6 +9,7 @@ export interface TeamPlayerViewModel {
   displayName: string;
   team: string;
   status: string;
+  correctCount: number;
   eliminatedReason: string;
   isYou: boolean;
 }
