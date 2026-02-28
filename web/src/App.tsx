@@ -343,6 +343,8 @@ export default function App() {
       <PostGameStatsModal
         open={postGameModalOpen}
         onClose={() => setPostGameModalOpen(false)}
+        onResetMatch={handleResetLobby}
+        role={ui.role}
         lobby={ui.lobby}
         hud={ui.matchHud}
       />

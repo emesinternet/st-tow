@@ -1,11 +1,18 @@
 import { Badge } from '@/components/shared/ui/badge';
 import { Button } from '@/components/shared/ui/button';
 import { Card, CardContent } from '@/components/shared/ui/card';
-import type { LobbyViewModel, MatchHudViewModel, TeamPlayerViewModel } from '@/types/ui';
+import type {
+  LobbyViewModel,
+  MatchHudViewModel,
+  TeamPlayerViewModel,
+  UiRole,
+} from '@/types/ui';
 
 interface PostGameStatsModalProps {
   open: boolean;
   onClose: () => void;
+  onResetMatch: () => Promise<void>;
+  role: UiRole;
   lobby: LobbyViewModel | null;
   hud: MatchHudViewModel | null;
 }
@@ -32,7 +39,14 @@ function playerRows(lobby: LobbyViewModel): TeamPlayerViewModel[] {
   });
 }
 
-export function PostGameStatsModal({ open, onClose, lobby, hud }: PostGameStatsModalProps) {
+export function PostGameStatsModal({
+  open,
+  onClose,
+  onResetMatch,
+  role,
+  lobby,
+  hud,
+}: PostGameStatsModalProps) {
   if (!open || !lobby) {
     return null;
   }
@@ -91,11 +105,27 @@ export function PostGameStatsModal({ open, onClose, lobby, hud }: PostGameStatsM
               </tbody>
             </table>
           </div>
-          <div className="flex justify-center pt-1">
-            <Button type="button" size="sm" variant="neutral" onClick={onClose}>
-              Close
-            </Button>
-          </div>
+          {role === 'host' ? (
+            <div className="flex justify-center gap-2 pt-1">
+              <Button type="button" size="sm" variant="neutral" onClick={onClose}>
+                Close
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="teamB"
+                onClick={() => {
+                  void onResetMatch();
+                }}
+              >
+                Reset Match
+              </Button>
+            </div>
+          ) : (
+            <p className="pt-1 text-center font-display text-sm font-black uppercase tracking-wide text-neo-muted">
+              Waiting for host
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>
