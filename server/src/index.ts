@@ -1,0 +1,1215 @@
+import { ScheduleAt, Timestamp } from 'spacetimedb';
+import {
+  schema,
+  table,
+  t,
+  type Infer,
+  type InferTypeOfRow,
+  type ReducerCtx,
+} from 'spacetimedb/server';
+import {
+  DEFAULT_LOBBY_SETTINGS,
+  GAME_TYPE_TUG_OF_WAR,
+  LOBBY_SETTING_KEYS,
+  LOBBY_STATUS_FINISHED,
+  LOBBY_STATUS_RUNNING,
+  LOBBY_STATUS_SUDDEN_DEATH,
+  LOBBY_STATUS_WAITING,
+  MATCH_PHASE_IN_GAME,
+  MATCH_PHASE_POST_GAME,
+  MATCH_PHASE_SUDDEN_DEATH,
+  MATCH_PHASE_PRE_GAME,
+  PLAYER_STATUS_ACTIVE,
+  PLAYER_STATUS_ELIMINATED,
+  PLAYER_STATUS_LEFT,
+  TEAM_A,
+  TEAM_B,
+  TUG_MODE_ELIMINATION,
+  TUG_MODE_NORMAL,
+} from './core/constants';
+import {
+  lobbyIdentityKey,
+  makeJoinCode,
+  msToMicros,
+  newId,
+  normalizeDisplayName,
+  nowMicros,
+  parseNumberJson,
+  scheduleId,
+  settingId,
+  tugPlayerStateId,
+} from './core/helpers';
+import { pickRandomWord } from './games/tug_of_war/words';
+
+const lobbyRow = {
+  lobby_id: t.string().primaryKey(),
+  join_code: t.string().unique(),
+  host_identity: t.identity().index(),
+  status: t.string().index(),
+  game_type: t.string(),
+  active_match_id: t.string(),
+  created_at: t.timestamp(),
+};
+
+const lobbySettingsRow = {
+  setting_id: t.string().primaryKey(),
+  lobby_id: t.string().index(),
+  key: t.string().index(),
+  value_json: t.string(),
+};
+
+const playerRow = {
+  player_id: t.string().primaryKey(),
+  lobby_id: t.string().index(),
+  identity: t.identity().index(),
+  lobby_identity_key: t.string().unique(),
+  display_name: t.string(),
+  team: t.string().index(),
+  status: t.string().index(),
+  joined_at: t.timestamp(),
+  left_at_micros: t.i64(),
+  eliminated_reason: t.string(),
+};
+
+const matchRow = {
+  match_id: t.string().primaryKey(),
+  lobby_id: t.string().index(),
+  game_type: t.string().index(),
+  phase: t.string().index(),
+  started_at: t.timestamp(),
+  ends_at_micros: t.i64(),
+  winner_team: t.string(),
+  winner_player_id: t.string(),
+  seed: t.u32(),
+};
+
+const matchClockRow = {
+  match_id: t.string().primaryKey(),
+  phase_ends_at: t.timestamp(),
+  seconds_remaining: t.i32(),
+  tick_rate_ms: t.i32(),
+};
+
+const matchScheduleRow = t.row({
+  scheduled_id: t.u64().primaryKey().autoInc(),
+  schedule_key: t.string().unique(),
+  match_id: t.string().index(),
+  kind: t.string(),
+  active: t.bool(),
+  scheduled_at: t.scheduleAt(),
+});
+
+const gameEventRow = {
+  event_id: t.string().primaryKey(),
+  lobby_id: t.string().index(),
+  match_id: t.string().index(),
+  type: t.string().index(),
+  payload_json: t.string(),
+  at: t.timestamp(),
+};
+
+const tugStateRow = {
+  match_id: t.string().primaryKey(),
+  rope_position: t.i32(),
+  win_threshold: t.i32(),
+  team_a_force: t.i32(),
+  team_b_force: t.i32(),
+  current_word: t.string(),
+  word_version: t.i32(),
+  mode: t.string().index(),
+  word_rotate_ms: t.i32(),
+  elimination_word_time_ms: t.i32(),
+  next_word_at_micros: t.i64(),
+  last_tick_at_micros: t.i64(),
+};
+
+const tugPlayerStateRow = {
+  tug_player_state_id: t.string().primaryKey(),
+  match_id: t.string().index(),
+  player_id: t.string().index(),
+  correct_count: t.i32(),
+  last_submit_at_micros: t.i64(),
+  deadline_at_micros: t.i64(),
+};
+
+const spacetimedb = schema({
+  lobby: table({ public: true }, lobbyRow),
+  lobby_settings: table(
+    {
+      public: true,
+      indexes: [
+        {
+          accessor: 'by_lobby_key',
+          algorithm: 'btree',
+          columns: ['lobby_id', 'key'],
+        },
+      ],
+    },
+    lobbySettingsRow
+  ),
+  player: table(
+    {
+      public: true,
+      indexes: [
+        {
+          accessor: 'by_lobby_status',
+          algorithm: 'btree',
+          columns: ['lobby_id', 'status'],
+        },
+        {
+          accessor: 'by_lobby_team',
+          algorithm: 'btree',
+          columns: ['lobby_id', 'team'],
+        },
+      ],
+    },
+    playerRow
+  ),
+  match: table(
+    {
+      public: true,
+      indexes: [
+        {
+          accessor: 'by_lobby_match',
+          algorithm: 'btree',
+          columns: ['lobby_id', 'match_id'],
+        },
+        {
+          accessor: 'by_lobby_game_type',
+          algorithm: 'btree',
+          columns: ['lobby_id', 'game_type'],
+        },
+      ],
+    },
+    matchRow
+  ),
+  match_clock: table({ public: true }, matchClockRow),
+  match_schedule: table(
+    {
+      name: 'schedule',
+      scheduled: (): any => tug_tick_scheduled,
+    },
+    matchScheduleRow
+  ),
+  game_event: table({ public: true }, gameEventRow),
+  tug_state: table({ public: true }, tugStateRow),
+  tug_player_state: table(
+    {
+      public: true,
+      indexes: [
+        {
+          accessor: 'by_match_player',
+          algorithm: 'btree',
+          columns: ['match_id', 'player_id'],
+        },
+        {
+          accessor: 'by_match_deadline',
+          algorithm: 'btree',
+          columns: ['match_id', 'deadline_at_micros'],
+        },
+      ],
+    },
+    tugPlayerStateRow
+  ),
+});
+
+export default spacetimedb;
+
+type LobbyRow = InferTypeOfRow<typeof lobbyRow>;
+type PlayerRow = InferTypeOfRow<typeof playerRow>;
+type MatchRow = InferTypeOfRow<typeof matchRow>;
+type MatchClockRow = InferTypeOfRow<typeof matchClockRow>;
+type TugStateRow = InferTypeOfRow<typeof tugStateRow>;
+type TugPlayerStateRow = InferTypeOfRow<typeof tugPlayerStateRow>;
+type MatchScheduleRow = Infer<typeof matchScheduleRow>;
+
+function replaceRow(table: any, current: any, next: any): void {
+  table.delete(current);
+  table.insert(next);
+}
+
+function findFirst<T>(
+  rows: Iterable<T>,
+  predicate: (row: T) => boolean
+): T | null {
+  for (const row of rows) {
+    if (predicate(row)) {
+      return row;
+    }
+  }
+  return null;
+}
+
+function emitGameEvent(
+  ctx: ReducerCtx<any>,
+  lobbyId: string,
+  matchId: string,
+  type: string,
+  payload: Record<string, unknown>
+): void {
+  ctx.db.game_event.insert({
+    event_id: newId(ctx, 'evt'),
+    lobby_id: lobbyId,
+    match_id: matchId,
+    type,
+    payload_json: JSON.stringify(payload),
+    at: ctx.timestamp,
+  });
+}
+
+function getLobbyOrThrow(ctx: ReducerCtx<any>, lobbyId: string): LobbyRow {
+  const lobby = getLobbyById(ctx, lobbyId);
+  if (!lobby) {
+    throw new Error('Lobby not found');
+  }
+  return lobby;
+}
+
+function getMatchOrThrow(ctx: ReducerCtx<any>, matchId: string): MatchRow {
+  const match = getMatchById(ctx, matchId);
+  if (!match) {
+    throw new Error('Match not found');
+  }
+  return match;
+}
+
+function getLobbyById(ctx: ReducerCtx<any>, lobbyId: string): LobbyRow | null {
+  return findFirst<LobbyRow>(
+    ctx.db.lobby.iter() as Iterable<LobbyRow>,
+    row => row.lobby_id === lobbyId
+  );
+}
+
+function getMatchById(ctx: ReducerCtx<any>, matchId: string): MatchRow | null {
+  return findFirst<MatchRow>(
+    ctx.db.match.iter() as Iterable<MatchRow>,
+    row => row.match_id === matchId
+  );
+}
+
+function getLobbyByJoinCode(
+  ctx: ReducerCtx<any>,
+  joinCode: string
+): LobbyRow | null {
+  return findFirst<LobbyRow>(
+    ctx.db.lobby.iter() as Iterable<LobbyRow>,
+    row => row.join_code === joinCode
+  );
+}
+
+function getMatchClockByMatchId(
+  ctx: ReducerCtx<any>,
+  matchId: string
+): MatchClockRow | null {
+  return findFirst<MatchClockRow>(
+    ctx.db.match_clock.iter() as Iterable<MatchClockRow>,
+    row => row.match_id === matchId
+  );
+}
+
+function getTugStateByMatchId(
+  ctx: ReducerCtx<any>,
+  matchId: string
+): TugStateRow | null {
+  return findFirst<TugStateRow>(
+    ctx.db.tug_state.iter() as Iterable<TugStateRow>,
+    row => row.match_id === matchId
+  );
+}
+
+function getTugPlayerStateById(
+  ctx: ReducerCtx<any>,
+  rowId: string
+): TugPlayerStateRow | null {
+  return findFirst<TugPlayerStateRow>(
+    ctx.db.tug_player_state.iter() as Iterable<TugPlayerStateRow>,
+    row => row.tug_player_state_id === rowId
+  );
+}
+
+function getPlayerById(ctx: ReducerCtx<any>, playerId: string): PlayerRow | null {
+  return findFirst<PlayerRow>(
+    ctx.db.player.iter() as Iterable<PlayerRow>,
+    row => row.player_id === playerId
+  );
+}
+
+function listTugPlayerStatesByMatch(
+  ctx: ReducerCtx<any>,
+  matchId: string
+): TugPlayerStateRow[] {
+  const rows: TugPlayerStateRow[] = [];
+  for (const row of ctx.db.tug_player_state.iter() as Iterable<TugPlayerStateRow>) {
+    if (row.match_id === matchId) {
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+
+function assertHost(ctx: ReducerCtx<any>, lobby: LobbyRow): void {
+  if (!lobby.host_identity.equals(ctx.sender)) {
+    throw new Error('Only the lobby host can call this reducer');
+  }
+}
+
+function getLobbySettingInt(
+  ctx: ReducerCtx<any>,
+  lobbyId: string,
+  key: string,
+  fallback: number
+): number {
+  const row = findFirst<InferTypeOfRow<typeof lobbySettingsRow>>(
+    ctx.db.lobby_settings.iter() as Iterable<InferTypeOfRow<typeof lobbySettingsRow>>,
+    item => item.setting_id === settingId(lobbyId, key)
+  );
+  if (!row) {
+    return fallback;
+  }
+
+  const parsed = parseNumberJson(row.value_json);
+  if (parsed == null) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
+function upsertLobbySetting(
+  ctx: ReducerCtx<any>,
+  lobbyId: string,
+  key: string,
+  valueJson: string
+): void {
+  const id = settingId(lobbyId, key);
+  const existing = findFirst<InferTypeOfRow<typeof lobbySettingsRow>>(
+    ctx.db.lobby_settings.iter() as Iterable<InferTypeOfRow<typeof lobbySettingsRow>>,
+    row => row.setting_id === id
+  );
+  if (existing) {
+    ctx.db.lobby_settings.delete(existing);
+  }
+
+  ctx.db.lobby_settings.insert({
+    setting_id: id,
+    lobby_id: lobbyId,
+    key,
+    value_json: valueJson,
+  });
+}
+
+function seedDefaultLobbySettings(ctx: ReducerCtx<any>, lobbyId: string): void {
+  for (const [key, value] of Object.entries(DEFAULT_LOBBY_SETTINGS)) {
+    upsertLobbySetting(ctx, lobbyId, key, JSON.stringify(value));
+  }
+}
+
+function removeTickSchedule(ctx: ReducerCtx<any>, matchId: string): void {
+  const key = scheduleId(matchId, 'tick');
+  const existing = findFirst<MatchScheduleRow>(
+    ctx.db.match_schedule.iter() as Iterable<MatchScheduleRow>,
+    row => row.schedule_key === key
+  );
+  if (existing) {
+    ctx.db.match_schedule.delete(existing);
+  }
+}
+
+function listPlayersInLobby(ctx: ReducerCtx<any>, lobbyId: string): PlayerRow[] {
+  const players: PlayerRow[] = [];
+  for (const player of ctx.db.player.iter() as Iterable<PlayerRow>) {
+    if (player.lobby_id === lobbyId) {
+      players.push(player);
+    }
+  }
+  return players;
+}
+
+function countActiveByTeam(players: PlayerRow[]): { a: number; b: number } {
+  let a = 0;
+  let b = 0;
+
+  for (const player of players) {
+    if (player.status !== PLAYER_STATUS_ACTIVE) {
+      continue;
+    }
+    if (player.team === TEAM_A) {
+      a += 1;
+    }
+    if (player.team === TEAM_B) {
+      b += 1;
+    }
+  }
+
+  return { a, b };
+}
+
+function chooseBalancedTeam(players: PlayerRow[]): string {
+  const counts = countActiveByTeam(players);
+  return counts.a <= counts.b ? TEAM_A : TEAM_B;
+}
+
+function findMembershipInLobby(
+  ctx: ReducerCtx<any>,
+  lobbyId: string
+): PlayerRow | null {
+  const key = lobbyIdentityKey(lobbyId, ctx.sender);
+  return findFirst<PlayerRow>(
+    ctx.db.player.iter() as Iterable<PlayerRow>,
+    row => row.lobby_identity_key === key
+  );
+}
+
+function ensureTeamsAssigned(ctx: ReducerCtx<any>, lobbyId: string): void {
+  const players = listPlayersInLobby(ctx, lobbyId).filter(
+    player => player.status !== PLAYER_STATUS_LEFT
+  );
+
+  let countA = 0;
+  let countB = 0;
+
+  for (const player of players) {
+    if (player.team === TEAM_A) {
+      countA += 1;
+    } else if (player.team === TEAM_B) {
+      countB += 1;
+    }
+  }
+
+  for (const player of players) {
+    if (player.team === TEAM_A || player.team === TEAM_B) {
+      continue;
+    }
+
+    const team = countA <= countB ? TEAM_A : TEAM_B;
+    if (team === TEAM_A) {
+      countA += 1;
+    } else {
+      countB += 1;
+    }
+
+    replaceRow(ctx.db.player, player, {
+      ...player,
+      team,
+    });
+  }
+}
+
+function resetPlayersForNewMatch(ctx: ReducerCtx<any>, lobbyId: string): void {
+  for (const player of listPlayersInLobby(ctx, lobbyId)) {
+    if (player.status === PLAYER_STATUS_LEFT) {
+      continue;
+    }
+
+    replaceRow(ctx.db.player, player, {
+      ...player,
+      status: PLAYER_STATUS_ACTIVE,
+      eliminated_reason: '',
+      left_at_micros: 0n,
+    });
+  }
+
+  ensureTeamsAssigned(ctx, lobbyId);
+}
+
+function initializeTugState(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  match: MatchRow
+): void {
+  const winThreshold = getLobbySettingInt(
+    ctx,
+    lobby.lobby_id,
+    LOBBY_SETTING_KEYS.win_threshold,
+    DEFAULT_LOBBY_SETTINGS.win_threshold
+  );
+  const wordRotateMs = getLobbySettingInt(
+    ctx,
+    lobby.lobby_id,
+    LOBBY_SETTING_KEYS.word_rotate_ms,
+    DEFAULT_LOBBY_SETTINGS.word_rotate_ms
+  );
+  const eliminationWordTimeMs = getLobbySettingInt(
+    ctx,
+    lobby.lobby_id,
+    LOBBY_SETTING_KEYS.elimination_word_time_ms,
+    DEFAULT_LOBBY_SETTINGS.elimination_word_time_ms
+  );
+  const now = nowMicros(ctx);
+
+  const tugCurrent = getTugStateByMatchId(ctx, match.match_id);
+  const tugNext: TugStateRow = {
+    match_id: match.match_id,
+    rope_position: 0,
+    win_threshold: winThreshold,
+    team_a_force: 0,
+    team_b_force: 0,
+    current_word: pickRandomWord(ctx),
+    word_version: 1,
+    mode: TUG_MODE_NORMAL,
+    word_rotate_ms: wordRotateMs,
+    elimination_word_time_ms: eliminationWordTimeMs,
+    next_word_at_micros: now + msToMicros(wordRotateMs),
+    last_tick_at_micros: now,
+  };
+
+  if (tugCurrent) {
+    replaceRow(ctx.db.tug_state, tugCurrent, tugNext);
+  } else {
+    ctx.db.tug_state.insert(tugNext);
+  }
+
+  for (const player of listPlayersInLobby(ctx, lobby.lobby_id)) {
+    if (player.status !== PLAYER_STATUS_ACTIVE) {
+      continue;
+    }
+
+    const id = tugPlayerStateId(match.match_id, player.player_id);
+    const existing = getTugPlayerStateById(ctx, id);
+    if (existing) {
+      ctx.db.tug_player_state.delete(existing);
+    }
+
+    ctx.db.tug_player_state.insert({
+      tug_player_state_id: id,
+      match_id: match.match_id,
+      player_id: player.player_id,
+      correct_count: 0,
+      last_submit_at_micros: 0n,
+      deadline_at_micros: 0n,
+    });
+  }
+
+  emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'tug_initialized', {
+    win_threshold: winThreshold,
+    word_rotate_ms: wordRotateMs,
+    elimination_word_time_ms: eliminationWordTimeMs,
+  });
+}
+
+function finishMatch(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  match: MatchRow,
+  winnerTeam: string
+): void {
+  if (match.phase === MATCH_PHASE_POST_GAME) {
+    return;
+  }
+
+  const matchNext: MatchRow = {
+    ...match,
+    phase: MATCH_PHASE_POST_GAME,
+    ends_at_micros: nowMicros(ctx),
+    winner_team: winnerTeam,
+  };
+  replaceRow(ctx.db.match, match, matchNext);
+
+  const lobbyNext: LobbyRow = {
+    ...lobby,
+    status: LOBBY_STATUS_FINISHED,
+  };
+  replaceRow(ctx.db.lobby, lobby, lobbyNext);
+
+  removeTickSchedule(ctx, match.match_id);
+  emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'match_finished', {
+    winner_team: winnerTeam,
+  });
+}
+
+function eliminatePlayer(
+  ctx: ReducerCtx<any>,
+  lobbyId: string,
+  matchId: string,
+  player: PlayerRow,
+  reason: string
+): void {
+  if (player.status !== PLAYER_STATUS_ACTIVE) {
+    return;
+  }
+
+  replaceRow(ctx.db.player, player, {
+    ...player,
+    status: PLAYER_STATUS_ELIMINATED,
+    eliminated_reason: reason,
+  });
+
+  const tpsId = tugPlayerStateId(matchId, player.player_id);
+  const playerState = getTugPlayerStateById(ctx, tpsId);
+  if (playerState) {
+    replaceRow(ctx.db.tug_player_state, playerState, {
+      ...playerState,
+      deadline_at_micros: 0n,
+    });
+  }
+
+  emitGameEvent(ctx, lobbyId, matchId, 'eliminated', {
+    player_id: player.player_id,
+    reason,
+  });
+}
+
+function transitionToSuddenDeath(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  match: MatchRow,
+  tug: TugStateRow
+): { lobby: LobbyRow; match: MatchRow; tug: TugStateRow } {
+  const matchNext: MatchRow = {
+    ...match,
+    phase: MATCH_PHASE_SUDDEN_DEATH,
+  };
+  replaceRow(ctx.db.match, match, matchNext);
+
+  const lobbyNext: LobbyRow = {
+    ...lobby,
+    status: LOBBY_STATUS_SUDDEN_DEATH,
+  };
+  replaceRow(ctx.db.lobby, lobby, lobbyNext);
+
+  const now = nowMicros(ctx);
+  const tugNext: TugStateRow = {
+    ...tug,
+    mode: TUG_MODE_ELIMINATION,
+    current_word: pickRandomWord(ctx),
+    word_version: tug.word_version + 1,
+    next_word_at_micros: now + msToMicros(tug.word_rotate_ms),
+    last_tick_at_micros: now,
+  };
+  replaceRow(ctx.db.tug_state, tug, tugNext);
+
+  const deadline = now + msToMicros(tug.elimination_word_time_ms);
+  for (const player of listPlayersInLobby(ctx, lobby.lobby_id)) {
+    if (player.status !== PLAYER_STATUS_ACTIVE) {
+      continue;
+    }
+
+    const id = tugPlayerStateId(match.match_id, player.player_id);
+    const existing = getTugPlayerStateById(ctx, id);
+    if (!existing) {
+      continue;
+    }
+
+    replaceRow(ctx.db.tug_player_state, existing, {
+      ...existing,
+      deadline_at_micros: deadline,
+    });
+  }
+
+  emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'sudden_death_started', {});
+  return { lobby: lobbyNext, match: matchNext, tug: tugNext };
+}
+
+function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
+  let match = getMatchById(ctx, matchId);
+  if (!match) {
+    return;
+  }
+
+  let lobby = getLobbyById(ctx, match.lobby_id);
+  if (!lobby) {
+    return;
+  }
+
+  const clock = getMatchClockByMatchId(ctx, matchId);
+  if (!clock) {
+    return;
+  }
+
+  let tug = getTugStateByMatchId(ctx, matchId);
+  if (!tug) {
+    return;
+  }
+
+  const now = nowMicros(ctx);
+  const remainingMicros = clock.phase_ends_at.microsSinceUnixEpoch - now;
+  const secondsRemaining =
+    remainingMicros > 0n ? Number(remainingMicros / 1_000_000n) : 0;
+
+  if (clock.seconds_remaining !== secondsRemaining) {
+    const clockNext: MatchClockRow = {
+      ...clock,
+      seconds_remaining: secondsRemaining,
+    };
+    replaceRow(ctx.db.match_clock, clock, clockNext);
+  }
+
+  if (match.phase === MATCH_PHASE_IN_GAME && secondsRemaining > 0) {
+    const tugNext: TugStateRow = {
+      ...tug,
+      rope_position: tug.rope_position + (tug.team_a_force - tug.team_b_force),
+      team_a_force: Math.floor(tug.team_a_force * 0.85),
+      team_b_force: Math.floor(tug.team_b_force * 0.85),
+      last_tick_at_micros: now,
+    };
+
+    if (now >= tugNext.next_word_at_micros) {
+      tugNext.current_word = pickRandomWord(ctx);
+      tugNext.word_version += 1;
+      tugNext.next_word_at_micros = now + msToMicros(tug.word_rotate_ms);
+    }
+
+    replaceRow(ctx.db.tug_state, tug, tugNext);
+    tug = tugNext;
+
+    if (tug.rope_position >= tug.win_threshold) {
+      finishMatch(ctx, lobby, match, TEAM_A);
+      return;
+    }
+
+    if (tug.rope_position <= -tug.win_threshold) {
+      finishMatch(ctx, lobby, match, TEAM_B);
+      return;
+    }
+  }
+
+  if (match.phase === MATCH_PHASE_IN_GAME && secondsRemaining === 0) {
+    const transitioned = transitionToSuddenDeath(ctx, lobby, match, tug);
+    lobby = transitioned.lobby;
+    match = transitioned.match;
+    tug = transitioned.tug;
+  }
+
+  if (match.phase === MATCH_PHASE_SUDDEN_DEATH) {
+    if (now >= tug.next_word_at_micros) {
+      const tugNext: TugStateRow = {
+        ...tug,
+        current_word: pickRandomWord(ctx),
+        word_version: tug.word_version + 1,
+        next_word_at_micros: now + msToMicros(tug.word_rotate_ms),
+        last_tick_at_micros: now,
+      };
+      replaceRow(ctx.db.tug_state, tug, tugNext);
+      tug = tugNext;
+    }
+
+    for (const playerState of listTugPlayerStatesByMatch(ctx, matchId)) {
+      const player = getPlayerById(ctx, playerState.player_id);
+      if (!player || player.status !== PLAYER_STATUS_ACTIVE) {
+        continue;
+      }
+
+      if (
+        playerState.deadline_at_micros > 0n &&
+        playerState.deadline_at_micros < now
+      ) {
+        eliminatePlayer(ctx, lobby.lobby_id, match.match_id, player, 'timeout');
+      }
+    }
+
+    const teamCounts = countActiveByTeam(listPlayersInLobby(ctx, lobby.lobby_id));
+    if (teamCounts.a === 0 && teamCounts.b > 0) {
+      finishMatch(ctx, lobby, match, TEAM_B);
+      return;
+    }
+    if (teamCounts.b === 0 && teamCounts.a > 0) {
+      finishMatch(ctx, lobby, match, TEAM_A);
+    }
+  }
+}
+
+function initGameForMatch(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  match: MatchRow
+): void {
+  if (lobby.game_type === GAME_TYPE_TUG_OF_WAR) {
+    initializeTugState(ctx, lobby, match);
+    return;
+  }
+
+  throw new Error(`Unsupported game type: ${lobby.game_type}`);
+}
+
+export const init = spacetimedb.init(_ctx => {});
+
+export const create_lobby = spacetimedb.reducer(
+  { game_type: t.string() },
+  (ctx, { game_type }) => {
+    if (game_type !== GAME_TYPE_TUG_OF_WAR) {
+      throw new Error(`Unsupported game type: ${game_type}`);
+    }
+
+    let joinCode = '';
+    for (let attempt = 0; attempt < 32; attempt++) {
+      const candidate = makeJoinCode(ctx);
+      if (!getLobbyByJoinCode(ctx, candidate)) {
+        joinCode = candidate;
+        break;
+      }
+    }
+
+    if (!joinCode) {
+      throw new Error('Failed to allocate unique join code');
+    }
+
+    const lobbyId = newId(ctx, 'lobby');
+    ctx.db.lobby.insert({
+      lobby_id: lobbyId,
+      join_code: joinCode,
+      host_identity: ctx.sender,
+      status: LOBBY_STATUS_WAITING,
+      game_type,
+      active_match_id: '',
+      created_at: ctx.timestamp,
+    });
+
+    seedDefaultLobbySettings(ctx, lobbyId);
+    emitGameEvent(ctx, lobbyId, '', 'lobby_created', {
+      join_code: joinCode,
+      game_type,
+    });
+  }
+);
+
+export const join_lobby = spacetimedb.reducer(
+  {
+    join_code: t.string(),
+    display_name: t.string(),
+  },
+  (ctx, { join_code, display_name }) => {
+    const lobby = getLobbyByJoinCode(ctx, join_code.toUpperCase());
+    if (!lobby) {
+      throw new Error('Lobby not found for join code');
+    }
+
+    const normalizedName = normalizeDisplayName(display_name);
+    const membershipKey = lobbyIdentityKey(lobby.lobby_id, ctx.sender);
+    const existing = findFirst<PlayerRow>(
+      ctx.db.player.iter() as Iterable<PlayerRow>,
+      row => row.lobby_identity_key === membershipKey
+    );
+    if (existing) {
+      let team = existing.team;
+      if (team !== TEAM_A && team !== TEAM_B) {
+        team = chooseBalancedTeam(listPlayersInLobby(ctx, lobby.lobby_id));
+      }
+
+      replaceRow(ctx.db.player, existing, {
+        ...existing,
+        display_name: normalizedName,
+        status: PLAYER_STATUS_ACTIVE,
+        team,
+        left_at_micros: 0n,
+        eliminated_reason: '',
+      });
+
+      emitGameEvent(ctx, lobby.lobby_id, lobby.active_match_id, 'player_reconnected', {
+        player_id: existing.player_id,
+      });
+      return;
+    }
+
+    const team = chooseBalancedTeam(listPlayersInLobby(ctx, lobby.lobby_id));
+    const playerId = newId(ctx, 'player');
+    ctx.db.player.insert({
+      player_id: playerId,
+      lobby_id: lobby.lobby_id,
+      identity: ctx.sender,
+      lobby_identity_key: membershipKey,
+      display_name: normalizedName,
+      team,
+      status: PLAYER_STATUS_ACTIVE,
+      joined_at: ctx.timestamp,
+      left_at_micros: 0n,
+      eliminated_reason: '',
+    });
+
+    emitGameEvent(ctx, lobby.lobby_id, lobby.active_match_id, 'player_joined', {
+      player_id: playerId,
+      team,
+      display_name: normalizedName,
+    });
+  }
+);
+
+export const leave_lobby = spacetimedb.reducer(
+  { lobby_id: t.string() },
+  (ctx, { lobby_id }) => {
+    getLobbyOrThrow(ctx, lobby_id);
+    const player = findMembershipInLobby(ctx, lobby_id);
+    if (!player) {
+      return;
+    }
+
+    if (player.status === PLAYER_STATUS_LEFT) {
+      return;
+    }
+
+    replaceRow(ctx.db.player, player, {
+      ...player,
+      status: PLAYER_STATUS_LEFT,
+      left_at_micros: nowMicros(ctx),
+    });
+
+    emitGameEvent(ctx, lobby_id, '', 'player_left', {
+      player_id: player.player_id,
+    });
+  }
+);
+
+export const set_lobby_setting = spacetimedb.reducer(
+  {
+    lobby_id: t.string(),
+    key: t.string(),
+    value_json: t.string(),
+  },
+  (ctx, { lobby_id, key, value_json }) => {
+    const lobby = getLobbyOrThrow(ctx, lobby_id);
+    assertHost(ctx, lobby);
+
+    upsertLobbySetting(ctx, lobby_id, key, value_json);
+    emitGameEvent(ctx, lobby_id, lobby.active_match_id, 'setting_changed', {
+      key,
+      value_json,
+    });
+  }
+);
+
+export const start_match = spacetimedb.reducer(
+  { lobby_id: t.string() },
+  (ctx, { lobby_id }) => {
+    const lobby = getLobbyOrThrow(ctx, lobby_id);
+    assertHost(ctx, lobby);
+
+    if (
+      lobby.active_match_id &&
+      (lobby.status === LOBBY_STATUS_RUNNING ||
+        lobby.status === LOBBY_STATUS_SUDDEN_DEATH)
+    ) {
+      throw new Error('Match is already active');
+    }
+
+    resetPlayersForNewMatch(ctx, lobby_id);
+
+    const matchId = newId(ctx, 'match');
+    const roundSeconds = getLobbySettingInt(
+      ctx,
+      lobby_id,
+      LOBBY_SETTING_KEYS.round_seconds,
+      DEFAULT_LOBBY_SETTINGS.round_seconds
+    );
+    const tickRateMs = getLobbySettingInt(
+      ctx,
+      lobby_id,
+      LOBBY_SETTING_KEYS.tick_rate_ms,
+      DEFAULT_LOBBY_SETTINGS.tick_rate_ms
+    );
+
+    const match: MatchRow = {
+      match_id: matchId,
+      lobby_id,
+      game_type: lobby.game_type,
+      phase: MATCH_PHASE_IN_GAME,
+      started_at: ctx.timestamp,
+      ends_at_micros: 0n,
+      winner_team: '',
+      winner_player_id: '',
+      seed: ctx.random.uint32(),
+    };
+    ctx.db.match.insert(match);
+
+    ctx.db.match_clock.insert({
+      match_id: matchId,
+      phase_ends_at: new Timestamp(
+        ctx.timestamp.microsSinceUnixEpoch + msToMicros(roundSeconds * 1000)
+      ),
+      seconds_remaining: roundSeconds,
+      tick_rate_ms: tickRateMs,
+    });
+
+    const lobbyNext: LobbyRow = {
+      ...lobby,
+      active_match_id: matchId,
+      status: LOBBY_STATUS_RUNNING,
+    };
+    replaceRow(ctx.db.lobby, lobby, lobbyNext);
+
+    initGameForMatch(ctx, lobbyNext, match);
+
+    removeTickSchedule(ctx, matchId);
+    ctx.db.match_schedule.insert({
+      scheduled_id: 0n,
+      schedule_key: scheduleId(matchId, 'tick'),
+      match_id: matchId,
+      kind: 'tick',
+      active: true,
+      scheduled_at: ScheduleAt.interval(msToMicros(tickRateMs)),
+    });
+
+    emitGameEvent(ctx, lobby_id, matchId, 'match_started', {
+      round_seconds: roundSeconds,
+      tick_rate_ms: tickRateMs,
+      game_type: lobby.game_type,
+    });
+  }
+);
+
+export const end_match = spacetimedb.reducer(
+  { lobby_id: t.string() },
+  (ctx, { lobby_id }) => {
+    const lobby = getLobbyOrThrow(ctx, lobby_id);
+    assertHost(ctx, lobby);
+
+    if (!lobby.active_match_id) {
+      return;
+    }
+
+    const match = getMatchById(ctx, lobby.active_match_id);
+    if (!match) {
+      return;
+    }
+
+    finishMatch(ctx, lobby, match, match.winner_team);
+  }
+);
+
+export const reset_lobby = spacetimedb.reducer(
+  { lobby_id: t.string() },
+  (ctx, { lobby_id }) => {
+    const lobby = getLobbyOrThrow(ctx, lobby_id);
+    assertHost(ctx, lobby);
+
+    if (lobby.active_match_id) {
+      removeTickSchedule(ctx, lobby.active_match_id);
+    }
+
+    replaceRow(ctx.db.lobby, lobby, {
+      ...lobby,
+      status: LOBBY_STATUS_WAITING,
+      active_match_id: '',
+    });
+
+    for (const player of listPlayersInLobby(ctx, lobby_id)) {
+      if (player.status === PLAYER_STATUS_LEFT) {
+        continue;
+      }
+
+      replaceRow(ctx.db.player, player, {
+        ...player,
+        status: PLAYER_STATUS_ACTIVE,
+        eliminated_reason: '',
+        left_at_micros: 0n,
+      });
+    }
+
+    emitGameEvent(ctx, lobby_id, '', 'lobby_reset', {});
+  }
+);
+
+export const tug_init = spacetimedb.reducer(
+  { match_id: t.string() },
+  (ctx, { match_id }) => {
+    const match = getMatchOrThrow(ctx, match_id);
+    const lobby = getLobbyOrThrow(ctx, match.lobby_id);
+    assertHost(ctx, lobby);
+
+    initializeTugState(ctx, lobby, match);
+  }
+);
+
+export const tug_submit = spacetimedb.reducer(
+  {
+    match_id: t.string(),
+    word_version: t.i32(),
+    typed: t.string(),
+  },
+  (ctx, { match_id, word_version, typed }) => {
+    const match = getMatchOrThrow(ctx, match_id);
+    if (
+      match.phase !== MATCH_PHASE_IN_GAME &&
+      match.phase !== MATCH_PHASE_SUDDEN_DEATH
+    ) {
+      throw new Error('Match is not accepting submissions');
+    }
+
+    const lobby = getLobbyOrThrow(ctx, match.lobby_id);
+    const player = findMembershipInLobby(ctx, lobby.lobby_id);
+    if (!player) {
+      throw new Error('Player is not in this lobby');
+    }
+
+    if (player.status !== PLAYER_STATUS_ACTIVE) {
+      throw new Error('Player is not active');
+    }
+
+    const tug = getTugStateByMatchId(ctx, match_id);
+    if (!tug) {
+      throw new Error('Tug state not initialized');
+    }
+
+    const stateId = tugPlayerStateId(match_id, player.player_id);
+    const playerState = getTugPlayerStateById(ctx, stateId);
+    if (!playerState) {
+      throw new Error('Player state not initialized for this match');
+    }
+
+    if (word_version !== tug.word_version) {
+      throw new Error('Stale submission word_version');
+    }
+
+    const now = nowMicros(ctx);
+    if (
+      playerState.last_submit_at_micros > 0n &&
+      now - playerState.last_submit_at_micros < 150_000n
+    ) {
+      throw new Error('Rate limited');
+    }
+
+    const correct = typed === tug.current_word;
+
+    if (!correct && tug.mode === TUG_MODE_ELIMINATION) {
+      eliminatePlayer(ctx, lobby.lobby_id, match_id, player, 'misspelling');
+      return;
+    }
+
+    const playerStateNext: TugPlayerStateRow = {
+      ...playerState,
+      last_submit_at_micros: now,
+    };
+
+    if (correct) {
+      playerStateNext.correct_count += 1;
+      if (tug.mode === TUG_MODE_ELIMINATION) {
+        playerStateNext.deadline_at_micros =
+          now + msToMicros(tug.elimination_word_time_ms);
+      }
+
+      const tugNext: TugStateRow = {
+        ...tug,
+        team_a_force: tug.team_a_force + (player.team === TEAM_A ? 1 : 0),
+        team_b_force: tug.team_b_force + (player.team === TEAM_B ? 1 : 0),
+      };
+      replaceRow(ctx.db.tug_state, tug, tugNext);
+
+      emitGameEvent(ctx, lobby.lobby_id, match_id, 'submit_ok', {
+        player_id: player.player_id,
+        team: player.team,
+      });
+    } else {
+      emitGameEvent(ctx, lobby.lobby_id, match_id, 'submit_bad', {
+        player_id: player.player_id,
+      });
+    }
+
+    replaceRow(ctx.db.tug_player_state, playerState, playerStateNext);
+  }
+);
+
+export const tug_tick_scheduled = spacetimedb.reducer(
+  { entry: matchScheduleRow },
+  (ctx, { entry }) => {
+    if (!entry.active || entry.kind !== 'tick') {
+      return;
+    }
+
+    runTugTick(ctx, entry.match_id);
+  }
+);
+
+export const tug_tick = spacetimedb.reducer(
+  { match_id: t.string() },
+  (ctx, { match_id }) => {
+    runTugTick(ctx, match_id);
+  }
+);
