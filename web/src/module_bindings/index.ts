@@ -44,6 +44,8 @@ import StartMatchReducer from "./start_match_reducer";
 import TugActivatePowerReducer from "./tug_activate_power_reducer";
 import TugInitReducer from "./tug_init_reducer";
 import TugRecordMissReducer from "./tug_record_miss_reducer";
+import TugRpsCastVoteReducer from "./tug_rps_cast_vote_reducer";
+import TugRpsContinueReducer from "./tug_rps_continue_reducer";
 import TugSubmitReducer from "./tug_submit_reducer";
 import TugTickReducer from "./tug_tick_reducer";
 
@@ -58,6 +60,8 @@ import MatchClockRow from "./match_clock_table";
 import PlayerRow from "./player_table";
 import TugHostStateRow from "./tug_host_state_table";
 import TugPlayerStateRow from "./tug_player_state_table";
+import TugRpsStateRow from "./tug_rps_state_table";
+import TugRpsVoteRow from "./tug_rps_vote_table";
 import TugStateRow from "./tug_state_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -239,6 +243,44 @@ const tablesSchema = __schema({
       { name: 'tug_player_state_tug_player_state_id_key', constraint: 'unique', columns: ['tugPlayerStateId'] },
     ],
   }, TugPlayerStateRow),
+  tug_rps_state: __table({
+    name: 'tug_rps_state',
+    indexes: [
+      { name: 'match_id', algorithm: 'btree', columns: [
+        'matchId',
+      ] },
+      { name: 'stage', algorithm: 'btree', columns: [
+        'stage',
+      ] },
+    ],
+    constraints: [
+      { name: 'tug_rps_state_match_id_key', constraint: 'unique', columns: ['matchId'] },
+    ],
+  }, TugRpsStateRow),
+  tug_rps_vote: __table({
+    name: 'tug_rps_vote',
+    indexes: [
+      { name: 'match_id', algorithm: 'btree', columns: [
+        'matchId',
+      ] },
+      { name: 'by_match_team', algorithm: 'btree', columns: [
+        'matchId',
+        'team',
+      ] },
+      { name: 'player_id', algorithm: 'btree', columns: [
+        'playerId',
+      ] },
+      { name: 'team', algorithm: 'btree', columns: [
+        'team',
+      ] },
+      { name: 'tug_rps_vote_id', algorithm: 'btree', columns: [
+        'tugRpsVoteId',
+      ] },
+    ],
+    constraints: [
+      { name: 'tug_rps_vote_tug_rps_vote_id_key', constraint: 'unique', columns: ['tugRpsVoteId'] },
+    ],
+  }, TugRpsVoteRow),
   tug_state: __table({
     name: 'tug_state',
     indexes: [
@@ -270,6 +312,8 @@ const reducersSchema = __reducers(
   __reducerSchema("tug_activate_power", TugActivatePowerReducer),
   __reducerSchema("tug_init", TugInitReducer),
   __reducerSchema("tug_record_miss", TugRecordMissReducer),
+  __reducerSchema("tug_rps_cast_vote", TugRpsCastVoteReducer),
+  __reducerSchema("tug_rps_continue", TugRpsContinueReducer),
   __reducerSchema("tug_submit", TugSubmitReducer),
   __reducerSchema("tug_tick", TugTickReducer),
 );

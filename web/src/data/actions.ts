@@ -44,6 +44,8 @@ export interface GameActions {
   submitWord: (matchId: string, wordVersion: number, typed: string) => Promise<void>;
   recordMistake: (matchId: string) => Promise<void>;
   activatePower: (matchId: string, powerId: string) => Promise<void>;
+  voteRps: (matchId: string, choice: string) => Promise<void>;
+  continueTieBreak: (matchId: string) => Promise<void>;
 }
 
 export function buildActions(connection: DbConnection | null): GameActions {
@@ -98,6 +100,19 @@ export function buildActions(connection: DbConnection | null): GameActions {
       await callReducer(conn, 'tug_activate_power', {
         matchId,
         powerId,
+      });
+    },
+    voteRps: async (matchId: string, choice: string) => {
+      const conn = assertConnection(connection);
+      await callReducer(conn, 'tug_rps_cast_vote', {
+        matchId,
+        choice,
+      });
+    },
+    continueTieBreak: async (matchId: string) => {
+      const conn = assertConnection(connection);
+      await callReducer(conn, 'tug_rps_continue', {
+        matchId,
       });
     },
   };

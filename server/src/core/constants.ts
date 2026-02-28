@@ -8,6 +8,7 @@ export const LOBBY_STATUS_FINISHED = 'Finished';
 export const MATCH_PHASE_PRE_GAME = 'PreGame';
 export const MATCH_PHASE_IN_GAME = 'InGame';
 export const MATCH_PHASE_SUDDEN_DEATH = 'SuddenDeath';
+export const MATCH_PHASE_TIE_BREAK_RPS = 'TieBreakRps';
 export const MATCH_PHASE_POST_GAME = 'PostGame';
 
 export const PLAYER_STATUS_ACTIVE = 'Active';

@@ -69,6 +69,7 @@ function makeBaseSnapshot(): SessionSnapshot {
         matchId: 'match-1',
         ropePosition: 0,
         winThreshold: 10,
+        tieZonePercent: 10,
         teamAForce: 7,
         teamBForce: 4,
         currentWord: '',
@@ -85,6 +86,8 @@ function makeBaseSnapshot(): SessionSnapshot {
         lastTickAtMicros: 0n,
       },
     ],
+    tugRpsStates: [],
+    tugRpsVotes: [],
     tugPlayerStates: [
       {
         tugPlayerStateId: 'tps-a',
@@ -188,6 +191,8 @@ test('selector derives pre-match seconds from round_seconds setting with fallbac
   snapshot.matches = [];
   snapshot.clocks = [];
   snapshot.tugStates = [];
+  snapshot.tugRpsStates = [];
+  snapshot.tugRpsVotes = [];
   snapshot.tugPlayerStates = [];
   snapshot.tugHostStates = [];
 
@@ -220,4 +225,100 @@ test('selector derives pre-match seconds from round_seconds setting with fallbac
   });
   assert.equal(withFallback.preMatchSecondsRemaining, 90);
   assert.equal(withFallback.preMatchHud?.secondsRemaining, 90);
+});
+
+test('selector hides counts for host during voting and shows own team counts for player', () => {
+  const snapshot = makeBaseSnapshot();
+  snapshot.matches[0] = {
+    ...snapshot.matches[0],
+    phase: 'TieBreakRps',
+  };
+  snapshot.tugRpsStates = [
+    {
+      matchId: 'match-1',
+      roundNumber: 1,
+      stage: 'Voting',
+      votingEndsAtMicros: BigInt(snapshot.generatedAt) * 1000n + 5_000_000n,
+      teamAChoice: '',
+      teamBChoice: '',
+      winnerTeam: '',
+      createdAtMicros: 0n,
+    },
+  ];
+  snapshot.tugRpsVotes = [
+    {
+      tugRpsVoteId: 'match-1:player-a',
+      matchId: 'match-1',
+      playerId: 'player-a',
+      team: 'A',
+      choice: 'rock',
+      submittedAtMicros: 0n,
+    },
+    {
+      tugRpsVoteId: 'match-1:player-b',
+      matchId: 'match-1',
+      playerId: 'player-b',
+      team: 'B',
+      choice: 'paper',
+      submittedAtMicros: 0n,
+    },
+  ];
+
+  const hostVm = selectUiViewModel({
+    connectionState: 'connected',
+    snapshot,
+    identity: 'c200host',
+    selectedLobbyId: '',
+    pendingJoinCode: '',
+  });
+  assert.equal(hostVm.rpsTieBreak?.stage, 'Voting');
+  assert.equal(hostVm.rpsTieBreak?.myTeamCounts, null);
+  assert.equal(hostVm.rpsTieBreak?.opponentTeamCounts, null);
+
+  const playerVm = selectUiViewModel({
+    connectionState: 'connected',
+    snapshot,
+    identity: 'c200abcd',
+    selectedLobbyId: '',
+    pendingJoinCode: '',
+  });
+  assert.equal(playerVm.rpsTieBreak?.stage, 'Voting');
+  assert.equal(playerVm.rpsTieBreak?.myTeam, 'A');
+  assert.equal(playerVm.rpsTieBreak?.myTeamCounts?.rock, 1);
+  assert.equal(playerVm.rpsTieBreak?.opponentTeamCounts, null);
+});
+
+test('selector exposes both team choices in reveal stage', () => {
+  const snapshot = makeBaseSnapshot();
+  snapshot.matches[0] = {
+    ...snapshot.matches[0],
+    phase: 'TieBreakRps',
+  };
+  snapshot.tugRpsStates = [
+    {
+      matchId: 'match-1',
+      roundNumber: 2,
+      stage: 'Reveal',
+      votingEndsAtMicros: 0n,
+      teamAChoice: 'rock',
+      teamBChoice: 'scissors',
+      winnerTeam: 'A',
+      createdAtMicros: 0n,
+    },
+  ];
+  snapshot.tugRpsVotes = [];
+
+  const vm = selectUiViewModel({
+    connectionState: 'connected',
+    snapshot,
+    identity: 'c200host',
+    selectedLobbyId: '',
+    pendingJoinCode: '',
+  });
+
+  assert.equal(vm.rpsTieBreak?.stage, 'Reveal');
+  assert.equal(vm.rpsTieBreak?.teamAChoice, 'rock');
+  assert.equal(vm.rpsTieBreak?.teamBChoice, 'scissors');
+  assert.equal(vm.rpsTieBreak?.winnerTeam, 'A');
+  assert.equal(vm.rpsTieBreak?.canHostContinue, true);
 });

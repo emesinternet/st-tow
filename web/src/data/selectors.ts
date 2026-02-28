@@ -53,6 +53,7 @@ export interface NormalizedTugState {
   matchId: string;
   ropePosition: number;
   winThreshold: number;
+  tieZonePercent: number;
   teamAForce: number;
   teamBForce: number;
   currentWord: string;
@@ -67,6 +68,26 @@ export interface NormalizedTugState {
   eliminationWordTimeMs: number;
   nextWordAtMicros: bigint;
   lastTickAtMicros: bigint;
+}
+
+export interface NormalizedTugRpsState {
+  matchId: string;
+  roundNumber: number;
+  stage: string;
+  votingEndsAtMicros: bigint;
+  teamAChoice: string;
+  teamBChoice: string;
+  winnerTeam: string;
+  createdAtMicros: bigint;
+}
+
+export interface NormalizedTugRpsVote {
+  tugRpsVoteId: string;
+  matchId: string;
+  playerId: string;
+  team: string;
+  choice: string;
+  submittedAtMicros: bigint;
 }
 
 export interface NormalizedTugPlayerState {
@@ -109,6 +130,8 @@ export interface SessionSnapshot {
   matches: NormalizedMatch[];
   clocks: NormalizedMatchClock[];
   tugStates: NormalizedTugState[];
+  tugRpsStates: NormalizedTugRpsState[];
+  tugRpsVotes: NormalizedTugRpsVote[];
   tugPlayerStates: NormalizedTugPlayerState[];
   tugHostStates: NormalizedTugHostState[];
   events: NormalizedGameEvent[];
@@ -122,6 +145,8 @@ export const EMPTY_SNAPSHOT: SessionSnapshot = {
   matches: [],
   clocks: [],
   tugStates: [],
+  tugRpsStates: [],
+  tugRpsVotes: [],
   tugPlayerStates: [],
   tugHostStates: [],
   events: [],
@@ -270,6 +295,7 @@ function normalizeTugState(row: GenericRow): NormalizedTugState {
     matchId: field<string>(row, 'matchId', 'match_id') ?? '',
     ropePosition: toNumber(field(row, 'ropePosition', 'rope_position')),
     winThreshold: toNumber(field(row, 'winThreshold', 'win_threshold')),
+    tieZonePercent: toNumber(field(row, 'tieZonePercent', 'tie_zone_percent')),
     teamAForce: toNumber(field(row, 'teamAForce', 'team_a_force')),
     teamBForce: toNumber(field(row, 'teamBForce', 'team_b_force')),
     currentWord: field<string>(row, 'currentWord', 'current_word') ?? '',
@@ -284,6 +310,30 @@ function normalizeTugState(row: GenericRow): NormalizedTugState {
     eliminationWordTimeMs: toNumber(field(row, 'eliminationWordTimeMs', 'elimination_word_time_ms')),
     nextWordAtMicros: toBigInt(field(row, 'nextWordAtMicros', 'next_word_at_micros')),
     lastTickAtMicros: toBigInt(field(row, 'lastTickAtMicros', 'last_tick_at_micros')),
+  };
+}
+
+function normalizeTugRpsState(row: GenericRow): NormalizedTugRpsState {
+  return {
+    matchId: field<string>(row, 'matchId', 'match_id') ?? '',
+    roundNumber: toNumber(field(row, 'roundNumber', 'round_number')),
+    stage: field<string>(row, 'stage', 'stage') ?? '',
+    votingEndsAtMicros: toBigInt(field(row, 'votingEndsAtMicros', 'voting_ends_at_micros')),
+    teamAChoice: field<string>(row, 'teamAChoice', 'team_a_choice') ?? '',
+    teamBChoice: field<string>(row, 'teamBChoice', 'team_b_choice') ?? '',
+    winnerTeam: field<string>(row, 'winnerTeam', 'winner_team') ?? '',
+    createdAtMicros: toBigInt(field(row, 'createdAtMicros', 'created_at_micros')),
+  };
+}
+
+function normalizeTugRpsVote(row: GenericRow): NormalizedTugRpsVote {
+  return {
+    tugRpsVoteId: field<string>(row, 'tugRpsVoteId', 'tug_rps_vote_id') ?? '',
+    matchId: field<string>(row, 'matchId', 'match_id') ?? '',
+    playerId: field<string>(row, 'playerId', 'player_id') ?? '',
+    team: field<string>(row, 'team', 'team') ?? '',
+    choice: field<string>(row, 'choice', 'choice') ?? '',
+    submittedAtMicros: toBigInt(field(row, 'submittedAtMicros', 'submitted_at_micros')),
   };
 }
 
@@ -334,6 +384,8 @@ export function extractSnapshot(connection: DbConnection): SessionSnapshot {
     matches: tableRows(connection, ['match']).map(normalizeMatch),
     clocks: tableRows(connection, ['match_clock', 'matchClock']).map(normalizeMatchClock),
     tugStates: tableRows(connection, ['tug_state', 'tugState']).map(normalizeTugState),
+    tugRpsStates: tableRows(connection, ['tug_rps_state', 'tugRpsState']).map(normalizeTugRpsState),
+    tugRpsVotes: tableRows(connection, ['tug_rps_vote', 'tugRpsVote']).map(normalizeTugRpsVote),
     tugPlayerStates: tableRows(connection, ['tug_player_state', 'tugPlayerState']).map(normalizeTugPlayerState),
     tugHostStates: tableRows(connection, ['tug_host_state', 'tugHostState']).map(normalizeTugHostState),
     events: tableRows(connection, ['game_event', 'gameEvent']).map(normalizeGameEvent),

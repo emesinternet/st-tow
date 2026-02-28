@@ -14,6 +14,7 @@ export default __t.row({
   matchId: __t.string().primaryKey().name("match_id"),
   ropePosition: __t.i32().name("rope_position"),
   winThreshold: __t.i32().name("win_threshold"),
+  tieZonePercent: __t.i32().name("tie_zone_percent"),
   teamAForce: __t.i32().name("team_a_force"),
   teamBForce: __t.i32().name("team_b_force"),
   currentWord: __t.string().name("current_word"),

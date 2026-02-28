@@ -44,6 +44,8 @@ export interface MatchHudViewModel {
   ropePosition: number;
   normalizedRopePosition: number;
   winThreshold: number;
+  tieZoneStartPercent: number;
+  tieZoneEndPercent: number;
   // Instantaneous physics force used by rope integration.
   teamAForce: number;
   // Instantaneous physics force used by rope integration.
@@ -68,6 +70,28 @@ export interface MatchHudViewModel {
   wordVersion: number;
   mode: string;
   suddenDeathDeadlineMicros: bigint | null;
+}
+
+export interface RpsVoteCountsViewModel {
+  rock: number;
+  paper: number;
+  scissors: number;
+}
+
+export interface RpsTieBreakViewModel {
+  matchId: string;
+  roundNumber: number;
+  stage: 'Voting' | 'Reveal';
+  secondsRemaining: number;
+  canVote: boolean;
+  myTeam: 'A' | 'B' | '';
+  myVote: 'rock' | 'paper' | 'scissors' | '';
+  myTeamCounts: RpsVoteCountsViewModel | null;
+  opponentTeamCounts: RpsVoteCountsViewModel | null;
+  teamAChoice: 'rock' | 'paper' | 'scissors' | '';
+  teamBChoice: 'rock' | 'paper' | 'scissors' | '';
+  winnerTeam: string;
+  canHostContinue: boolean;
 }
 
 export interface HostPowerActionViewModel {
@@ -114,6 +138,7 @@ export interface UiViewModel {
   matchHud: MatchHudViewModel | null;
   preMatchHud: MatchHudViewModel | null;
   preMatchSecondsRemaining: number;
+  rpsTieBreak: RpsTieBreakViewModel | null;
   hostPanel: HostPanelViewModel | null;
   playerInput: PlayerInputViewModel | null;
   events: EventFeedItemViewModel[];

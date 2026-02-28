@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <rect x="4" y="4" width="112" height="112" rx="18" fill="#f2f2f2" stroke="#1f2a44" stroke-width="6"/>
+  <circle cx="60" cy="60" r="30" fill="#d9d9d9" stroke="#1f2a44" stroke-width="6"/>
+  <text x="60" y="104" text-anchor="middle" font-family="monospace" font-size="13" font-weight="700" fill="#1f2a44">ROCK</text>
+</svg>

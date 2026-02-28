@@ -6,6 +6,8 @@ import type {
   NormalizedPlayer,
   NormalizedTugHostState,
   NormalizedTugPlayerState,
+  NormalizedTugRpsState,
+  NormalizedTugRpsVote,
   NormalizedTugState,
   SessionSnapshot,
 } from '@/data/selectors';
@@ -18,6 +20,7 @@ import type {
   LobbyViewModel,
   MatchHudViewModel,
   PlayerInputViewModel,
+  RpsTieBreakViewModel,
   TeamCountViewModel,
   TeamPlayerViewModel,
   UiPhase,
@@ -26,6 +29,7 @@ import type {
 } from '@/types/ui';
 
 const DEFAULT_ROUND_SECONDS = 90;
+const MATCH_PHASE_TIE_BREAK_RPS = 'TieBreakRps';
 const HOST_POWER_SPECS: Array<{ id: string; label: string; cost: number }> = [
   { id: 'tech_mode_burst', label: 'Tech Burst', cost: 1 },
   { id: 'symbols_mode_burst', label: 'Symbols Burst', cost: 1 },
@@ -203,7 +207,8 @@ function derivePhase(lobby: NormalizedLobby | null, match: NormalizedMatch | nul
   if (
     match.phase === 'PreGame' ||
     match.phase === 'InGame' ||
-    match.phase === 'SuddenDeath'
+    match.phase === 'SuddenDeath' ||
+    match.phase === MATCH_PHASE_TIE_BREAK_RPS
   ) {
     return 'match';
   }
@@ -216,6 +221,21 @@ function normalizeRopePosition(ropePosition: number, winThreshold: number): numb
   }
   const normalized = (ropePosition / winThreshold) * 50 + 50;
   return Math.max(0, Math.min(100, normalized));
+}
+
+function normalizeTieZoneBounds(
+  winThreshold: number,
+  tieZonePercent: number
+): { start: number; end: number } {
+  if (winThreshold <= 0) {
+    return { start: 50, end: 50 };
+  }
+  const clampedPercent = Math.max(0, Math.min(100, tieZonePercent));
+  const tieWindow = (winThreshold * clampedPercent) / 100;
+  return {
+    start: normalizeRopePosition(-tieWindow, winThreshold),
+    end: normalizeRopePosition(tieWindow, winThreshold),
+  };
 }
 
 function buildHostPanelModel(
@@ -382,6 +402,98 @@ function buildPlayerInputModel(
   };
 }
 
+function isRpsChoice(value: string): value is 'rock' | 'paper' | 'scissors' {
+  return value === 'rock' || value === 'paper' || value === 'scissors';
+}
+
+function buildRpsTieBreakModel(
+  role: UiRole,
+  match: NormalizedMatch | null,
+  rpsState: NormalizedTugRpsState | null,
+  rpsVotes: NormalizedTugRpsVote[],
+  myPlayer: NormalizedPlayer | null,
+  snapshotGeneratedAt: number
+): RpsTieBreakViewModel | null {
+  if (!match || match.phase !== MATCH_PHASE_TIE_BREAK_RPS || !rpsState) {
+    return null;
+  }
+  if (rpsState.stage !== 'Voting' && rpsState.stage !== 'Reveal') {
+    return null;
+  }
+
+  const countsA = { rock: 0, paper: 0, scissors: 0 };
+  const countsB = { rock: 0, paper: 0, scissors: 0 };
+  for (const vote of rpsVotes) {
+    if (!isRpsChoice(vote.choice)) {
+      continue;
+    }
+    if (vote.team === 'A') {
+      countsA[vote.choice] += 1;
+      continue;
+    }
+    if (vote.team === 'B') {
+      countsB[vote.choice] += 1;
+    }
+  }
+
+  const myTeam = myPlayer?.team === 'A' || myPlayer?.team === 'B' ? myPlayer.team : '';
+  const myVote = myPlayer
+    ? rpsVotes.find(vote => vote.playerId === myPlayer.playerId)
+    : null;
+  const myVoteChoice = myVote && isRpsChoice(myVote.choice) ? myVote.choice : '';
+
+  const nowMicros = BigInt(Math.trunc(snapshotGeneratedAt)) * 1000n;
+  const remainingMicros =
+    rpsState.votingEndsAtMicros > nowMicros ? rpsState.votingEndsAtMicros - nowMicros : 0n;
+  const secondsRemaining =
+    rpsState.stage === 'Voting'
+      ? Math.max(0, Math.ceil(Number(remainingMicros) / 1_000_000))
+      : 0;
+
+  let myTeamCounts: RpsTieBreakViewModel['myTeamCounts'] = null;
+  let opponentTeamCounts: RpsTieBreakViewModel['opponentTeamCounts'] = null;
+  if (rpsState.stage === 'Voting') {
+    if (role === 'player' && myTeam === 'A') {
+      myTeamCounts = countsA;
+    } else if (role === 'player' && myTeam === 'B') {
+      myTeamCounts = countsB;
+    }
+  } else {
+    if (myTeam === 'A') {
+      myTeamCounts = countsA;
+      opponentTeamCounts = countsB;
+    } else if (myTeam === 'B') {
+      myTeamCounts = countsB;
+      opponentTeamCounts = countsA;
+    } else {
+      myTeamCounts = countsA;
+      opponentTeamCounts = countsB;
+    }
+  }
+
+  const teamAChoice = isRpsChoice(rpsState.teamAChoice) ? rpsState.teamAChoice : '';
+  const teamBChoice = isRpsChoice(rpsState.teamBChoice) ? rpsState.teamBChoice : '';
+
+  return {
+    matchId: match.matchId,
+    roundNumber: Math.max(1, rpsState.roundNumber),
+    stage: rpsState.stage,
+    secondsRemaining,
+    canVote: role === 'player' && !!myTeam && rpsState.stage === 'Voting' && secondsRemaining > 0,
+    myTeam: myTeam as 'A' | 'B' | '',
+    myVote: myVoteChoice,
+    myTeamCounts,
+    opponentTeamCounts,
+    teamAChoice,
+    teamBChoice,
+    winnerTeam: rpsState.winnerTeam,
+    canHostContinue:
+      role === 'host' &&
+      rpsState.stage === 'Reveal' &&
+      (rpsState.winnerTeam === 'A' || rpsState.winnerTeam === 'B'),
+  };
+}
+
 function buildEventFeed(
   snapshot: SessionSnapshot,
   lobbyId: string,
@@ -435,6 +547,8 @@ function buildMatchHudModel(
 ): MatchHudViewModel {
   const ropePosition = tug?.ropePosition ?? 0;
   const winThreshold = tug?.winThreshold ?? 100;
+  const tieZonePercent = Math.max(0, tug?.tieZonePercent ?? 10);
+  const tieZoneBounds = normalizeTieZoneBounds(winThreshold, tieZonePercent);
   const rampTier = Math.max(1, Math.min(5, tug?.rampTier ?? 1));
   const effectiveTier = Math.max(
     1,
@@ -476,6 +590,8 @@ function buildMatchHudModel(
     ropePosition,
     normalizedRopePosition: normalizeRopePosition(ropePosition, winThreshold),
     winThreshold,
+    tieZoneStartPercent: tieZoneBounds.start,
+    tieZoneEndPercent: tieZoneBounds.end,
     teamAForce: tug?.teamAForce ?? 0,
     teamBForce: tug?.teamBForce ?? 0,
     teamAPulls,
@@ -511,6 +627,8 @@ function buildPreMatchHudModel(
     ropePosition: 0,
     normalizedRopePosition: 50,
     winThreshold: 100,
+    tieZoneStartPercent: 45,
+    tieZoneEndPercent: 55,
     teamAForce: 0,
     teamBForce: 0,
     teamAPulls: 0,
@@ -537,20 +655,21 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
   const { connectionState, snapshot, identity, selectedLobbyId, pendingJoinCode } = input;
 
   const lobby = findLobby(snapshot, identity, selectedLobbyId, pendingJoinCode);
-  if (!lobby) {
-    return {
-      connectionState,
-      role: 'observer',
-      phase: 'landing',
-      lobby: null,
-      matchHud: null,
-      preMatchHud: null,
-      preMatchSecondsRemaining: DEFAULT_ROUND_SECONDS,
-      hostPanel: null,
-      playerInput: null,
-      events: [],
-    };
-  }
+    if (!lobby) {
+      return {
+        connectionState,
+        role: 'observer',
+        phase: 'landing',
+        lobby: null,
+        matchHud: null,
+        preMatchHud: null,
+        preMatchSecondsRemaining: DEFAULT_ROUND_SECONDS,
+        rpsTieBreak: null,
+        hostPanel: null,
+        playerInput: null,
+        events: [],
+      };
+    }
 
   const preMatchSecondsRemaining = getLobbySettingInt(
     snapshot.lobbySettings,
@@ -574,6 +693,12 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
   const tug = match
     ? snapshot.tugStates.find(item => item.matchId === match.matchId) ?? null
     : null;
+  const rpsState = match
+    ? snapshot.tugRpsStates.find(item => item.matchId === match.matchId) ?? null
+    : null;
+  const rpsVotes = match
+    ? snapshot.tugRpsVotes.filter(item => item.matchId === match.matchId)
+    : [];
   const matchPlayerStates = match
     ? snapshot.tugPlayerStates.filter(item => item.matchId === match.matchId)
     : [];
@@ -617,6 +742,14 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
       : null,
     preMatchHud: match ? null : buildPreMatchHudModel(lobby.lobbyId, preMatchSecondsRemaining),
     preMatchSecondsRemaining,
+    rpsTieBreak: buildRpsTieBreakModel(
+      role,
+      match,
+      rpsState,
+      rpsVotes,
+      myPlayer,
+      snapshot.generatedAt
+    ),
     hostPanel: buildHostPanelModel(
       isSameIdentity(lobby.hostIdentity, identity),
       lobby,

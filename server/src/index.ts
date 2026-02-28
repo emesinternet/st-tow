@@ -21,6 +21,7 @@ import {
   MATCH_PHASE_IN_GAME,
   MATCH_PHASE_POST_GAME,
   MATCH_PHASE_SUDDEN_DEATH,
+  MATCH_PHASE_TIE_BREAK_RPS,
   MATCH_PHASE_PRE_GAME,
   PLAYER_STATUS_ACTIVE,
   PLAYER_STATUS_ELIMINATED,
@@ -48,7 +49,11 @@ import {
 import { pickWordForContext } from './games/tug_of_war/words';
 import {
   buildExcludedWordsForPlayer,
+  isRopeInTieZone,
   isCorrectWordSubmission,
+  resolveMajorityRpsChoiceFromCounts,
+  resolveRpsWinner,
+  type RpsChoice,
   resolveWinnerFromRopePosition,
   shouldEliminateOnWrongSubmission,
 } from './games/tug_of_war/gameplay';
@@ -137,6 +142,7 @@ const tugStateRow = {
   match_id: t.string().primaryKey(),
   rope_position: t.i32(),
   win_threshold: t.i32(),
+  tie_zone_percent: t.i32(),
   team_a_force: t.i32(),
   team_b_force: t.i32(),
   current_word: t.string(),
@@ -175,6 +181,26 @@ const tugHostStateRow = {
   last_word_type: t.string(),
   word_version: t.i32(),
   last_submit_at_micros: t.i64(),
+};
+
+const tugRpsStateRow = {
+  match_id: t.string().primaryKey(),
+  round_number: t.i32(),
+  stage: t.string().index(),
+  voting_ends_at_micros: t.i64(),
+  team_a_choice: t.string(),
+  team_b_choice: t.string(),
+  winner_team: t.string(),
+  created_at_micros: t.i64(),
+};
+
+const tugRpsVoteRow = {
+  tug_rps_vote_id: t.string().primaryKey(),
+  match_id: t.string().index(),
+  player_id: t.string().index(),
+  team: t.string().index(),
+  choice: t.string(),
+  submitted_at_micros: t.i64(),
 };
 
 const spacetimedb = schema({
@@ -257,6 +283,20 @@ const spacetimedb = schema({
     tugPlayerStateRow
   ),
   tug_host_state: table({ public: true }, tugHostStateRow),
+  tug_rps_state: table({ public: true }, tugRpsStateRow),
+  tug_rps_vote: table(
+    {
+      public: true,
+      indexes: [
+        {
+          accessor: 'by_match_team',
+          algorithm: 'btree',
+          columns: ['match_id', 'team'],
+        },
+      ],
+    },
+    tugRpsVoteRow
+  ),
 });
 
 export default spacetimedb;
@@ -268,10 +308,16 @@ type MatchClockRow = InferTypeOfRow<typeof matchClockRow>;
 type TugStateRow = InferTypeOfRow<typeof tugStateRow>;
 type TugPlayerStateRow = InferTypeOfRow<typeof tugPlayerStateRow>;
 type TugHostStateRow = InferTypeOfRow<typeof tugHostStateRow>;
+type TugRpsStateRow = InferTypeOfRow<typeof tugRpsStateRow>;
+type TugRpsVoteRow = InferTypeOfRow<typeof tugRpsVoteRow>;
 type MatchScheduleRow = Infer<typeof matchScheduleRow>;
 
 const PRE_GAME_COUNTDOWN_SECONDS = 3;
 const HOST_POWER_METER_MAX = 100;
+const RPS_VOTE_SECONDS = 10;
+const TIE_ZONE_PERCENT = 10;
+const RPS_STAGE_VOTING = 'Voting';
+const RPS_STAGE_REVEAL = 'Reveal';
 
 type HostPowerId =
   | typeof HOST_POWER_TECH_MODE_BURST
@@ -440,6 +486,42 @@ function getTugHostStateByMatchId(
     ctx.db.tug_host_state.iter() as Iterable<TugHostStateRow>,
     row => row.match_id === matchId
   );
+}
+
+function getTugRpsStateByMatchId(
+  ctx: ReducerCtx<any>,
+  matchId: string
+): TugRpsStateRow | null {
+  return findFirst<TugRpsStateRow>(
+    ctx.db.tug_rps_state.iter() as Iterable<TugRpsStateRow>,
+    row => row.match_id === matchId
+  );
+}
+
+function listTugRpsVotesByMatch(
+  ctx: ReducerCtx<any>,
+  matchId: string
+): TugRpsVoteRow[] {
+  const rows: TugRpsVoteRow[] = [];
+  for (const row of ctx.db.tug_rps_vote.iter() as Iterable<TugRpsVoteRow>) {
+    if (row.match_id === matchId) {
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+
+function clearTugRpsVotesByMatch(ctx: ReducerCtx<any>, matchId: string): void {
+  for (const row of listTugRpsVotesByMatch(ctx, matchId)) {
+    ctx.db.tug_rps_vote.delete(row);
+  }
+}
+
+function clearTugRpsStateForMatch(ctx: ReducerCtx<any>, matchId: string): void {
+  const row = getTugRpsStateByMatchId(ctx, matchId);
+  if (row) {
+    ctx.db.tug_rps_state.delete(row);
+  }
 }
 
 function getPlayerById(ctx: ReducerCtx<any>, playerId: string): PlayerRow | null {
@@ -839,6 +921,7 @@ function initializeTugState(
     match_id: match.match_id,
     rope_position: 0,
     win_threshold: winThreshold,
+    tie_zone_percent: TIE_ZONE_PERCENT,
     team_a_force: 0,
     team_b_force: 0,
     current_word: firstCenterWord.value,
@@ -957,6 +1040,135 @@ function finishMatch(
   emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'match_finished', {
     winner_team: resolvedWinnerTeam,
   });
+}
+
+function isValidRpsChoice(value: string): value is RpsChoice {
+  return value === 'rock' || value === 'paper' || value === 'scissors';
+}
+
+interface TeamVoteCounts {
+  rock: number;
+  paper: number;
+  scissors: number;
+}
+
+interface RpsVoteCountsByTeam {
+  a: TeamVoteCounts;
+  b: TeamVoteCounts;
+}
+
+function emptyTeamVoteCounts(): TeamVoteCounts {
+  return { rock: 0, paper: 0, scissors: 0 };
+}
+
+function countRpsVotesByTeam(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  matchId: string
+): RpsVoteCountsByTeam {
+  const counts: RpsVoteCountsByTeam = {
+    a: emptyTeamVoteCounts(),
+    b: emptyTeamVoteCounts(),
+  };
+  const playersById = new Map<string, PlayerRow>();
+  for (const player of listPlayersInLobby(ctx, lobby.lobby_id)) {
+    playersById.set(player.player_id, player);
+  }
+
+  for (const vote of listTugRpsVotesByMatch(ctx, matchId)) {
+    const player = playersById.get(vote.player_id);
+    if (!player || player.status === PLAYER_STATUS_LEFT) {
+      continue;
+    }
+    if (!isValidRpsChoice(vote.choice)) {
+      continue;
+    }
+    if (vote.team === TEAM_A) {
+      counts.a[vote.choice] += 1;
+      continue;
+    }
+    if (vote.team === TEAM_B) {
+      counts.b[vote.choice] += 1;
+    }
+  }
+
+  return counts;
+}
+
+function beginRpsTieBreak(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  match: MatchRow,
+  tug: TugStateRow
+): void {
+  const now = nowMicros(ctx);
+  const matchNext: MatchRow = {
+    ...match,
+    phase: MATCH_PHASE_TIE_BREAK_RPS,
+  };
+  replaceRow(ctx.db.match, match, matchNext);
+
+  const lobbyNext: LobbyRow = {
+    ...lobby,
+    status: LOBBY_STATUS_RUNNING,
+  };
+  replaceRow(ctx.db.lobby, lobby, lobbyNext);
+
+  const clock = getMatchClockByMatchId(ctx, match.match_id);
+  if (clock) {
+    replaceRow(ctx.db.match_clock, clock, {
+      ...clock,
+      phase_ends_at: new Timestamp(now + msToMicros(RPS_VOTE_SECONDS * 1000)),
+      seconds_remaining: RPS_VOTE_SECONDS,
+    });
+  }
+
+  clearTugRpsVotesByMatch(ctx, match.match_id);
+  const current = getTugRpsStateByMatchId(ctx, match.match_id);
+  const next: TugRpsStateRow = {
+    match_id: match.match_id,
+    round_number: 1,
+    stage: RPS_STAGE_VOTING,
+    voting_ends_at_micros: now + msToMicros(RPS_VOTE_SECONDS * 1000),
+    team_a_choice: '',
+    team_b_choice: '',
+    winner_team: '',
+    created_at_micros: now,
+  };
+  if (current) {
+    replaceRow(ctx.db.tug_rps_state, current, next);
+  } else {
+    ctx.db.tug_rps_state.insert(next);
+  }
+
+  emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'tiebreak_started', {
+    tie_zone_percent: tug.tie_zone_percent,
+    rope_position: tug.rope_position,
+    round_number: 1,
+    voting_seconds: RPS_VOTE_SECONDS,
+  });
+}
+
+function maybeFinishOrStartTieBreak(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  match: MatchRow,
+  tug: TugStateRow,
+  winnerTeam: string
+): boolean {
+  if (
+    isRopeInTieZone(
+      tug.rope_position,
+      tug.win_threshold,
+      tug.tie_zone_percent
+    )
+  ) {
+    beginRpsTieBreak(ctx, lobby, match, tug);
+    return true;
+  }
+
+  finishMatch(ctx, lobby, match, winnerTeam);
+  return true;
 }
 
 function eliminatePlayer(
@@ -1280,6 +1492,80 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
     return;
   }
 
+  if (match.phase === MATCH_PHASE_TIE_BREAK_RPS) {
+    const rpsState = getTugRpsStateByMatchId(ctx, matchId);
+    if (!rpsState) {
+      return;
+    }
+
+    if (rpsState.stage !== RPS_STAGE_VOTING) {
+      return;
+    }
+
+    if (!isPhaseExpired(rpsState.voting_ends_at_micros, now)) {
+      return;
+    }
+
+    const voteCounts = countRpsVotesByTeam(ctx, lobby, matchId);
+    const teamAChoice = resolveMajorityRpsChoiceFromCounts(voteCounts.a);
+    const teamBChoice = resolveMajorityRpsChoiceFromCounts(voteCounts.b);
+    const winnerTeam = resolveRpsWinner(teamAChoice, teamBChoice);
+
+    if (!winnerTeam) {
+      const nextRound = rpsState.round_number + 1;
+      const nextVotingEndsAt = now + msToMicros(RPS_VOTE_SECONDS * 1000);
+      replaceRow(ctx.db.tug_rps_state, rpsState, {
+        ...rpsState,
+        round_number: nextRound,
+        stage: RPS_STAGE_VOTING,
+        voting_ends_at_micros: nextVotingEndsAt,
+        team_a_choice: '',
+        team_b_choice: '',
+        winner_team: '',
+      });
+      clearTugRpsVotesByMatch(ctx, matchId);
+
+      const clockNext: MatchClockRow = {
+        ...clock,
+        phase_ends_at: new Timestamp(nextVotingEndsAt),
+        seconds_remaining: RPS_VOTE_SECONDS,
+      };
+      replaceRow(ctx.db.match_clock, clock, clockNext);
+
+      emitGameEvent(ctx, lobby.lobby_id, matchId, 'rps_round_revote', {
+        round_number: nextRound,
+        voting_seconds: RPS_VOTE_SECONDS,
+      });
+      return;
+    }
+
+    replaceRow(ctx.db.tug_rps_state, rpsState, {
+      ...rpsState,
+      stage: RPS_STAGE_REVEAL,
+      voting_ends_at_micros: 0n,
+      team_a_choice: teamAChoice,
+      team_b_choice: teamBChoice,
+      winner_team: winnerTeam,
+    });
+
+    if (clock.seconds_remaining !== 0 || clock.phase_ends_at.microsSinceUnixEpoch !== now) {
+      const clockNext: MatchClockRow = {
+        ...clock,
+        phase_ends_at: new Timestamp(now),
+        seconds_remaining: 0,
+      };
+      replaceRow(ctx.db.match_clock, clock, clockNext);
+    }
+
+    emitGameEvent(ctx, lobby.lobby_id, matchId, 'rps_reveal_ready', {
+      round_number: rpsState.round_number,
+      team_a_choice: teamAChoice,
+      team_b_choice: teamBChoice,
+      winner_team: winnerTeam,
+    });
+    return;
+  }
+
   tug = maybeExpireTimedPower(ctx, lobby, match, tug, now);
   tug = updateTiersOnTugState(ctx, lobby, match, tug);
 
@@ -1296,12 +1582,12 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
     tug = tugNext;
 
     if (tug.rope_position >= tug.win_threshold) {
-      finishMatch(ctx, lobby, match, TEAM_A);
+      maybeFinishOrStartTieBreak(ctx, lobby, match, tug, TEAM_A);
       return;
     }
 
     if (tug.rope_position <= -tug.win_threshold) {
-      finishMatch(ctx, lobby, match, TEAM_B);
+      maybeFinishOrStartTieBreak(ctx, lobby, match, tug, TEAM_B);
       return;
     }
   }
@@ -1334,15 +1620,21 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
 
     const teamCounts = countActiveByTeam(listPlayersInLobby(ctx, lobby.lobby_id));
     if (teamCounts.a === 0 && teamCounts.b === 0) {
-      finishMatch(ctx, lobby, match, resolveWinnerFromTugState(tug));
+      maybeFinishOrStartTieBreak(
+        ctx,
+        lobby,
+        match,
+        tug,
+        resolveWinnerFromTugState(tug)
+      );
       return;
     }
     if (teamCounts.a === 0 && teamCounts.b > 0) {
-      finishMatch(ctx, lobby, match, TEAM_B);
+      maybeFinishOrStartTieBreak(ctx, lobby, match, tug, TEAM_B);
       return;
     }
     if (teamCounts.b === 0 && teamCounts.a > 0) {
-      finishMatch(ctx, lobby, match, TEAM_A);
+      maybeFinishOrStartTieBreak(ctx, lobby, match, tug, TEAM_A);
     }
   }
 }
@@ -1565,6 +1857,8 @@ export const start_match = spacetimedb.reducer(
       seed: ctx.random.uint32(),
     };
     ctx.db.match.insert(match);
+    clearTugRpsStateForMatch(ctx, matchId);
+    clearTugRpsVotesByMatch(ctx, matchId);
 
     ctx.db.match_clock.insert({
       match_id: matchId,
@@ -1639,12 +1933,16 @@ export const reset_lobby = spacetimedb.reducer(
           ...tug,
           mode: TUG_MODE_NORMAL,
           word_mode: WORD_MODE_NORMAL,
+          tie_zone_percent: TIE_ZONE_PERCENT,
           ramp_tier: 1,
           difficulty_bonus_tier: 0,
           active_power_id: '',
           power_expires_at_micros: 0n,
         });
       }
+
+      clearTugRpsStateForMatch(ctx, lobby.active_match_id);
+      clearTugRpsVotesByMatch(ctx, lobby.active_match_id);
 
       const hostState = getTugHostStateByMatchId(ctx, lobby.active_match_id);
       if (hostState) {
@@ -1828,6 +2126,101 @@ export const tug_activate_power = spacetimedb.reducer(
     });
 
     rerollAllActiveWords(ctx, lobby, match, tugActive);
+  }
+);
+
+export const tug_rps_cast_vote = spacetimedb.reducer(
+  {
+    match_id: t.string(),
+    choice: t.string(),
+  },
+  (ctx, { match_id, choice }) => {
+    const match = getMatchOrThrow(ctx, match_id);
+    if (match.phase !== MATCH_PHASE_TIE_BREAK_RPS) {
+      throw new Error('Match is not in tie-break voting');
+    }
+
+    const lobby = getLobbyOrThrow(ctx, match.lobby_id);
+    if (lobby.host_identity.equals(ctx.sender)) {
+      throw new Error('Host cannot vote in tie-break');
+    }
+
+    const rpsState = getTugRpsStateByMatchId(ctx, match_id);
+    if (!rpsState || rpsState.stage !== RPS_STAGE_VOTING) {
+      throw new Error('Tie-break voting is not open');
+    }
+    if (nowMicros(ctx) > rpsState.voting_ends_at_micros) {
+      throw new Error('Tie-break voting is closed');
+    }
+
+    if (!isValidRpsChoice(choice)) {
+      throw new Error('Invalid RPS choice');
+    }
+
+    const player = findMembershipInLobby(ctx, lobby.lobby_id);
+    if (!player) {
+      throw new Error('Player is not in this lobby');
+    }
+    if (player.status === PLAYER_STATUS_LEFT) {
+      throw new Error('Left players cannot vote');
+    }
+    if (player.team !== TEAM_A && player.team !== TEAM_B) {
+      throw new Error('Player is not on a team');
+    }
+
+    const voteId = `${match_id}:${player.player_id}`;
+    const existing = findFirst<TugRpsVoteRow>(
+      ctx.db.tug_rps_vote.iter() as Iterable<TugRpsVoteRow>,
+      row => row.tug_rps_vote_id === voteId
+    );
+    const nextVote: TugRpsVoteRow = {
+      tug_rps_vote_id: voteId,
+      match_id,
+      player_id: player.player_id,
+      team: player.team,
+      choice,
+      submitted_at_micros: nowMicros(ctx),
+    };
+    if (existing) {
+      replaceRow(ctx.db.tug_rps_vote, existing, nextVote);
+    } else {
+      ctx.db.tug_rps_vote.insert(nextVote);
+    }
+
+    emitGameEvent(ctx, lobby.lobby_id, match_id, 'rps_vote_cast', {
+      round_number: rpsState.round_number,
+      vote_received: true,
+    });
+  }
+);
+
+export const tug_rps_continue = spacetimedb.reducer(
+  {
+    match_id: t.string(),
+  },
+  (ctx, { match_id }) => {
+    const match = getMatchOrThrow(ctx, match_id);
+    if (match.phase !== MATCH_PHASE_TIE_BREAK_RPS) {
+      throw new Error('Match is not in tie-break reveal');
+    }
+
+    const lobby = getLobbyOrThrow(ctx, match.lobby_id);
+    assertHost(ctx, lobby);
+
+    const rpsState = getTugRpsStateByMatchId(ctx, match_id);
+    if (!rpsState || rpsState.stage !== RPS_STAGE_REVEAL) {
+      throw new Error('Tie-break reveal is not ready');
+    }
+    if (rpsState.winner_team !== TEAM_A && rpsState.winner_team !== TEAM_B) {
+      throw new Error('Tie-break winner is not resolved');
+    }
+
+    emitGameEvent(ctx, lobby.lobby_id, match_id, 'tiebreak_continue_to_postgame', {
+      winner_team: rpsState.winner_team,
+      round_number: rpsState.round_number,
+    });
+
+    finishMatch(ctx, lobby, match, rpsState.winner_team);
   }
 );
 

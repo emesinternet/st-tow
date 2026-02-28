@@ -2,6 +2,7 @@ const PHASE_LABELS: Record<string, string> = {
   PreGame: 'Pre-Game',
   InGame: 'In Match',
   SuddenDeath: 'Sudden Death',
+  TieBreakRps: 'Tie-Break',
   PostGame: 'Post Game',
 };
 

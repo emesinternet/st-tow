@@ -110,10 +110,33 @@ export const TugPlayerState = __t.object("TugPlayerState", {
 });
 export type TugPlayerState = __Infer<typeof TugPlayerState>;
 
+export const TugRpsState = __t.object("TugRpsState", {
+  matchId: __t.string(),
+  roundNumber: __t.i32(),
+  stage: __t.string(),
+  votingEndsAtMicros: __t.i64(),
+  teamAChoice: __t.string(),
+  teamBChoice: __t.string(),
+  winnerTeam: __t.string(),
+  createdAtMicros: __t.i64(),
+});
+export type TugRpsState = __Infer<typeof TugRpsState>;
+
+export const TugRpsVote = __t.object("TugRpsVote", {
+  tugRpsVoteId: __t.string(),
+  matchId: __t.string(),
+  playerId: __t.string(),
+  team: __t.string(),
+  choice: __t.string(),
+  submittedAtMicros: __t.i64(),
+});
+export type TugRpsVote = __Infer<typeof TugRpsVote>;
+
 export const TugState = __t.object("TugState", {
   matchId: __t.string(),
   ropePosition: __t.i32(),
   winThreshold: __t.i32(),
+  tieZonePercent: __t.i32(),
   teamAForce: __t.i32(),
   teamBForce: __t.i32(),
   currentWord: __t.string(),

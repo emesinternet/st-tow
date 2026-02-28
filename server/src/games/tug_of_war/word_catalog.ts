@@ -108,11 +108,16 @@ function addExpandedEntries(
   type: WordType,
   values: readonly string[],
   target: WordEntry[],
-  used: Set<string>
+  used: Set<string>,
+  options?: { expand?: boolean }
 ): void {
   addWordEntries(mode, tier, type, values, target);
   for (const value of values) {
     used.add(value);
+  }
+
+  if (options?.expand === false) {
+    return;
   }
 
   if (values.length === 0) {
@@ -562,10 +567,18 @@ function buildCatalog(): WordEntry[] {
   const tiers: WordDifficultyTier[] = [1, 2, 3, 4, 5];
   for (const tier of tiers) {
     const normal = NORMAL_TIER_WORDS[tier];
-    addExpandedEntries(WORD_MODE_NORMAL, tier, 'object', normal.object, entries, used);
-    addExpandedEntries(WORD_MODE_NORMAL, tier, 'action', normal.action, entries, used);
-    addExpandedEntries(WORD_MODE_NORMAL, tier, 'abstract', normal.abstract, entries, used);
-    addExpandedEntries(WORD_MODE_NORMAL, tier, 'nature', normal.nature, entries, used);
+    addExpandedEntries(WORD_MODE_NORMAL, tier, 'object', normal.object, entries, used, {
+      expand: false,
+    });
+    addExpandedEntries(WORD_MODE_NORMAL, tier, 'action', normal.action, entries, used, {
+      expand: false,
+    });
+    addExpandedEntries(WORD_MODE_NORMAL, tier, 'abstract', normal.abstract, entries, used, {
+      expand: false,
+    });
+    addExpandedEntries(WORD_MODE_NORMAL, tier, 'nature', normal.nature, entries, used, {
+      expand: false,
+    });
 
     const tech = TECH_TIER_WORDS[tier];
     addExpandedEntries(WORD_MODE_TECH, tier, 'command', tech.command, entries, used);

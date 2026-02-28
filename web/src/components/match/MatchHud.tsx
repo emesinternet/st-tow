@@ -150,6 +150,13 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers }: MatchHudProps) {
           </div>
         </div>
         <div className="relative h-24 overflow-hidden rounded-[16px] border-4 border-neo-ink bg-gradient-to-r from-neo-teamA/25 via-neo-yellow/25 to-neo-teamB/25 sm:h-28">
+          <div
+            className="absolute inset-y-0 z-10 border-x-2 border-neo-ink/50 bg-neo-yellow/25"
+            style={{
+              left: `${hud.tieZoneStartPercent}%`,
+              width: `${Math.max(0, hud.tieZoneEndPercent - hud.tieZoneStartPercent)}%`,
+            }}
+          />
           <div className="absolute inset-1.5 grid grid-cols-2 gap-1 overflow-hidden rounded-[12px] sm:inset-2">
             <div className="pr-1.5 pl-2 pt-9 pb-0 sm:pr-2 sm:pl-3 sm:pt-10">
               <TeamMarkers players={teamAPlayers} tone="teamA" />
