@@ -315,9 +315,9 @@ type MatchScheduleRow = Infer<typeof matchScheduleRow>;
 const PRE_GAME_COUNTDOWN_SECONDS = 3;
 const HOST_POWER_METER_MAX = 100;
 const RPS_VOTE_SECONDS = 10;
-const TIE_ZONE_PERCENT = 10;
 const RPS_STAGE_VOTING = 'Voting';
 const RPS_STAGE_REVEAL = 'Reveal';
+const TIE_ZONE_PERCENT_OPTIONS = new Set([10, 20, 30, 40]);
 
 type HostPowerId =
   | typeof HOST_POWER_TECH_MODE_BURST
@@ -362,6 +362,10 @@ function isWordMode(value: string): value is WordMode {
     value === WORD_MODE_TECH ||
     value === WORD_MODE_SYMBOLS
   );
+}
+
+function isValidTieZonePercent(value: number): boolean {
+  return TIE_ZONE_PERCENT_OPTIONS.has(value);
 }
 
 function clampTier(value: number): WordDifficultyTier {
@@ -909,6 +913,12 @@ function initializeTugState(
     LOBBY_SETTING_KEYS.elimination_word_time_ms,
     DEFAULT_LOBBY_SETTINGS.elimination_word_time_ms
   );
+  const tieZonePercent = getLobbySettingInt(
+    ctx,
+    lobby.lobby_id,
+    LOBBY_SETTING_KEYS.tie_zone_percent,
+    DEFAULT_LOBBY_SETTINGS.tie_zone_percent
+  );
   const now = nowMicros(ctx);
 
   const tugCurrent = getTugStateByMatchId(ctx, match.match_id);
@@ -921,7 +931,7 @@ function initializeTugState(
     match_id: match.match_id,
     rope_position: 0,
     win_threshold: winThreshold,
-    tie_zone_percent: TIE_ZONE_PERCENT,
+    tie_zone_percent: tieZonePercent,
     team_a_force: 0,
     team_b_force: 0,
     current_word: firstCenterWord.value,
@@ -1658,14 +1668,18 @@ export const create_lobby = spacetimedb.reducer(
   {
     game_type: t.string(),
     round_seconds: t.i32(),
+    tie_zone_percent: t.i32(),
   },
-  (ctx, { game_type, round_seconds }) => {
+  (ctx, { game_type, round_seconds, tie_zone_percent }) => {
     if (game_type !== GAME_TYPE_TUG_OF_WAR) {
       throw new Error(`Unsupported game type: ${game_type}`);
     }
 
     if (round_seconds < 60 || round_seconds > 3600) {
       throw new Error('round_seconds must be between 60 and 3600');
+    }
+    if (!isValidTieZonePercent(tie_zone_percent)) {
+      throw new Error('tie_zone_percent must be one of 10, 20, 30, or 40');
     }
 
     let joinCode = '';
@@ -1699,10 +1713,17 @@ export const create_lobby = spacetimedb.reducer(
       LOBBY_SETTING_KEYS.round_seconds,
       JSON.stringify(round_seconds)
     );
+    upsertLobbySetting(
+      ctx,
+      lobbyId,
+      LOBBY_SETTING_KEYS.tie_zone_percent,
+      JSON.stringify(tie_zone_percent)
+    );
     emitGameEvent(ctx, lobbyId, '', 'lobby_created', {
       join_code: joinCode,
       game_type,
       round_seconds,
+      tie_zone_percent,
     });
   }
 );
@@ -1929,11 +1950,17 @@ export const reset_lobby = spacetimedb.reducer(
 
       const tug = getTugStateByMatchId(ctx, lobby.active_match_id);
       if (tug) {
+        const tieZonePercent = getLobbySettingInt(
+          ctx,
+          lobby_id,
+          LOBBY_SETTING_KEYS.tie_zone_percent,
+          DEFAULT_LOBBY_SETTINGS.tie_zone_percent
+        );
         replaceRow(ctx.db.tug_state, tug, {
           ...tug,
           mode: TUG_MODE_NORMAL,
           word_mode: WORD_MODE_NORMAL,
-          tie_zone_percent: TIE_ZONE_PERCENT,
+          tie_zone_percent: tieZonePercent,
           ramp_tier: 1,
           difficulty_bonus_tier: 0,
           active_power_id: '',

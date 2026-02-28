@@ -35,7 +35,11 @@ function assertConnection(connection: DbConnection | null): DbConnection {
 }
 
 export interface GameActions {
-  createLobby: (gameType: string, roundSeconds: number) => Promise<void>;
+  createLobby: (
+    gameType: string,
+    roundSeconds: number,
+    tieZonePercent: number
+  ) => Promise<void>;
   joinLobby: (joinCode: string, displayName: string) => Promise<void>;
   setLobbySetting: (lobbyId: string, key: string, valueJson: string) => Promise<void>;
   startMatch: (lobbyId: string) => Promise<void>;
@@ -50,9 +54,17 @@ export interface GameActions {
 
 export function buildActions(connection: DbConnection | null): GameActions {
   return {
-    createLobby: async (gameType: string, roundSeconds: number) => {
+    createLobby: async (
+      gameType: string,
+      roundSeconds: number,
+      tieZonePercent: number
+    ) => {
       const conn = assertConnection(connection);
-      await callReducer(conn, 'create_lobby', { gameType, roundSeconds });
+      await callReducer(conn, 'create_lobby', {
+        gameType,
+        roundSeconds,
+        tieZonePercent,
+      });
     },
     joinLobby: async (joinCode: string, displayName: string) => {
       const conn = assertConnection(connection);

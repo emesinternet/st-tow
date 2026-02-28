@@ -203,6 +203,12 @@ test('selector derives pre-match seconds from round_seconds setting with fallbac
       key: 'round_seconds',
       valueJson: '120',
     },
+    {
+      settingId: 'lobby-1:tie_zone_percent',
+      lobbyId: 'lobby-1',
+      key: 'tie_zone_percent',
+      valueJson: '20',
+    },
   ];
 
   const withSetting = selectUiViewModel({
@@ -214,6 +220,8 @@ test('selector derives pre-match seconds from round_seconds setting with fallbac
   });
   assert.equal(withSetting.preMatchSecondsRemaining, 120);
   assert.equal(withSetting.preMatchHud?.secondsRemaining, 120);
+  assert.equal(withSetting.preMatchHud?.tieZoneStartPercent, 40);
+  assert.equal(withSetting.preMatchHud?.tieZoneEndPercent, 60);
 
   snapshot.lobbySettings = [];
   const withFallback = selectUiViewModel({
@@ -225,6 +233,8 @@ test('selector derives pre-match seconds from round_seconds setting with fallbac
   });
   assert.equal(withFallback.preMatchSecondsRemaining, 90);
   assert.equal(withFallback.preMatchHud?.secondsRemaining, 90);
+  assert.equal(withFallback.preMatchHud?.tieZoneStartPercent, 45);
+  assert.equal(withFallback.preMatchHud?.tieZoneEndPercent, 55);
 });
 
 test('selector hides counts for host during voting and shows own team counts for player', () => {

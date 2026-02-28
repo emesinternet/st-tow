@@ -13,4 +13,5 @@ import {
 export default {
   gameType: __t.string(),
   roundSeconds: __t.i32(),
+  tieZonePercent: __t.i32(),
 };

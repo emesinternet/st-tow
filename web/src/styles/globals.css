@@ -36,10 +36,10 @@ body {
   font-family: 'Space Grotesk', sans-serif;
   color: hsl(var(--fg));
   background:
-    radial-gradient(circle at 15% 5%, #fff5c1 0, transparent 35%),
-    radial-gradient(circle at 85% 15%, #c7e8ff 0, transparent 38%),
-    radial-gradient(circle at 50% 90%, #ffd7cc 0, transparent 45%),
-    hsl(var(--bg));
+    radial-gradient(circle at 15% 5%, oklch(0.97 0.06 100) 0, transparent 35%),
+    radial-gradient(circle at 85% 15%, oklch(0.93 0.05 245) 0, transparent 38%),
+    radial-gradient(circle at 50% 90%, oklch(0.9 0.08 35) 0, transparent 45%),
+    oklch(0.96 0.03 95);
 }
 
 ::selection {
@@ -49,8 +49,8 @@ body {
 
 .neo-grid {
   background-image:
-    linear-gradient(to right, hsl(var(--border) / 0.07) 1px, transparent 1px),
-    linear-gradient(to bottom, hsl(var(--border) / 0.07) 1px, transparent 1px);
+    linear-gradient(to right, oklch(0.3 0.03 255 / 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.3 0.03 255 / 0.07) 1px, transparent 1px);
   background-size: 22px 22px;
 }
 
@@ -61,16 +61,43 @@ body {
 
 .team-bg-a {
   background:
-    radial-gradient(circle at 12% 10%, hsl(var(--team-a) / 0.55) 0, transparent 38%),
-    radial-gradient(circle at 88% 18%, hsl(var(--accent) / 0.35) 0, transparent 36%),
-    linear-gradient(135deg, #ffd6cb 0%, #ffe7dd 46%, #fff5d8 100%);
+    radial-gradient(circle at 12% 10%, oklch(0.72 0.19 28 / 0.56) 0, transparent 38%),
+    radial-gradient(circle at 88% 18%, oklch(0.9 0.11 95 / 0.33) 0, transparent 36%),
+    linear-gradient(
+      135deg,
+      oklch(0.89 0.08 34) 0%,
+      oklch(0.94 0.06 40) 46%,
+      oklch(0.97 0.05 95) 100%
+    );
 }
 
 .team-bg-b {
   background:
-    radial-gradient(circle at 86% 10%, hsl(var(--team-b) / 0.55) 0, transparent 38%),
-    radial-gradient(circle at 14% 18%, hsl(var(--accent) / 0.3) 0, transparent 36%),
-    linear-gradient(135deg, #d5eaff 0%, #e3f0ff 48%, #e8f7ff 100%);
+    radial-gradient(circle at 86% 10%, oklch(0.68 0.12 250 / 0.56) 0, transparent 38%),
+    radial-gradient(circle at 14% 18%, oklch(0.9 0.11 95 / 0.3) 0, transparent 36%),
+    linear-gradient(
+      135deg,
+      oklch(0.9 0.05 250) 0%,
+      oklch(0.94 0.04 245) 48%,
+      oklch(0.96 0.04 230) 100%
+    );
+}
+
+.bg-tug-war-gradient {
+  background: linear-gradient(
+    90deg,
+    oklch(0.9 0.07 30 / 0.45) 0%,
+    oklch(0.91 0.04 250 / 0.45) 100%
+  );
+}
+
+.bg-rps-reveal-gradient {
+  background: linear-gradient(
+    90deg,
+    oklch(0.89 0.1 30 / 0.9) 0%,
+    oklch(0.9 0.07 350 / 0.65) 46%,
+    oklch(0.86 0.11 250 / 0.9) 100%
+  );
 }
 
 .fade-enter {

@@ -149,7 +149,7 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers }: MatchHudProps) {
             )}
           </div>
         </div>
-        <div className="relative h-24 overflow-hidden rounded-[16px] border-4 border-neo-ink bg-gradient-to-r from-neo-teamA/25 via-neo-yellow/25 to-neo-teamB/25 sm:h-28">
+        <div className="bg-tug-war-gradient relative h-24 overflow-hidden rounded-[16px] border-4 border-neo-ink sm:h-28">
           <div
             className="absolute inset-y-0 z-10 border-x-2 border-neo-ink/50 bg-neo-yellow/25"
             style={{

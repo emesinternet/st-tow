@@ -6,9 +6,11 @@ interface LandingPanelProps {
   displayName: string;
   joinCode: string;
   roundMinutes: number;
+  tieZoneSize: 'small' | 'medium' | 'large' | 'xlarge';
   onDisplayNameChange: (next: string) => void;
   onJoinCodeChange: (next: string) => void;
   onRoundMinutesChange: (next: number) => void;
+  onTieZoneSizeChange: (next: 'small' | 'medium' | 'large' | 'xlarge') => void;
   onJoin: () => Promise<void>;
   onCreateLobby: () => Promise<void>;
 }
@@ -17,9 +19,11 @@ export function LandingPanel({
   displayName,
   joinCode,
   roundMinutes,
+  tieZoneSize,
   onDisplayNameChange,
   onJoinCodeChange,
   onRoundMinutesChange,
+  onTieZoneSizeChange,
   onJoin,
   onCreateLobby,
 }: LandingPanelProps) {
@@ -61,6 +65,26 @@ export function LandingPanel({
             }}
             placeholder="1"
           />
+        </label>
+
+        <label className="block space-y-1">
+          <span className="font-display text-xs font-bold uppercase tracking-wide">
+            Tie Zone Width
+          </span>
+          <select
+            value={tieZoneSize}
+            onChange={event =>
+              onTieZoneSizeChange(
+                event.target.value as 'small' | 'medium' | 'large' | 'xlarge'
+              )
+            }
+            className="neo-focus h-11 w-full rounded-[12px] border-4 border-neo-ink bg-neo-paper px-3 font-display text-sm font-bold uppercase tracking-wide text-neo-ink shadow-neo-sm"
+          >
+            <option value="small">Small (10%)</option>
+            <option value="medium">Medium (20%)</option>
+            <option value="large">Large (30%)</option>
+            <option value="xlarge">XLarge (40%)</option>
+          </select>
         </label>
 
         <label className="block space-y-1">

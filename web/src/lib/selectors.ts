@@ -29,6 +29,8 @@ import type {
 } from '@/types/ui';
 
 const DEFAULT_ROUND_SECONDS = 90;
+const DEFAULT_WIN_THRESHOLD = 100;
+const DEFAULT_TIE_ZONE_PERCENT = 10;
 const MATCH_PHASE_TIE_BREAK_RPS = 'TieBreakRps';
 const HOST_POWER_SPECS: Array<{ id: string; label: string; cost: number }> = [
   { id: 'tech_mode_burst', label: 'Tech Burst', cost: 1 },
@@ -538,6 +540,8 @@ function buildMatchHudModel(
   match: NormalizedMatch,
   clock: NormalizedMatchClock | null,
   tug: NormalizedTugState | null,
+  lobbyWinThreshold: number,
+  lobbyTieZonePercent: number,
   snapshotGeneratedAt: number,
   teamAPlayers: NormalizedPlayer[],
   teamBPlayers: NormalizedPlayer[],
@@ -546,8 +550,8 @@ function buildMatchHudModel(
   myState: NormalizedTugPlayerState | null
 ): MatchHudViewModel {
   const ropePosition = tug?.ropePosition ?? 0;
-  const winThreshold = tug?.winThreshold ?? 100;
-  const tieZonePercent = Math.max(0, tug?.tieZonePercent ?? 10);
+  const winThreshold = tug?.winThreshold ?? lobbyWinThreshold;
+  const tieZonePercent = Math.max(0, tug?.tieZonePercent ?? lobbyTieZonePercent);
   const tieZoneBounds = normalizeTieZoneBounds(winThreshold, tieZonePercent);
   const rampTier = Math.max(1, Math.min(5, tug?.rampTier ?? 1));
   const effectiveTier = Math.max(
@@ -617,8 +621,11 @@ function buildMatchHudModel(
 
 function buildPreMatchHudModel(
   lobbyId: string,
-  preMatchSecondsRemaining: number
+  preMatchSecondsRemaining: number,
+  winThreshold: number,
+  tieZonePercent: number
 ): MatchHudViewModel {
+  const tieZoneBounds = normalizeTieZoneBounds(winThreshold, tieZonePercent);
   return {
     matchId: `${lobbyId}:pre`,
     phase: 'PreGame',
@@ -626,9 +633,9 @@ function buildPreMatchHudModel(
     winnerTeam: '',
     ropePosition: 0,
     normalizedRopePosition: 50,
-    winThreshold: 100,
-    tieZoneStartPercent: 45,
-    tieZoneEndPercent: 55,
+    winThreshold,
+    tieZoneStartPercent: tieZoneBounds.start,
+    tieZoneEndPercent: tieZoneBounds.end,
     teamAForce: 0,
     teamBForce: 0,
     teamAPulls: 0,
@@ -676,6 +683,18 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
     lobby.lobbyId,
     'round_seconds',
     DEFAULT_ROUND_SECONDS
+  );
+  const preMatchWinThreshold = getLobbySettingInt(
+    snapshot.lobbySettings,
+    lobby.lobbyId,
+    'win_threshold',
+    DEFAULT_WIN_THRESHOLD
+  );
+  const preMatchTieZonePercent = getLobbySettingInt(
+    snapshot.lobbySettings,
+    lobby.lobbyId,
+    'tie_zone_percent',
+    DEFAULT_TIE_ZONE_PERCENT
   );
 
   const lobbyPlayers = snapshot.players.filter(player => player.lobbyId === lobby.lobbyId);
@@ -732,6 +751,8 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
           match,
           clock,
           tug,
+          preMatchWinThreshold,
+          preMatchTieZonePercent,
           snapshot.generatedAt,
           teamAPlayers,
           teamBPlayers,
@@ -740,7 +761,14 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
           myTugState
         )
       : null,
-    preMatchHud: match ? null : buildPreMatchHudModel(lobby.lobbyId, preMatchSecondsRemaining),
+    preMatchHud: match
+      ? null
+      : buildPreMatchHudModel(
+          lobby.lobbyId,
+          preMatchSecondsRemaining,
+          preMatchWinThreshold,
+          preMatchTieZonePercent
+        ),
     preMatchSecondsRemaining,
     rpsTieBreak: buildRpsTieBreakModel(
       role,

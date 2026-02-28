@@ -25,6 +25,14 @@ import type { RpsTieBreakViewModel, ToastMessage } from '@/types/ui';
 
 const GAME_TYPE_TUG_OF_WAR = 'tug_of_war';
 type DebugModal = 'none' | 'countdown' | 'rpsVoting' | 'rpsReveal' | 'postGame';
+type TieZoneSize = 'small' | 'medium' | 'large' | 'xlarge';
+
+const TIE_ZONE_PERCENT_BY_SIZE: Record<TieZoneSize, number> = {
+  small: 10,
+  medium: 20,
+  large: 30,
+  xlarge: 40,
+};
 
 function makeToastId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -48,6 +56,7 @@ export default function App() {
   const [displayName, setDisplayName] = useState('Player');
   const [joinCode, setJoinCode] = useState('');
   const [roundMinutes, setRoundMinutes] = useState(1);
+  const [tieZoneSize, setTieZoneSize] = useState<TieZoneSize>('small');
   const [pendingRoundSeconds, setPendingRoundSeconds] = useState<number | null>(null);
   const [pendingJoinCode, setPendingJoinCode] = useState('');
   const [selectedLobbyId, setSelectedLobbyId] = useState('');
@@ -138,11 +147,12 @@ export default function App() {
   const handleCreateLobby = useCallback(async () => {
     setPendingJoinCode('');
     const roundSeconds = Math.max(1, Math.min(60, Math.trunc(roundMinutes))) * 60;
+    const tieZonePercent = TIE_ZONE_PERCENT_BY_SIZE[tieZoneSize];
     await withActionErrorToast('Could not create lobby', () =>
-      actions.createLobby(GAME_TYPE_TUG_OF_WAR, roundSeconds)
+      actions.createLobby(GAME_TYPE_TUG_OF_WAR, roundSeconds, tieZonePercent)
     );
     setPendingRoundSeconds(roundSeconds);
-  }, [actions, roundMinutes, withActionErrorToast]);
+  }, [actions, roundMinutes, tieZoneSize, withActionErrorToast]);
 
   useEffect(() => {
     if (pendingRoundSeconds == null) {
@@ -345,9 +355,11 @@ export default function App() {
         displayName={displayName}
         joinCode={joinCode}
         roundMinutes={roundMinutes}
+        tieZoneSize={tieZoneSize}
         onDisplayNameChange={setDisplayName}
         onJoinCodeChange={setJoinCode}
         onRoundMinutesChange={setRoundMinutes}
+        onTieZoneSizeChange={setTieZoneSize}
         onJoin={handleJoinLobby}
         onCreateLobby={handleCreateLobby}
       />
