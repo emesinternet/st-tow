@@ -17,24 +17,12 @@ import {
 } from '@/components/shared/ui/toast';
 import { useSpacetimeSession } from '@/data/useSpacetimeSession';
 import { selectUiViewModel } from '@/lib/selectors';
-import type { MatchHudViewModel, ToastMessage } from '@/types/ui';
+import type { ToastMessage } from '@/types/ui';
 
 const GAME_TYPE_TUG_OF_WAR = 'tug_of_war';
-const DEFAULT_ROUND_SECONDS = 90;
 
 function makeToastId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function parseSettingInt(valueJson: string): number | null {
-  try {
-    const parsed = JSON.parse(valueJson);
-    const number = Number(parsed);
-    return Number.isFinite(number) ? Math.trunc(number) : null;
-  } catch {
-    const number = Number(valueJson);
-    return Number.isFinite(number) ? Math.trunc(number) : null;
-  }
 }
 
 function resolveTeamTone(
@@ -176,42 +164,6 @@ export default function App() {
     },
     [actions, ui.matchHud, withActionErrorToast]
   );
-
-  const preMatchRoundSeconds = useMemo(() => {
-    if (!ui.lobby) {
-      return DEFAULT_ROUND_SECONDS;
-    }
-
-    const row = snapshot.lobbySettings.find(
-      setting =>
-        setting.lobbyId === ui.lobby!.lobbyId &&
-        setting.key === 'round_seconds'
-    );
-    if (!row) {
-      return DEFAULT_ROUND_SECONDS;
-    }
-
-    return parseSettingInt(row.valueJson) ?? DEFAULT_ROUND_SECONDS;
-  }, [snapshot.lobbySettings, ui.lobby]);
-
-  const preMatchHud: MatchHudViewModel = {
-    matchId: ui.lobby?.lobbyId ?? 'preview',
-    phase: 'PreGame',
-    secondsRemaining: preMatchRoundSeconds,
-    winnerTeam: '',
-    ropePosition: 0,
-    normalizedRopePosition: 50,
-    winThreshold: 100,
-    teamAForce: 0,
-    teamBForce: 0,
-    aliveTeamA: 0,
-    aliveTeamB: 0,
-    currentWord: '',
-    wordVersion: 0,
-    mode: 'Normal',
-    suddenDeathDeadlineMicros: null,
-  };
-  const hideTypingPanel = ui.role === 'host' && ui.matchHud != null;
   const teamTone = ui.lobby ? resolveTeamTone(ui.lobby) : 'neutral';
   const backgroundClassName =
     teamTone === 'teamA'
@@ -232,12 +184,14 @@ export default function App() {
       />
     ) : (
       <>
-        <MatchHud hud={ui.matchHud ?? preMatchHud} />
-        {!hideTypingPanel ? (
+        {ui.matchHud || ui.preMatchHud ? (
+          <MatchHud hud={ui.matchHud ?? ui.preMatchHud!} />
+        ) : null}
+        {ui.playerInput ? (
           <PlayerInputPanel
             model={ui.playerInput}
             onSubmitWord={handleSubmitWord}
-            preMatch={!ui.matchHud}
+            preMatch={!ui.matchHud || ui.matchHud.phase === 'PreGame'}
           />
         ) : null}
       </>

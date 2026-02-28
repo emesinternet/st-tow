@@ -86,6 +86,7 @@ export function useSpacetimeSession(): SpacetimeSession {
             tables.match_clock,
             tables.tug_state,
             tables.tug_player_state,
+            tables.tug_host_state,
             tables.game_event,
           ]);
 

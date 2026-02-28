@@ -13,11 +13,24 @@ Realtime SpacetimeDB tug-of-war game with a React web client.
 
 - Host creates a lobby and shares a join code.
 - Players join, are balanced into team A/B, and complete words to add team force.
-- Match flow: `Waiting -> InGame -> SuddenDeath -> PostGame`.
+- Match flow: `Waiting -> PreGame(3s countdown) -> InGame -> SuddenDeath -> PostGame`.
 - Words are per-player. Each player gets their own random target stream.
 - Words do not rotate on a timer; a new word is assigned only when that player completes the current word.
 - In sudden death, active players must complete their word before their deadline.
 - If both teams are eliminated on the same tick, the match ends deterministically.
+- Host has a separate `tug_host_state` stream:
+  - correct host submits increment host score only
+  - host does not change rope force
+  - host cannot be eliminated
+
+## Current UI Semantics
+
+- Header contains connection/phase/role badges and host start/end/reset controls.
+- Match HUD row displays `A pulls | timer | B pulls | host score`.
+- Rope position is rendered from normalized tug position.
+- `teamAForce` / `teamBForce` are physics force values.
+- `teamAPulls` / `teamBPulls` are cumulative correct submissions.
+- Event feed is compact and anchored at the bottom of the app shell.
 
 ## Reducers
 
@@ -90,6 +103,8 @@ All run-state files live in WSL:
 
 - `/tmp/sttow/<db>/ready.flag`
 - `/tmp/sttow/<db>/fail.flag`
+- `/tmp/sttow/<db>/stage.log`
+- `/tmp/sttow/<db>/build.log`
 - `/tmp/sttow/<db>/publish.log`
 - `/tmp/sttow/<db>/generate.log`
 - `/tmp/sttow/<db>/web.log`
@@ -100,9 +115,16 @@ WSL:
 
 ```bash
 cd ~/repos/st-tow/server && npm run typecheck
+cd ~/repos/st-tow/server && npm run test
 cd ~/repos/st-tow/web && npm run typecheck
+cd ~/repos/st-tow/web && npm run test
 cd ~/repos/st-tow/web && npm run build
 ```
+
+## Near-Term Roadmap
+
+- Large centered match-start countdown overlay polish on top of current server-authoritative `PreGame` phase.
+- Host score effects on gameplay are intentionally deferred; current host score is display-only.
 
 ## Common Issues
 

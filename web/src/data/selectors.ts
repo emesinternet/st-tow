@@ -74,6 +74,15 @@ export interface NormalizedTugPlayerState {
   deadlineAtMicros: bigint;
 }
 
+export interface NormalizedTugHostState {
+  matchId: string;
+  hostIdentity: string;
+  score: number;
+  currentWord: string;
+  wordVersion: number;
+  lastSubmitAtMicros: bigint;
+}
+
 export interface NormalizedGameEvent {
   eventId: string;
   lobbyId: string;
@@ -91,6 +100,7 @@ export interface SessionSnapshot {
   clocks: NormalizedMatchClock[];
   tugStates: NormalizedTugState[];
   tugPlayerStates: NormalizedTugPlayerState[];
+  tugHostStates: NormalizedTugHostState[];
   events: NormalizedGameEvent[];
   generatedAt: number;
 }
@@ -103,6 +113,7 @@ export const EMPTY_SNAPSHOT: SessionSnapshot = {
   clocks: [],
   tugStates: [],
   tugPlayerStates: [],
+  tugHostStates: [],
   events: [],
   generatedAt: 0,
 };
@@ -273,6 +284,17 @@ function normalizeTugPlayerState(row: GenericRow): NormalizedTugPlayerState {
   };
 }
 
+function normalizeTugHostState(row: GenericRow): NormalizedTugHostState {
+  return {
+    matchId: field<string>(row, 'matchId', 'match_id') ?? '',
+    hostIdentity: toIdentityHex(field(row, 'hostIdentity', 'host_identity')),
+    score: toNumber(field(row, 'score', 'score')),
+    currentWord: field<string>(row, 'currentWord', 'current_word') ?? '',
+    wordVersion: toNumber(field(row, 'wordVersion', 'word_version')),
+    lastSubmitAtMicros: toBigInt(field(row, 'lastSubmitAtMicros', 'last_submit_at_micros')),
+  };
+}
+
 function normalizeGameEvent(row: GenericRow): NormalizedGameEvent {
   return {
     eventId: field<string>(row, 'eventId', 'event_id') ?? '',
@@ -293,6 +315,7 @@ export function extractSnapshot(connection: DbConnection): SessionSnapshot {
     clocks: tableRows(connection, ['match_clock', 'matchClock']).map(normalizeMatchClock),
     tugStates: tableRows(connection, ['tug_state', 'tugState']).map(normalizeTugState),
     tugPlayerStates: tableRows(connection, ['tug_player_state', 'tugPlayerState']).map(normalizeTugPlayerState),
+    tugHostStates: tableRows(connection, ['tug_host_state', 'tugHostState']).map(normalizeTugHostState),
     events: tableRows(connection, ['game_event', 'gameEvent']).map(normalizeGameEvent),
     generatedAt: Date.now(),
   };

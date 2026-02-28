@@ -39,6 +39,7 @@ Tug-specific tables:
 
 - `tug_state`
 - `tug_player_state`
+- `tug_host_state`
 
 Design rule:
 
@@ -65,7 +66,7 @@ Tug reducers:
 
 Integration seam:
 
-- `start_match` creates match + clock rows, initializes game state, and schedules ticks.
+- `start_match` creates match + clock rows (3s `PreGame` countdown), initializes game state, and schedules ticks.
 
 ### Tick and State Machine
 
@@ -86,7 +87,8 @@ Match phases:
 Flow:
 
 - `create_lobby` -> `Waiting`
-- `start_match` -> `InGame`
+- `start_match` -> `PreGame` (3s)
+- countdown expiry -> `InGame`
 - timer expiry -> `SuddenDeath`
 - win condition -> `PostGame` + lobby `Finished`
 - `reset_lobby` -> `Waiting`
@@ -100,6 +102,10 @@ Flow:
   - wrong submit eliminates player immediately
   - deadline timeout eliminates player
 - If both teams reach zero active players in sudden death on the same tick, match ends (no hang).
+- Host has independent tug state in `tug_host_state`:
+  - host submit increases `score` only
+  - host does not affect rope force
+  - host is never eliminated
 
 ### Web Client Structure
 
@@ -131,12 +137,19 @@ Generated bindings:
 
 ### Frontend UX Model
 
-- Shared responsive shell with role-aware side panel.
+- Shared responsive shell with header-centric controls.
 - Landing screen for host/create + join by code.
-- Host controls for start/end/reset.
-- Match HUD with rope/force/word/timer status.
+- Host controls are compact header buttons and only visible to host.
+- Match HUD shows:
+  - team pull counters (`teamAPulls` / `teamBPulls`)
+  - large centered timer
+  - host score (display-only)
+  - rope bar driven by normalized rope position
+- Distinguish semantics:
+  - `teamAForce`/`teamBForce` = instantaneous physics force (server decay/tick input)
+  - `teamAPulls`/`teamBPulls` = cumulative correct submissions (stable counters)
 - Sticky-focus player input with progressive fill and auto-submit on completion (no Enter required).
-- Event feed from `game_event` telemetry.
+- Event feed is compact and anchored to the bottom region of the page.
 
 ## Environment Model (Windows launcher, WSL runtime)
 
@@ -189,6 +202,8 @@ Given DB name `<db>`, launcher writes under:
 
 - `/tmp/sttow/<db>/ready.flag`
 - `/tmp/sttow/<db>/fail.flag`
+- `/tmp/sttow/<db>/stage.log`
+- `/tmp/sttow/<db>/build.log`
 - `/tmp/sttow/<db>/publish.log`
 - `/tmp/sttow/<db>/generate.log`
 - `/tmp/sttow/<db>/web.log`
@@ -207,7 +222,9 @@ After server logic changes:
 
 ```bash
 cd ~/repos/st-tow/server && npm run typecheck
+cd ~/repos/st-tow/server && npm run test
 cd ~/repos/st-tow/web && npm run typecheck
+cd ~/repos/st-tow/web && npm run test
 cd ~/repos/st-tow/web && npm run build
 ```
 

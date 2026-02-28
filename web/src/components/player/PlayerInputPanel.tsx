@@ -16,12 +16,11 @@ export function PlayerInputPanel({
   preMatch = false,
 }: PlayerInputPanelProps) {
   const [typed, setTyped] = useState('');
-  const [feedback, setFeedback] = useState<'idle' | 'submitted' | 'rejected'>('idle');
   const [submitting, setSubmitting] = useState(false);
 
   const targetWord = model?.currentWord ?? '';
   const isEliminated = model?.playerStatus === 'Eliminated';
-  const showReadyMessage = preMatch && !isEliminated && !targetWord;
+  const showReadyMessage = preMatch && !isEliminated;
   const readyName = model?.playerName?.trim() || 'PLAYER';
   const displayWord = isEliminated ? 'ELIMINATED' : targetWord || '...';
   const canType = Boolean(model?.canSubmit) && Boolean(targetWord) && !submitting;
@@ -30,20 +29,6 @@ export function PlayerInputPanel({
     setTyped('');
     setSubmitting(false);
   }, [targetWord]);
-
-  useEffect(() => {
-    if (feedback === 'idle') {
-      return;
-    }
-
-    const handle = window.setTimeout(() => {
-      setFeedback('idle');
-    }, 420);
-
-    return () => {
-      window.clearTimeout(handle);
-    };
-  }, [feedback]);
 
   const handleProgressInput = useCallback(async (value: string): Promise<void> => {
     if (!canType) {
@@ -54,7 +39,6 @@ export function PlayerInputPanel({
     setTyped(progress.nextTyped);
 
     if (progress.feedback === 'rejected') {
-      setFeedback('rejected');
       return;
     }
 
@@ -66,9 +50,8 @@ export function PlayerInputPanel({
       setSubmitting(true);
       await onSubmitWord(value);
       setTyped('');
-      setFeedback('submitted');
     } catch {
-      setFeedback('rejected');
+      // Keep local typing state stable; submission errors are surfaced by toast in App.
     } finally {
       setSubmitting(false);
     }

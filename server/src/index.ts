@@ -46,6 +46,12 @@ import {
   resolveWinnerFromRopePosition,
   shouldEliminateOnWrongSubmission,
 } from './games/tug_of_war/gameplay';
+import {
+  applyHostSubmission,
+  applyPlayerCorrectSubmission,
+  deriveSecondsRemaining,
+  isPhaseExpired,
+} from './games/tug_of_war/runtime';
 
 const lobbyRow = {
   lobby_id: t.string().primaryKey(),
@@ -139,6 +145,15 @@ const tugPlayerStateRow = {
   deadline_at_micros: t.i64(),
 };
 
+const tugHostStateRow = {
+  match_id: t.string().primaryKey(),
+  host_identity: t.identity().index(),
+  score: t.i32(),
+  current_word: t.string(),
+  word_version: t.i32(),
+  last_submit_at_micros: t.i64(),
+};
+
 const spacetimedb = schema({
   lobby: table({ public: true }, lobbyRow),
   lobby_settings: table(
@@ -218,6 +233,7 @@ const spacetimedb = schema({
     },
     tugPlayerStateRow
   ),
+  tug_host_state: table({ public: true }, tugHostStateRow),
 });
 
 export default spacetimedb;
@@ -228,7 +244,10 @@ type MatchRow = InferTypeOfRow<typeof matchRow>;
 type MatchClockRow = InferTypeOfRow<typeof matchClockRow>;
 type TugStateRow = InferTypeOfRow<typeof tugStateRow>;
 type TugPlayerStateRow = InferTypeOfRow<typeof tugPlayerStateRow>;
+type TugHostStateRow = InferTypeOfRow<typeof tugHostStateRow>;
 type MatchScheduleRow = Infer<typeof matchScheduleRow>;
+
+const PRE_GAME_COUNTDOWN_SECONDS = 3;
 
 function replaceRow(table: any, current: any, next: any): void {
   table.delete(current);
@@ -334,6 +353,16 @@ function getTugPlayerStateById(
   );
 }
 
+function getTugHostStateByMatchId(
+  ctx: ReducerCtx<any>,
+  matchId: string
+): TugHostStateRow | null {
+  return findFirst<TugHostStateRow>(
+    ctx.db.tug_host_state.iter() as Iterable<TugHostStateRow>,
+    row => row.match_id === matchId
+  );
+}
+
 function getPlayerById(ctx: ReducerCtx<any>, playerId: string): PlayerRow | null {
   return findFirst<PlayerRow>(
     ctx.db.player.iter() as Iterable<PlayerRow>,
@@ -372,6 +401,29 @@ function pickWordForPlayer(
   return pickRandomWordExcluding(ctx, excluded);
 }
 
+function pickWordForHost(
+  ctx: ReducerCtx<any>,
+  matchId: string,
+  includeCurrentWord = false
+): string {
+  const excluded = new Set<string>();
+
+  for (const row of listTugPlayerStatesByMatch(ctx, matchId)) {
+    if (row.current_word) {
+      excluded.add(row.current_word);
+    }
+  }
+
+  if (includeCurrentWord) {
+    const hostState = getTugHostStateByMatchId(ctx, matchId);
+    if (hostState?.current_word) {
+      excluded.add(hostState.current_word);
+    }
+  }
+
+  return pickRandomWordExcluding(ctx, excluded);
+}
+
 function ensureTugPlayerStateForActiveMatch(
   ctx: ReducerCtx<any>,
   lobby: LobbyRow,
@@ -387,6 +439,7 @@ function ensureTugPlayerStateForActiveMatch(
   }
 
   if (
+    match.phase !== MATCH_PHASE_PRE_GAME &&
     match.phase !== MATCH_PHASE_IN_GAME &&
     match.phase !== MATCH_PHASE_SUDDEN_DEATH
   ) {
@@ -656,6 +709,21 @@ function initializeTugState(
     });
   }
 
+  const hostStateCurrent = getTugHostStateByMatchId(ctx, match.match_id);
+  const hostStateNext: TugHostStateRow = {
+    match_id: match.match_id,
+    host_identity: lobby.host_identity,
+    score: 0,
+    current_word: pickWordForHost(ctx, match.match_id),
+    word_version: 1,
+    last_submit_at_micros: 0n,
+  };
+  if (hostStateCurrent) {
+    replaceRow(ctx.db.tug_host_state, hostStateCurrent, hostStateNext);
+  } else {
+    ctx.db.tug_host_state.insert(hostStateNext);
+  }
+
   emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'tug_initialized', {
     win_threshold: winThreshold,
     word_rotate_ms: wordRotateMs,
@@ -773,6 +841,44 @@ function transitionToSuddenDeath(
   return { lobby: lobbyNext, match: matchNext, tug: tugNext };
 }
 
+function transitionPreGameToInGame(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  match: MatchRow,
+  clock: MatchClockRow
+): { match: MatchRow; clock: MatchClockRow } {
+  const roundSeconds = getLobbySettingInt(
+    ctx,
+    lobby.lobby_id,
+    LOBBY_SETTING_KEYS.round_seconds,
+    DEFAULT_LOBBY_SETTINGS.round_seconds
+  );
+
+  const matchNext: MatchRow = {
+    ...match,
+    phase: MATCH_PHASE_IN_GAME,
+  };
+  replaceRow(ctx.db.match, match, matchNext);
+
+  const clockNext: MatchClockRow = {
+    ...clock,
+    phase_ends_at: new Timestamp(
+      ctx.timestamp.microsSinceUnixEpoch + msToMicros(roundSeconds * 1000)
+    ),
+    seconds_remaining: roundSeconds,
+  };
+  replaceRow(ctx.db.match_clock, clock, clockNext);
+
+  emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'countdown_finished', {
+    round_seconds: roundSeconds,
+  });
+
+  return {
+    match: matchNext,
+    clock: clockNext,
+  };
+}
+
 function resolveWinnerFromTugState(tug: TugStateRow): string {
   return resolveWinnerFromRopePosition(tug.rope_position);
 }
@@ -788,7 +894,7 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
     return;
   }
 
-  const clock = getMatchClockByMatchId(ctx, matchId);
+  let clock = getMatchClockByMatchId(ctx, matchId);
   if (!clock) {
     return;
   }
@@ -799,9 +905,10 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
   }
 
   const now = nowMicros(ctx);
-  const remainingMicros = clock.phase_ends_at.microsSinceUnixEpoch - now;
-  const secondsRemaining =
-    remainingMicros > 0n ? Number(remainingMicros / 1_000_000n) : 0;
+  const secondsRemaining = deriveSecondsRemaining(
+    clock.phase_ends_at.microsSinceUnixEpoch,
+    now
+  );
 
   if (clock.seconds_remaining !== secondsRemaining) {
     const clockNext: MatchClockRow = {
@@ -809,6 +916,18 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
       seconds_remaining: secondsRemaining,
     };
     replaceRow(ctx.db.match_clock, clock, clockNext);
+    clock = clockNext;
+  }
+
+  if (match.phase === MATCH_PHASE_PRE_GAME) {
+    if (!isPhaseExpired(clock.phase_ends_at.microsSinceUnixEpoch, now)) {
+      return;
+    }
+
+    const transitioned = transitionPreGameToInGame(ctx, lobby, match, clock);
+    match = transitioned.match;
+    clock = transitioned.clock;
+    return;
   }
 
   if (match.phase === MATCH_PHASE_IN_GAME && secondsRemaining > 0) {
@@ -834,7 +953,10 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
     }
   }
 
-  if (match.phase === MATCH_PHASE_IN_GAME && secondsRemaining === 0) {
+  if (
+    match.phase === MATCH_PHASE_IN_GAME &&
+    isPhaseExpired(clock.phase_ends_at.microsSinceUnixEpoch, now)
+  ) {
     const transitioned = transitionToSuddenDeath(ctx, lobby, match, tug);
     lobby = transitioned.lobby;
     match = transitioned.match;
@@ -1067,7 +1189,7 @@ export const start_match = spacetimedb.reducer(
       match_id: matchId,
       lobby_id,
       game_type: lobby.game_type,
-      phase: MATCH_PHASE_IN_GAME,
+      phase: MATCH_PHASE_PRE_GAME,
       started_at: ctx.timestamp,
       ends_at_micros: 0n,
       winner_team: '',
@@ -1079,9 +1201,9 @@ export const start_match = spacetimedb.reducer(
     ctx.db.match_clock.insert({
       match_id: matchId,
       phase_ends_at: new Timestamp(
-        ctx.timestamp.microsSinceUnixEpoch + msToMicros(roundSeconds * 1000)
+        ctx.timestamp.microsSinceUnixEpoch + msToMicros(PRE_GAME_COUNTDOWN_SECONDS * 1000)
       ),
-      seconds_remaining: roundSeconds,
+      seconds_remaining: PRE_GAME_COUNTDOWN_SECONDS,
       tick_rate_ms: tickRateMs,
     });
 
@@ -1108,6 +1230,9 @@ export const start_match = spacetimedb.reducer(
       round_seconds: roundSeconds,
       tick_rate_ms: tickRateMs,
       game_type: lobby.game_type,
+    });
+    emitGameEvent(ctx, lobby_id, matchId, 'countdown_started', {
+      seconds: PRE_GAME_COUNTDOWN_SECONDS,
     });
   }
 );
@@ -1191,6 +1316,50 @@ export const tug_submit = spacetimedb.reducer(
     }
 
     const lobby = getLobbyOrThrow(ctx, match.lobby_id);
+    const tug = getTugStateByMatchId(ctx, match_id);
+    if (!tug) {
+      throw new Error('Tug state not initialized');
+    }
+
+    if (lobby.host_identity.equals(ctx.sender)) {
+      const hostState = getTugHostStateByMatchId(ctx, match_id);
+      if (!hostState) {
+        throw new Error('Host state not initialized for this match');
+      }
+
+      const now = nowMicros(ctx);
+      const nextHostWord = pickWordForHost(ctx, match_id, true);
+      const hostResult = applyHostSubmission(
+        {
+          score: hostState.score,
+          currentWord: hostState.current_word,
+          wordVersion: hostState.word_version,
+          lastSubmitAtMicros: hostState.last_submit_at_micros,
+        },
+        typed,
+        nextHostWord,
+        now
+      );
+      const hostStateNext: TugHostStateRow = {
+        ...hostState,
+        score: hostResult.nextState.score,
+        current_word: hostResult.nextState.currentWord,
+        word_version: hostResult.nextState.wordVersion,
+        last_submit_at_micros: hostResult.nextState.lastSubmitAtMicros,
+      };
+
+      if (hostResult.correct) {
+        emitGameEvent(ctx, lobby.lobby_id, match_id, 'host_submit_ok', {
+          score: hostStateNext.score,
+        });
+      } else {
+        emitGameEvent(ctx, lobby.lobby_id, match_id, 'host_submit_bad', {});
+      }
+
+      replaceRow(ctx.db.tug_host_state, hostState, hostStateNext);
+      return;
+    }
+
     const player = findMembershipInLobby(ctx, lobby.lobby_id);
     if (!player) {
       throw new Error('Player is not in this lobby');
@@ -1198,11 +1367,6 @@ export const tug_submit = spacetimedb.reducer(
 
     if (player.status !== PLAYER_STATUS_ACTIVE) {
       throw new Error('Player is not active');
-    }
-
-    const tug = getTugStateByMatchId(ctx, match_id);
-    if (!tug) {
-      throw new Error('Tug state not initialized');
     }
 
     const stateId = tugPlayerStateId(match_id, player.player_id);
@@ -1237,10 +1401,19 @@ export const tug_submit = spacetimedb.reducer(
           now + msToMicros(tug.elimination_word_time_ms);
       }
 
+      const teamSubmit = applyPlayerCorrectSubmission(
+        {
+          teamAForce: tug.team_a_force,
+          teamBForce: tug.team_b_force,
+          teamAPulls: 0,
+          teamBPulls: 0,
+        },
+        player.team
+      );
       const tugNext: TugStateRow = {
         ...tug,
-        team_a_force: tug.team_a_force + (player.team === TEAM_A ? 1 : 0),
-        team_b_force: tug.team_b_force + (player.team === TEAM_B ? 1 : 0),
+        team_a_force: teamSubmit.teamAForce,
+        team_b_force: teamSubmit.teamBForce,
       };
       replaceRow(ctx.db.tug_state, tug, tugNext);
 

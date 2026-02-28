@@ -8,18 +8,26 @@ interface MatchHudProps {
 }
 
 export function MatchHud({ hud }: MatchHudProps) {
+  const hostScore = hud.hostScore ?? 0;
+
   return (
     <Card className="overflow-hidden">
       <CardContent className="space-y-4 p-4">
-        <div className="grid grid-cols-3 items-center gap-3">
-          <p className="text-right font-display text-4xl font-black tabular-nums tracking-wide text-neo-teamA sm:text-5xl">
-            {hud.teamAForce}
+        <div className="flex flex-wrap items-end justify-center gap-2 text-center font-display font-black tracking-wide sm:gap-3">
+          <p className="text-3xl tabular-nums text-neo-teamA sm:text-4xl">
+            A {hud.teamAPulls}
           </p>
-          <p className="text-center font-display text-4xl font-black tabular-nums tracking-wide sm:text-5xl">
+          <span className="pb-1 text-xl text-neo-muted sm:text-2xl">|</span>
+          <p className="text-4xl tabular-nums text-neo-ink sm:text-5xl">
             {formatSeconds(hud.secondsRemaining)}
           </p>
-          <p className="text-left font-display text-4xl font-black tabular-nums tracking-wide text-neo-teamB sm:text-5xl">
-            {hud.teamBForce}
+          <span className="pb-1 text-xl text-neo-muted sm:text-2xl">|</span>
+          <p className="text-3xl tabular-nums text-neo-teamB sm:text-4xl">
+            B {hud.teamBPulls}
+          </p>
+          <span className="pb-1 text-xl text-neo-muted sm:text-2xl">|</span>
+          <p className="text-3xl tabular-nums text-neo-ink sm:text-4xl">
+            H {hostScore}
           </p>
         </div>
         <div className="relative h-20 rounded-full border-4 border-neo-ink bg-gradient-to-r from-neo-teamA/25 via-neo-yellow/25 to-neo-teamB/25 sm:h-24">

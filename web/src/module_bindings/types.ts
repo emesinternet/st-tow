@@ -84,6 +84,16 @@ export const Schedule = __t.object("Schedule", {
 });
 export type Schedule = __Infer<typeof Schedule>;
 
+export const TugHostState = __t.object("TugHostState", {
+  matchId: __t.string(),
+  hostIdentity: __t.identity(),
+  score: __t.i32(),
+  currentWord: __t.string(),
+  wordVersion: __t.i32(),
+  lastSubmitAtMicros: __t.i64(),
+});
+export type TugHostState = __Infer<typeof TugHostState>;
+
 export const TugPlayerState = __t.object("TugPlayerState", {
   tugPlayerStateId: __t.string(),
   matchId: __t.string(),

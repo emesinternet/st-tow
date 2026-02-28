@@ -1,8 +1,10 @@
 import type {
   NormalizedLobby,
+  NormalizedLobbySetting,
   NormalizedMatch,
   NormalizedMatchClock,
   NormalizedPlayer,
+  NormalizedTugHostState,
   NormalizedTugPlayerState,
   NormalizedTugState,
   SessionSnapshot,
@@ -22,6 +24,8 @@ import type {
   UiViewModel,
 } from '@/types/ui';
 
+const DEFAULT_ROUND_SECONDS = 90;
+
 export interface SelectUiViewModelInput {
   connectionState: ConnectionState;
   snapshot: SessionSnapshot;
@@ -39,6 +43,30 @@ function isSameIdentity(left: string, right: string): boolean {
     return false;
   }
   return normalizeIdentity(left) === normalizeIdentity(right);
+}
+
+function parseSettingInt(valueJson: string): number | null {
+  try {
+    const parsed = JSON.parse(valueJson);
+    const number = Number(parsed);
+    return Number.isFinite(number) ? Math.trunc(number) : null;
+  } catch {
+    const number = Number(valueJson);
+    return Number.isFinite(number) ? Math.trunc(number) : null;
+  }
+}
+
+function getLobbySettingInt(
+  settings: NormalizedLobbySetting[],
+  lobbyId: string,
+  key: string,
+  fallback: number
+): number {
+  const row = settings.find(item => item.lobbyId === lobbyId && item.key === key);
+  if (!row) {
+    return fallback;
+  }
+  return parseSettingInt(row.valueJson) ?? fallback;
 }
 
 function compareBigIntDescending(a: bigint, b: bigint): number {
@@ -155,7 +183,11 @@ function derivePhase(lobby: NormalizedLobby | null, match: NormalizedMatch | nul
   if (match.phase === 'PostGame' || lobby.status === 'Finished') {
     return 'post';
   }
-  if (match.phase === 'InGame' || match.phase === 'SuddenDeath') {
+  if (
+    match.phase === 'PreGame' ||
+    match.phase === 'InGame' ||
+    match.phase === 'SuddenDeath'
+  ) {
     return 'match';
   }
   return 'lobby';
@@ -204,12 +236,46 @@ function buildHostPanelModel(
   };
 }
 
+function buildHostInputModel(
+  player: NormalizedPlayer | null,
+  match: NormalizedMatch | null,
+  hostState: NormalizedTugHostState | null
+): PlayerInputViewModel {
+  let disabledReason: string | null = null;
+  if (!match) {
+    disabledReason = 'Waiting for host to start the match.';
+  } else if (match.phase !== 'InGame' && match.phase !== 'SuddenDeath') {
+    disabledReason = 'Submissions are currently closed.';
+  }
+
+  const resolvedWord = hostState?.currentWord ?? '';
+  if (!disabledReason && !resolvedWord) {
+    disabledReason = 'Waiting for your next word.';
+  }
+
+  return {
+    playerId: player?.playerId ?? 'host',
+    playerName: player?.displayName ?? 'Host',
+    playerStatus: 'Host',
+    eliminatedReason: '',
+    currentWord: resolvedWord,
+    canSubmit: disabledReason == null,
+    disabledReason,
+    deadlineAtMicros: null,
+  };
+}
+
 function buildPlayerInputModel(
   role: UiRole,
   player: NormalizedPlayer | null,
   match: NormalizedMatch | null,
-  playerState: NormalizedTugPlayerState | null
+  playerState: NormalizedTugPlayerState | null,
+  hostState: NormalizedTugHostState | null
 ): PlayerInputViewModel | null {
+  if (role === 'host') {
+    return buildHostInputModel(player, match, hostState);
+  }
+
   if (!player) {
     if (role === 'player') {
       return {
@@ -305,6 +371,7 @@ function buildMatchHudModel(
   teamAPlayers: NormalizedPlayer[],
   teamBPlayers: NormalizedPlayer[],
   matchPlayerStates: NormalizedTugPlayerState[],
+  hostState: NormalizedTugHostState | null,
   myState: NormalizedTugPlayerState | null
 ): MatchHudViewModel {
   const ropePosition = tug?.ropePosition ?? 0;
@@ -332,8 +399,12 @@ function buildMatchHudModel(
     ropePosition,
     normalizedRopePosition: normalizeRopePosition(ropePosition, winThreshold),
     winThreshold,
-    teamAForce: teamAPulls,
-    teamBForce: teamBPulls,
+    teamAForce: tug?.teamAForce ?? 0,
+    teamBForce: tug?.teamBForce ?? 0,
+    teamAPulls,
+    teamBPulls,
+    hostScore: hostState ? hostState.score : null,
+    hostCurrentWord: hostState?.currentWord ?? '',
     aliveTeamA: teamAPlayers.filter(player => player.status === 'Active').length,
     aliveTeamB: teamBPlayers.filter(player => player.status === 'Active').length,
     currentWord: tug?.currentWord ?? '',
@@ -341,6 +412,33 @@ function buildMatchHudModel(
     mode: tug?.mode ?? 'Normal',
     suddenDeathDeadlineMicros:
       myState && myState.deadlineAtMicros > 0n ? myState.deadlineAtMicros : null,
+  };
+}
+
+function buildPreMatchHudModel(
+  lobbyId: string,
+  preMatchSecondsRemaining: number
+): MatchHudViewModel {
+  return {
+    matchId: `${lobbyId}:pre`,
+    phase: 'PreGame',
+    secondsRemaining: preMatchSecondsRemaining,
+    winnerTeam: '',
+    ropePosition: 0,
+    normalizedRopePosition: 50,
+    winThreshold: 100,
+    teamAForce: 0,
+    teamBForce: 0,
+    teamAPulls: 0,
+    teamBPulls: 0,
+    hostScore: null,
+    hostCurrentWord: '',
+    aliveTeamA: 0,
+    aliveTeamB: 0,
+    currentWord: '',
+    wordVersion: 0,
+    mode: 'Normal',
+    suddenDeathDeadlineMicros: null,
   };
 }
 
@@ -355,11 +453,20 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
       phase: 'landing',
       lobby: null,
       matchHud: null,
+      preMatchHud: null,
+      preMatchSecondsRemaining: DEFAULT_ROUND_SECONDS,
       hostPanel: null,
       playerInput: null,
       events: [],
     };
   }
+
+  const preMatchSecondsRemaining = getLobbySettingInt(
+    snapshot.lobbySettings,
+    lobby.lobbyId,
+    'round_seconds',
+    DEFAULT_ROUND_SECONDS
+  );
 
   const lobbyPlayers = snapshot.players.filter(player => player.lobbyId === lobby.lobbyId);
   const myPlayer =
@@ -379,6 +486,9 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
   const matchPlayerStates = match
     ? snapshot.tugPlayerStates.filter(item => item.matchId === match.matchId)
     : [];
+  const hostState = match
+    ? snapshot.tugHostStates.find(item => item.matchId === match.matchId) ?? null
+    : null;
 
   const myTugState =
     match && myPlayer
@@ -406,11 +516,14 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
           teamAPlayers,
           teamBPlayers,
           matchPlayerStates,
+          hostState,
           myTugState
         )
       : null,
+    preMatchHud: match ? null : buildPreMatchHudModel(lobby.lobbyId, preMatchSecondsRemaining),
+    preMatchSecondsRemaining,
     hostPanel: buildHostPanelModel(isSameIdentity(lobby.hostIdentity, identity), lobby, match),
-    playerInput: buildPlayerInputModel(role, myPlayer, match, myTugState),
+    playerInput: buildPlayerInputModel(role, myPlayer, match, myTugState, hostState),
     events: buildEventFeed(snapshot, lobby.lobbyId),
   };
 }

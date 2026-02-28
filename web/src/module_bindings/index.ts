@@ -54,6 +54,7 @@ import LobbySettingsRow from "./lobby_settings_table";
 import MatchRow from "./match_table";
 import MatchClockRow from "./match_clock_table";
 import PlayerRow from "./player_table";
+import TugHostStateRow from "./tug_host_state_table";
 import TugPlayerStateRow from "./tug_player_state_table";
 import TugStateRow from "./tug_state_table";
 
@@ -197,6 +198,20 @@ const tablesSchema = __schema({
       { name: 'player_player_id_key', constraint: 'unique', columns: ['playerId'] },
     ],
   }, PlayerRow),
+  tug_host_state: __table({
+    name: 'tug_host_state',
+    indexes: [
+      { name: 'host_identity', algorithm: 'btree', columns: [
+        'hostIdentity',
+      ] },
+      { name: 'match_id', algorithm: 'btree', columns: [
+        'matchId',
+      ] },
+    ],
+    constraints: [
+      { name: 'tug_host_state_match_id_key', constraint: 'unique', columns: ['matchId'] },
+    ],
+  }, TugHostStateRow),
   tug_player_state: __table({
     name: 'tug_player_state',
     indexes: [

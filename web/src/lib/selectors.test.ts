@@ -19,7 +19,7 @@ function makeBaseSnapshot(): SessionSnapshot {
     lobbySettings: [],
     players: [
       {
-        playerId: 'player-1',
+        playerId: 'player-a',
         lobbyId: 'lobby-1',
         identity: 'c200abcd',
         lobbyIdentityKey: 'lobby-1:c200abcd',
@@ -27,6 +27,18 @@ function makeBaseSnapshot(): SessionSnapshot {
         team: 'A',
         status: 'Active',
         joinedAtMicros: 11n,
+        leftAtMicros: 0n,
+        eliminatedReason: '',
+      },
+      {
+        playerId: 'player-b',
+        lobbyId: 'lobby-1',
+        identity: 'c200efgh',
+        lobbyIdentityKey: 'lobby-1:c200efgh',
+        displayName: 'Player Two',
+        team: 'B',
+        status: 'Active',
+        joinedAtMicros: 12n,
         leftAtMicros: 0n,
         eliminatedReason: '',
       },
@@ -57,8 +69,8 @@ function makeBaseSnapshot(): SessionSnapshot {
         matchId: 'match-1',
         ropePosition: 0,
         winThreshold: 10,
-        teamAForce: 0,
-        teamBForce: 0,
+        teamAForce: 7,
+        teamBForce: 4,
         currentWord: '',
         wordVersion: 1,
         mode: 'Normal',
@@ -70,13 +82,32 @@ function makeBaseSnapshot(): SessionSnapshot {
     ],
     tugPlayerStates: [
       {
-        tugPlayerStateId: 'tps-1',
+        tugPlayerStateId: 'tps-a',
         matchId: 'match-1',
-        playerId: 'player-1',
+        playerId: 'player-a',
         currentWord: 'anchor',
-        correctCount: 0,
+        correctCount: 3,
         lastSubmitAtMicros: 0n,
         deadlineAtMicros: 0n,
+      },
+      {
+        tugPlayerStateId: 'tps-b',
+        matchId: 'match-1',
+        playerId: 'player-b',
+        currentWord: 'bridge',
+        correctCount: 5,
+        lastSubmitAtMicros: 0n,
+        deadlineAtMicros: 0n,
+      },
+    ],
+    tugHostStates: [
+      {
+        matchId: 'match-1',
+        hostIdentity: 'c200host',
+        score: 9,
+        currentWord: 'captain',
+        wordVersion: 3,
+        lastSubmitAtMicros: 0n,
       },
     ],
     events: [],
@@ -98,18 +129,76 @@ test('selectUiViewModel resolves player by identity case and exposes current wor
   assert.equal(vm.playerInput?.canSubmit, true);
 });
 
-test('selectUiViewModel disables submit when player has no assigned word', () => {
-  const snapshot = makeBaseSnapshot();
-  snapshot.tugPlayerStates = [];
-
+test('selector keeps force fields physical and pull fields cumulative', () => {
   const vm = selectUiViewModel({
+    connectionState: 'connected',
+    snapshot: makeBaseSnapshot(),
+    identity: 'c200abcd',
+    selectedLobbyId: '',
+    pendingJoinCode: '',
+  });
+
+  assert.equal(vm.matchHud?.teamAForce, 7);
+  assert.equal(vm.matchHud?.teamBForce, 4);
+  assert.equal(vm.matchHud?.teamAPulls, 3);
+  assert.equal(vm.matchHud?.teamBPulls, 5);
+});
+
+test('selector exposes host score from tug_host_state when present', () => {
+  const vm = selectUiViewModel({
+    connectionState: 'connected',
+    snapshot: makeBaseSnapshot(),
+    identity: 'c200host',
+    selectedLobbyId: '',
+    pendingJoinCode: '',
+  });
+
+  assert.equal(vm.role, 'host');
+  assert.equal(vm.matchHud?.hostScore, 9);
+  assert.equal(vm.playerInput?.currentWord, 'captain');
+});
+
+test('selector derives pre-match seconds from round_seconds setting with fallback', () => {
+  const snapshot = makeBaseSnapshot();
+  snapshot.lobbies[0] = {
+    ...snapshot.lobbies[0],
+    status: 'Waiting',
+    activeMatchId: '',
+  };
+  snapshot.matches = [];
+  snapshot.clocks = [];
+  snapshot.tugStates = [];
+  snapshot.tugPlayerStates = [];
+  snapshot.tugHostStates = [];
+
+  snapshot.lobbySettings = [
+    {
+      settingId: 'lobby-1:round_seconds',
+      lobbyId: 'lobby-1',
+      key: 'round_seconds',
+      valueJson: '120',
+    },
+  ];
+
+  const withSetting = selectUiViewModel({
     connectionState: 'connected',
     snapshot,
     identity: 'c200abcd',
     selectedLobbyId: '',
     pendingJoinCode: '',
   });
+  assert.equal(withSetting.preMatchSecondsRemaining, 120);
+  assert.equal(withSetting.preMatchHud?.secondsRemaining, 120);
 
-  assert.equal(vm.playerInput?.canSubmit, false);
-  assert.equal(vm.playerInput?.disabledReason, 'Waiting for your next word.');
+  snapshot.lobbySettings = [];
+  const withFallback = selectUiViewModel({
+    connectionState: 'connected',
+    snapshot,
+    identity: 'c200abcd',
+    selectedLobbyId: '',
+    pendingJoinCode: '',
+  });
+  assert.equal(withFallback.preMatchSecondsRemaining, 90);
+  assert.equal(withFallback.preMatchHud?.secondsRemaining, 90);
 });
+

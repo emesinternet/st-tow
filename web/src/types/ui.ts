@@ -41,8 +41,17 @@ export interface MatchHudViewModel {
   ropePosition: number;
   normalizedRopePosition: number;
   winThreshold: number;
+  // Instantaneous physics force used by rope integration.
   teamAForce: number;
+  // Instantaneous physics force used by rope integration.
   teamBForce: number;
+  // Cumulative correct submissions for scoreboard display.
+  teamAPulls: number;
+  // Cumulative correct submissions for scoreboard display.
+  teamBPulls: number;
+  // Display-only host score (no gameplay impact yet).
+  hostScore: number | null;
+  hostCurrentWord: string;
   aliveTeamA: number;
   aliveTeamB: number;
   currentWord: string;
@@ -84,6 +93,8 @@ export interface UiViewModel {
   phase: UiPhase;
   lobby: LobbyViewModel | null;
   matchHud: MatchHudViewModel | null;
+  preMatchHud: MatchHudViewModel | null;
+  preMatchSecondsRemaining: number;
   hostPanel: HostPanelViewModel | null;
   playerInput: PlayerInputViewModel | null;
   events: EventFeedItemViewModel[];

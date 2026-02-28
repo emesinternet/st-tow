@@ -42,6 +42,7 @@ done
 RUN_DIR="/tmp/sttow/$DB_NAME"
 READY_FILE="$RUN_DIR/ready.flag"
 FAIL_FILE="$RUN_DIR/fail.flag"
+STAGE_LOG="$RUN_DIR/stage.log"
 BUILD_LOG="$RUN_DIR/build.log"
 PUBLISH_LOG="$RUN_DIR/publish.log"
 GENERATE_LOG="$RUN_DIR/generate.log"
@@ -51,7 +52,7 @@ JS_PATH_WIN="${STAGE_SERVER_WIN%/}/dist/bundle.js"
 JS_PATH_WSL=""
 
 mkdir -p "$RUN_DIR"
-rm -f "$READY_FILE" "$FAIL_FILE" "$BUILD_LOG" "$PUBLISH_LOG" "$GENERATE_LOG"
+rm -f "$READY_FILE" "$FAIL_FILE" "$STAGE_LOG" "$BUILD_LOG" "$PUBLISH_LOG" "$GENERATE_LOG"
 
 echo "st-tow publish+generate"
 echo "db: $DB_NAME"
@@ -80,24 +81,28 @@ fi
     --exclude node_modules \
     --exclude dist \
     "$REPO_DIR/server/" "$STAGE_SERVER_WSL/"
-} >"$BUILD_LOG" 2>&1 || {
-  cat "$BUILD_LOG"
-  echo "server stage failed" | tee "$FAIL_FILE"
+} >"$STAGE_LOG" 2>&1 || {
+  cat "$STAGE_LOG"
+  echo "server stage failed (see $STAGE_LOG)" | tee "$FAIL_FILE"
   exit 1
 }
 
 {
-  echo "Installing server dependencies in Windows staging path..."
-  cmd.exe /d /s /c "cd /d ${STAGE_SERVER_WIN//\//\\} && npm install --silent"
+  echo "Installing server dependencies in staged path..."
+  (
+    cd "$STAGE_SERVER_WSL"
+    npm install --silent
+  )
   echo "Building staged server module..."
   spacetime build -p "$STAGE_SERVER_WIN"
 } >>"$BUILD_LOG" 2>&1 || {
   cat "$BUILD_LOG"
-  echo "build failed" | tee "$FAIL_FILE"
+  echo "build failed (see $BUILD_LOG)" | tee "$FAIL_FILE"
   exit 1
 }
 
 if [[ ! -f "$JS_PATH_WSL" ]]; then
+  cat "$STAGE_LOG"
   cat "$BUILD_LOG"
   echo "missing built bundle after build: $JS_PATH_WIN" | tee "$FAIL_FILE"
   exit 1
@@ -120,10 +125,11 @@ done
 
 if [[ "$publish_ok" != true ]]; then
   cat "$PUBLISH_LOG"
-  echo "publish failed" | tee "$FAIL_FILE"
+  echo "publish failed (see $PUBLISH_LOG)" | tee "$FAIL_FILE"
   exit 1
 fi
 
+cat "$STAGE_LOG"
 cat "$BUILD_LOG"
 cat "$PUBLISH_LOG"
 
@@ -133,7 +139,7 @@ cat "$PUBLISH_LOG"
   spacetime generate --lang typescript --out-dir src/module_bindings --js-path "$JS_PATH_WIN"
 } >"$GENERATE_LOG" 2>&1 || {
   cat "$GENERATE_LOG"
-  echo "generate failed" | tee "$FAIL_FILE"
+  echo "generate failed (see $GENERATE_LOG)" | tee "$FAIL_FILE"
   exit 1
 }
 
