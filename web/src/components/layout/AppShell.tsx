@@ -5,19 +5,24 @@ interface AppShellProps {
   banner: ReactNode;
   primary: ReactNode;
   secondary: ReactNode;
+  backgroundClassName?: string;
 }
 
-export function AppShell({ header, banner, primary, secondary }: AppShellProps) {
+export function AppShell({
+  header,
+  banner,
+  primary,
+  secondary,
+  backgroundClassName = '',
+}: AppShellProps) {
   return (
-    <div className="min-h-screen pb-8">
-      <div className="mx-auto w-full max-w-[1200px] px-3 py-4 sm:px-4 sm:py-6">
+    <div className={`min-h-screen pb-8 ${backgroundClassName}`}>
+      <div className="mx-auto flex min-h-screen w-full max-w-[1200px] flex-col px-3 py-4 sm:px-4 sm:py-6">
         {banner}
         {header}
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <section className="space-y-4">{primary}</section>
-          <aside className="hidden space-y-4 lg:block">{secondary}</aside>
-        </div>
+        <section className="mt-4 space-y-4">{primary}</section>
+        <aside className="mt-auto space-y-4 pt-6">{secondary}</aside>
       </div>
     </div>
   );

@@ -40,6 +40,12 @@ import {
   tugPlayerStateId,
 } from './core/helpers';
 import { pickRandomWord, pickRandomWordExcluding } from './games/tug_of_war/words';
+import {
+  buildExcludedWordsForPlayer,
+  isCorrectWordSubmission,
+  resolveWinnerFromRopePosition,
+  shouldEliminateOnWrongSubmission,
+} from './games/tug_of_war/gameplay';
 
 const lobbyRow = {
   lobby_id: t.string().primaryKey(),
@@ -351,17 +357,18 @@ function listTugPlayerStatesByMatch(
 function pickWordForPlayer(
   ctx: ReducerCtx<any>,
   matchId: string,
-  playerId: string
+  playerId: string,
+  includeSelfCurrentWord = false
 ): string {
-  const excluded = new Set<string>();
-  for (const row of listTugPlayerStatesByMatch(ctx, matchId)) {
-    if (row.player_id === playerId) {
-      continue;
-    }
-    if (row.current_word) {
-      excluded.add(row.current_word);
-    }
-  }
+  const playerStates = listTugPlayerStatesByMatch(ctx, matchId).map(row => ({
+    playerId: row.player_id,
+    currentWord: row.current_word,
+  }));
+  const excluded = buildExcludedWordsForPlayer(
+    playerStates,
+    playerId,
+    { includeSelfCurrentWord }
+  );
   return pickRandomWordExcluding(ctx, excluded);
 }
 
@@ -767,13 +774,7 @@ function transitionToSuddenDeath(
 }
 
 function resolveWinnerFromTugState(tug: TugStateRow): string {
-  if (tug.rope_position > 0) {
-    return TEAM_A;
-  }
-  if (tug.rope_position < 0) {
-    return TEAM_B;
-  }
-  return '';
+  return resolveWinnerFromRopePosition(tug.rope_position);
 }
 
 function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
@@ -1211,9 +1212,9 @@ export const tug_submit = spacetimedb.reducer(
     }
 
     const now = nowMicros(ctx);
-    const correct = typed === playerState.current_word;
+    const correct = isCorrectWordSubmission(typed, playerState.current_word);
 
-    if (!correct && tug.mode === TUG_MODE_ELIMINATION) {
+    if (!correct && shouldEliminateOnWrongSubmission(tug.mode)) {
       eliminatePlayer(ctx, lobby.lobby_id, match_id, player, 'misspelling');
       return;
     }
@@ -1225,7 +1226,12 @@ export const tug_submit = spacetimedb.reducer(
 
     if (correct) {
       playerStateNext.correct_count += 1;
-      playerStateNext.current_word = pickWordForPlayer(ctx, match_id, player.player_id);
+      playerStateNext.current_word = pickWordForPlayer(
+        ctx,
+        match_id,
+        player.player_id,
+        true
+      );
       if (tug.mode === TUG_MODE_ELIMINATION) {
         playerStateNext.deadline_at_micros =
           now + msToMicros(tug.elimination_word_time_ms);

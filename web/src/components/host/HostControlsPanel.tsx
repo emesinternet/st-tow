@@ -10,6 +10,7 @@ interface HostControlsPanelProps {
   onStartMatch: () => Promise<void>;
   onResetLobby: () => Promise<void>;
   onEndMatch: () => Promise<void>;
+  variant?: 'card' | 'inline';
 }
 
 export function HostControlsPanel({
@@ -19,10 +20,45 @@ export function HostControlsPanel({
   onStartMatch,
   onResetLobby,
   onEndMatch,
+  variant = 'card',
 }: HostControlsPanelProps) {
   const canStart = hostPanel?.canStart ?? false;
   const canReset = hostPanel?.canReset ?? false;
   const canEndMatch = hostPanel?.canEndMatch ?? false;
+
+  if (variant === 'inline') {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="teamB"
+          disabled={!canStart}
+          onClick={() => void onStartMatch()}
+        >
+          Start
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="danger"
+          disabled={!canEndMatch}
+          onClick={() => void onEndMatch()}
+        >
+          End
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="neutral"
+          disabled={!canReset}
+          onClick={() => void onResetLobby()}
+        >
+          Reset
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <Card>

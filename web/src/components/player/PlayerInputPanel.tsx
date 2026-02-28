@@ -1,25 +1,30 @@
-import { useEffect, useState } from 'react';
-import { Badge } from '@/components/shared/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/shared/ui/card';
-import { Input } from '@/components/shared/ui/input';
-import { useStickyInputFocus } from '@/lib/focus';
+import { useCallback, useEffect, useState } from 'react';
+import { Card, CardContent } from '@/components/shared/ui/card';
 import { cn } from '@/lib/utils';
 import type { PlayerInputViewModel } from '@/types/ui';
+import { evaluateTypingProgress } from '@/components/player/typingProgress';
 
 interface PlayerInputPanelProps {
   model: PlayerInputViewModel | null;
   onSubmitWord: (typed: string) => Promise<void>;
+  preMatch?: boolean;
 }
 
-export function PlayerInputPanel({ model, onSubmitWord }: PlayerInputPanelProps) {
+export function PlayerInputPanel({
+  model,
+  onSubmitWord,
+  preMatch = false,
+}: PlayerInputPanelProps) {
   const [typed, setTyped] = useState('');
   const [feedback, setFeedback] = useState<'idle' | 'submitted' | 'rejected'>('idle');
   const [submitting, setSubmitting] = useState(false);
 
   const targetWord = model?.currentWord ?? '';
+  const isEliminated = model?.playerStatus === 'Eliminated';
+  const showReadyMessage = preMatch && !isEliminated && !targetWord;
+  const readyName = model?.playerName?.trim() || 'PLAYER';
+  const displayWord = isEliminated ? 'ELIMINATED' : targetWord || '...';
   const canType = Boolean(model?.canSubmit) && Boolean(targetWord) && !submitting;
-
-  const focusRef = useStickyInputFocus(canType, [targetWord, feedback, submitting]);
 
   useEffect(() => {
     setTyped('');
@@ -40,20 +45,20 @@ export function PlayerInputPanel({ model, onSubmitWord }: PlayerInputPanelProps)
     };
   }, [feedback]);
 
-  async function handleProgressInput(value: string): Promise<void> {
+  const handleProgressInput = useCallback(async (value: string): Promise<void> => {
     if (!canType) {
       return;
     }
 
-    if (!targetWord.startsWith(value)) {
-      setTyped('');
+    const progress = evaluateTypingProgress(targetWord, value);
+    setTyped(progress.nextTyped);
+
+    if (progress.feedback === 'rejected') {
       setFeedback('rejected');
       return;
     }
 
-    setTyped(value);
-
-    if (value !== targetWord) {
+    if (!progress.shouldSubmit) {
       return;
     }
 
@@ -67,87 +72,74 @@ export function PlayerInputPanel({ model, onSubmitWord }: PlayerInputPanelProps)
     } finally {
       setSubmitting(false);
     }
-  }
+  }, [canType, onSubmitWord, targetWord]);
 
-  const feedbackBadge =
-    feedback === 'submitted'
-      ? { variant: 'success' as const, text: 'Hit' }
-      : feedback === 'rejected'
-        ? { variant: 'danger' as const, text: 'Reset' }
-        : null;
+  useEffect(() => {
+    if (!canType) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.altKey || event.ctrlKey || event.metaKey) {
+        return;
+      }
+
+      let nextValue = typed;
+      if (event.key === 'Backspace') {
+        event.preventDefault();
+        nextValue = typed.slice(0, -1);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        nextValue = '';
+      } else if (event.key.length === 1) {
+        event.preventDefault();
+        nextValue = typed + event.key.toLowerCase();
+      } else {
+        return;
+      }
+
+      void handleProgressInput(nextValue);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [canType, handleProgressInput, typed]);
 
   return (
     <Card>
-      <CardHeader className="mb-2 flex flex-row items-center justify-between">
-        <CardTitle className="text-lg">Player Input</CardTitle>
-        {feedbackBadge ? <Badge variant={feedbackBadge.variant}>{feedbackBadge.text}</Badge> : null}
-      </CardHeader>
       <CardContent className="space-y-3">
-        {model ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge
-              variant={
-                model.playerStatus === 'Active'
-                  ? 'success'
-                  : model.playerStatus === 'Eliminated'
-                    ? 'danger'
-                    : 'neutral'
-              }
-            >
-              {model.playerName} • {model.playerStatus}
-            </Badge>
-            {model.deadlineAtMicros ? <Badge variant="danger">Sudden Death Live</Badge> : null}
-          </div>
-        ) : (
-          <Badge variant="neutral">Observer mode</Badge>
-        )}
-
-        <div className="rounded-[12px] border-4 border-neo-ink bg-neo-yellow/35 p-3 shadow-neo-sm">
-          <p className="mb-2 font-display text-[11px] font-bold uppercase tracking-wide text-neo-muted">
-            Target Word
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {(targetWord || '...').split('').map((char, index) => {
-              const isFilled = index < typed.length;
-              const isActive = index === typed.length;
-              return (
-                <span
-                  key={`${char}-${index}`}
-                  className={cn(
-                    'inline-flex min-h-9 min-w-8 items-center justify-center rounded-[8px] border-2 border-neo-ink px-2 font-display text-lg font-extrabold uppercase shadow-neo-sm',
-                    isFilled ? 'bg-neo-success text-neo-paper' : 'bg-neo-paper text-neo-ink',
-                    isActive && canType ? 'bg-neo-yellow' : ''
-                  )}
-                >
-                  {char}
-                </span>
-              );
-            })}
-          </div>
+        <div className="p-4">
+          {showReadyMessage ? (
+            <p className="text-center font-display text-2xl font-extrabold uppercase tracking-wide text-neo-muted sm:text-3xl">
+              Get ready to type {readyName}!
+            </p>
+          ) : (
+            <div className="flex flex-wrap justify-center gap-2">
+              {displayWord.split('').map((char, index) => {
+                const isFilled = index < typed.length;
+                const isActive = index === typed.length;
+                return (
+                  <span
+                    key={`${char}-${index}`}
+                    className={cn(
+                      'inline-flex min-h-14 min-w-11 items-center justify-center rounded-[10px] border-2 border-neo-ink px-2 font-display text-3xl font-extrabold uppercase shadow-neo-sm sm:min-h-16 sm:min-w-12 sm:text-4xl',
+                      isEliminated
+                        ? 'bg-neo-danger text-neo-paper'
+                        : isFilled
+                          ? 'bg-neo-success text-neo-paper'
+                          : 'bg-neo-paper text-neo-ink',
+                      !isEliminated && isActive && canType ? 'bg-neo-yellow' : ''
+                    )}
+                  >
+                    {char}
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </div>
-
-        <Input
-          ref={focusRef}
-          value={typed}
-          onChange={event => {
-            void handleProgressInput(event.target.value);
-          }}
-          placeholder={canType ? 'Type continuously. Mistake resets progress.' : 'Waiting for next round'}
-          disabled={!canType}
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          inputMode="text"
-        />
-
-        {!model?.canSubmit && model?.disabledReason ? (
-          <p className="font-body text-sm text-neo-muted">{model.disabledReason}</p>
-        ) : (
-          <p className="font-body text-xs text-neo-muted">
-            No Enter required. Complete the word to submit automatically.
-          </p>
-        )}
       </CardContent>
     </Card>
   );

@@ -30,6 +30,17 @@ export interface SelectUiViewModelInput {
   pendingJoinCode: string;
 }
 
+function normalizeIdentity(identity: string): string {
+  return identity.trim().toLowerCase();
+}
+
+function isSameIdentity(left: string, right: string): boolean {
+  if (!left || !right) {
+    return false;
+  }
+  return normalizeIdentity(left) === normalizeIdentity(right);
+}
+
 function compareBigIntDescending(a: bigint, b: bigint): number {
   if (a > b) {
     return -1;
@@ -68,14 +79,14 @@ function findLobby(
 
   if (identity) {
     const hostLobby = [...snapshot.lobbies]
-      .filter(lobby => lobby.hostIdentity === identity)
+      .filter(lobby => isSameIdentity(lobby.hostIdentity, identity))
       .sort(byCreatedAtDescending)[0];
     if (hostLobby) {
       return hostLobby;
     }
 
     const memberships = snapshot.players
-      .filter(player => player.identity === identity)
+      .filter(player => isSameIdentity(player.identity, identity))
       .sort((a, b) => compareBigIntDescending(a.joinedAtMicros, b.joinedAtMicros));
 
     for (const membership of memberships) {
@@ -100,7 +111,7 @@ function buildTeamPlayerViewModel(
       team: player.team,
       status: player.status,
       eliminatedReason: player.eliminatedReason,
-      isYou: player.identity === identity,
+      isYou: isSameIdentity(player.identity, identity),
     }))
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
@@ -125,7 +136,7 @@ function deriveRole(
   if (!lobby) {
     return 'observer';
   }
-  if (identity && lobby.hostIdentity === identity) {
+  if (identity && isSameIdentity(lobby.hostIdentity, identity)) {
     return 'host';
   }
   if (myPlayer) {
@@ -278,7 +289,7 @@ function buildLobbyModel(
     joinCode: lobby.joinCode,
     status: lobby.status,
     gameType: lobby.gameType,
-    isHost: lobby.hostIdentity === identity,
+    isHost: isSameIdentity(lobby.hostIdentity, identity),
     hostIdentity: lobby.hostIdentity,
     teamA: buildTeamPlayerViewModel(teamAPlayers, identity),
     teamB: buildTeamPlayerViewModel(teamBPlayers, identity),
@@ -293,10 +304,25 @@ function buildMatchHudModel(
   tug: NormalizedTugState | null,
   teamAPlayers: NormalizedPlayer[],
   teamBPlayers: NormalizedPlayer[],
+  matchPlayerStates: NormalizedTugPlayerState[],
   myState: NormalizedTugPlayerState | null
 ): MatchHudViewModel {
   const ropePosition = tug?.ropePosition ?? 0;
   const winThreshold = tug?.winThreshold ?? 100;
+  const teamAIds = new Set(teamAPlayers.map(player => player.playerId));
+  const teamBIds = new Set(teamBPlayers.map(player => player.playerId));
+
+  let teamAPulls = 0;
+  let teamBPulls = 0;
+  for (const playerState of matchPlayerStates) {
+    if (teamAIds.has(playerState.playerId)) {
+      teamAPulls += playerState.correctCount;
+      continue;
+    }
+    if (teamBIds.has(playerState.playerId)) {
+      teamBPulls += playerState.correctCount;
+    }
+  }
 
   return {
     matchId: match.matchId,
@@ -306,8 +332,8 @@ function buildMatchHudModel(
     ropePosition,
     normalizedRopePosition: normalizeRopePosition(ropePosition, winThreshold),
     winThreshold,
-    teamAForce: tug?.teamAForce ?? 0,
-    teamBForce: tug?.teamBForce ?? 0,
+    teamAForce: teamAPulls,
+    teamBForce: teamBPulls,
     aliveTeamA: teamAPlayers.filter(player => player.status === 'Active').length,
     aliveTeamB: teamBPlayers.filter(player => player.status === 'Active').length,
     currentWord: tug?.currentWord ?? '',
@@ -336,7 +362,8 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
   }
 
   const lobbyPlayers = snapshot.players.filter(player => player.lobbyId === lobby.lobbyId);
-  const myPlayer = lobbyPlayers.find(player => player.identity === identity) ?? null;
+  const myPlayer =
+    lobbyPlayers.find(player => isSameIdentity(player.identity, identity)) ?? null;
 
   const match = lobby.activeMatchId
     ? snapshot.matches.find(item => item.matchId === lobby.activeMatchId) ?? null
@@ -349,10 +376,13 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
   const tug = match
     ? snapshot.tugStates.find(item => item.matchId === match.matchId) ?? null
     : null;
+  const matchPlayerStates = match
+    ? snapshot.tugPlayerStates.filter(item => item.matchId === match.matchId)
+    : [];
 
   const myTugState =
     match && myPlayer
-      ? snapshot.tugPlayerStates.find(
+      ? matchPlayerStates.find(
           item => item.matchId === match.matchId && item.playerId === myPlayer.playerId
         ) ?? null
       : null;
@@ -369,9 +399,17 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
     phase,
     lobby: buildLobbyModel(lobby, lobbyPlayers, identity),
     matchHud: match
-      ? buildMatchHudModel(match, clock, tug, teamAPlayers, teamBPlayers, myTugState)
+      ? buildMatchHudModel(
+          match,
+          clock,
+          tug,
+          teamAPlayers,
+          teamBPlayers,
+          matchPlayerStates,
+          myTugState
+        )
       : null,
-    hostPanel: buildHostPanelModel(lobby.hostIdentity === identity, lobby, match),
+    hostPanel: buildHostPanelModel(isSameIdentity(lobby.hostIdentity, identity), lobby, match),
     playerInput: buildPlayerInputModel(role, myPlayer, match, myTugState),
     events: buildEventFeed(snapshot, lobby.lobbyId),
   };

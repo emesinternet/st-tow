@@ -59,6 +59,20 @@ body {
   outline-offset: 2px;
 }
 
+.team-bg-a {
+  background:
+    radial-gradient(circle at 12% 10%, hsl(var(--team-a) / 0.55) 0, transparent 38%),
+    radial-gradient(circle at 88% 18%, hsl(var(--accent) / 0.35) 0, transparent 36%),
+    linear-gradient(135deg, #ffd6cb 0%, #ffe7dd 46%, #fff5d8 100%);
+}
+
+.team-bg-b {
+  background:
+    radial-gradient(circle at 86% 10%, hsl(var(--team-b) / 0.55) 0, transparent 38%),
+    radial-gradient(circle at 14% 18%, hsl(var(--accent) / 0.3) 0, transparent 36%),
+    linear-gradient(135deg, #d5eaff 0%, #e3f0ff 48%, #e8f7ff 100%);
+}
+
 .fade-enter {
   animation: fade-enter 280ms ease-out;
 }

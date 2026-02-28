@@ -4,13 +4,10 @@ import { ConnectionBanner } from '@/components/layout/ConnectionBanner';
 import { HeaderBar } from '@/components/layout/HeaderBar';
 import { HostControlsPanel } from '@/components/host/HostControlsPanel';
 import { LandingPanel } from '@/components/lobby/LandingPanel';
-import { LobbyOverview } from '@/components/lobby/LobbyOverview';
 import { MatchHud } from '@/components/match/MatchHud';
 import { PlayerInputPanel } from '@/components/player/PlayerInputPanel';
 import { EventFeed } from '@/components/shared/EventFeed';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/shared/ui/card';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/shared/ui/sheet';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/shared/ui/tabs';
+import { Button } from '@/components/shared/ui/button';
 import {
   Toast,
   ToastDescription,
@@ -20,12 +17,36 @@ import {
 } from '@/components/shared/ui/toast';
 import { useSpacetimeSession } from '@/data/useSpacetimeSession';
 import { selectUiViewModel } from '@/lib/selectors';
-import type { ToastMessage } from '@/types/ui';
+import type { MatchHudViewModel, ToastMessage } from '@/types/ui';
 
 const GAME_TYPE_TUG_OF_WAR = 'tug_of_war';
+const DEFAULT_ROUND_SECONDS = 90;
 
 function makeToastId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function parseSettingInt(valueJson: string): number | null {
+  try {
+    const parsed = JSON.parse(valueJson);
+    const number = Number(parsed);
+    return Number.isFinite(number) ? Math.trunc(number) : null;
+  } catch {
+    const number = Number(valueJson);
+    return Number.isFinite(number) ? Math.trunc(number) : null;
+  }
+}
+
+function resolveTeamTone(
+  lobby: NonNullable<ReturnType<typeof selectUiViewModel>['lobby']>
+): 'teamA' | 'teamB' | 'neutral' {
+  if (lobby.teamA.some(player => player.isYou)) {
+    return 'teamA';
+  }
+  if (lobby.teamB.some(player => player.isYou)) {
+    return 'teamB';
+  }
+  return 'neutral';
 }
 
 export default function App() {
@@ -35,7 +56,6 @@ export default function App() {
   const [joinCode, setJoinCode] = useState('');
   const [pendingJoinCode, setPendingJoinCode] = useState('');
   const [selectedLobbyId, setSelectedLobbyId] = useState('');
-  const [mobilePanelsOpen, setMobilePanelsOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const ui = useMemo(
@@ -157,6 +177,49 @@ export default function App() {
     [actions, ui.matchHud, withActionErrorToast]
   );
 
+  const preMatchRoundSeconds = useMemo(() => {
+    if (!ui.lobby) {
+      return DEFAULT_ROUND_SECONDS;
+    }
+
+    const row = snapshot.lobbySettings.find(
+      setting =>
+        setting.lobbyId === ui.lobby!.lobbyId &&
+        setting.key === 'round_seconds'
+    );
+    if (!row) {
+      return DEFAULT_ROUND_SECONDS;
+    }
+
+    return parseSettingInt(row.valueJson) ?? DEFAULT_ROUND_SECONDS;
+  }, [snapshot.lobbySettings, ui.lobby]);
+
+  const preMatchHud: MatchHudViewModel = {
+    matchId: ui.lobby?.lobbyId ?? 'preview',
+    phase: 'PreGame',
+    secondsRemaining: preMatchRoundSeconds,
+    winnerTeam: '',
+    ropePosition: 0,
+    normalizedRopePosition: 50,
+    winThreshold: 100,
+    teamAForce: 0,
+    teamBForce: 0,
+    aliveTeamA: 0,
+    aliveTeamB: 0,
+    currentWord: '',
+    wordVersion: 0,
+    mode: 'Normal',
+    suddenDeathDeadlineMicros: null,
+  };
+  const hideTypingPanel = ui.role === 'host' && ui.matchHud != null;
+  const teamTone = ui.lobby ? resolveTeamTone(ui.lobby) : 'neutral';
+  const backgroundClassName =
+    teamTone === 'teamA'
+      ? 'team-bg-a'
+      : teamTone === 'teamB'
+        ? 'team-bg-b'
+        : '';
+
   const primary =
     ui.phase === 'landing' ? (
       <LandingPanel
@@ -169,43 +232,40 @@ export default function App() {
       />
     ) : (
       <>
-        {ui.lobby ? <LobbyOverview lobby={ui.lobby} /> : null}
-        {ui.matchHud ? <MatchHud hud={ui.matchHud} /> : null}
-        <PlayerInputPanel model={ui.playerInput} onSubmitWord={handleSubmitWord} />
-        {ui.phase === 'post' ? (
-          <Card className="bg-neo-yellow/70">
-            <CardHeader>
-              <CardTitle className="text-xl">Round Complete</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="font-body text-sm">
-                {ui.matchHud?.winnerTeam
-                  ? `Team ${ui.matchHud.winnerTeam} wins. Host can reset for a rematch.`
-                  : 'Match ended. Host can reset for a rematch.'}
-              </p>
-            </CardContent>
-          </Card>
+        <MatchHud hud={ui.matchHud ?? preMatchHud} />
+        {!hideTypingPanel ? (
+          <PlayerInputPanel
+            model={ui.playerInput}
+            onSubmitWord={handleSubmitWord}
+            preMatch={!ui.matchHud}
+          />
         ) : null}
       </>
     );
 
   const secondary = (
-    <>
-      <HostControlsPanel
-        lobby={ui.lobby}
-        hud={ui.matchHud}
-        hostPanel={ui.hostPanel}
-        onStartMatch={handleStartMatch}
-        onResetLobby={handleResetLobby}
-        onEndMatch={handleEndMatch}
-      />
-      <EventFeed events={ui.events} />
-    </>
+    <EventFeed
+      events={ui.events}
+      headerAction={
+        <Button
+          type="button"
+          size="sm"
+          variant="neutral"
+          onClick={() => {
+            localStorage.removeItem('auth_token');
+            window.location.reload();
+          }}
+        >
+          Reset Session
+        </Button>
+      }
+    />
   );
 
   return (
     <ToastProvider duration={2200} swipeDirection="right">
       <AppShell
+        backgroundClassName={backgroundClassName}
         banner={<ConnectionBanner state={state} errorMessage={errorMessage} />}
         header={
           <HeaderBar
@@ -214,40 +274,24 @@ export default function App() {
             phase={ui.phase}
             lobbyCode={ui.lobby?.joinCode ?? ''}
             lobbyStatus={ui.lobby?.status ?? ''}
-            onOpenPanels={() => setMobilePanelsOpen(true)}
+            controls={
+              ui.role === 'host' ? (
+                <HostControlsPanel
+                  lobby={ui.lobby}
+                  hud={ui.matchHud}
+                  hostPanel={ui.hostPanel}
+                  onStartMatch={handleStartMatch}
+                  onResetLobby={handleResetLobby}
+                  onEndMatch={handleEndMatch}
+                  variant="inline"
+                />
+              ) : null
+            }
           />
         }
         primary={primary}
         secondary={secondary}
       />
-
-      <Sheet open={mobilePanelsOpen} onOpenChange={setMobilePanelsOpen}>
-        <SheetContent side="right" className="lg:hidden">
-          <SheetHeader>
-            <SheetTitle>Role Panels</SheetTitle>
-          </SheetHeader>
-
-          <Tabs defaultValue="controls">
-            <TabsList>
-              <TabsTrigger value="controls">Controls</TabsTrigger>
-              <TabsTrigger value="events">Events</TabsTrigger>
-            </TabsList>
-            <TabsContent value="controls">
-              <HostControlsPanel
-                lobby={ui.lobby}
-                hud={ui.matchHud}
-                hostPanel={ui.hostPanel}
-                onStartMatch={handleStartMatch}
-                onResetLobby={handleResetLobby}
-                onEndMatch={handleEndMatch}
-              />
-            </TabsContent>
-            <TabsContent value="events">
-              <EventFeed events={ui.events} />
-            </TabsContent>
-          </Tabs>
-        </SheetContent>
-      </Sheet>
 
       {toasts.map(toast => (
         <Toast
@@ -265,17 +309,6 @@ export default function App() {
         </Toast>
       ))}
       <ToastViewport />
-
-      <button
-        type="button"
-        className="neo-focus fixed bottom-3 left-3 z-[120] rounded-[10px] border-4 border-neo-ink bg-neo-paper px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wide text-neo-ink shadow-neo-sm transition active:translate-x-[2px] active:translate-y-[2px] active:shadow-neo-pressed"
-        onClick={() => {
-          localStorage.removeItem('auth_token');
-          window.location.reload();
-        }}
-      >
-        Debug: Reset Session
-      </button>
     </ToastProvider>
   );
 }

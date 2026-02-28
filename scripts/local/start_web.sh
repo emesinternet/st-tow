@@ -44,6 +44,7 @@ READY_FILE="$RUN_DIR/ready.flag"
 FAIL_FILE="$RUN_DIR/fail.flag"
 PUBLISH_LOG="$RUN_DIR/publish.log"
 GENERATE_LOG="$RUN_DIR/generate.log"
+BUILD_LOG="$RUN_DIR/build.log"
 WEB_LOG="$RUN_DIR/web.log"
 
 mkdir -p "$RUN_DIR"
@@ -55,8 +56,10 @@ echo "run dir: $RUN_DIR"
 for _ in $(seq 1 300); do
   if [[ -f "$FAIL_FILE" ]]; then
     echo "Publish/generate failed."
+    echo "build log: $BUILD_LOG"
     echo "publish log: $PUBLISH_LOG"
     echo "generate log: $GENERATE_LOG"
+    [[ -f "$BUILD_LOG" ]] && tail -n 120 "$BUILD_LOG"
     [[ -f "$PUBLISH_LOG" ]] && tail -n 120 "$PUBLISH_LOG"
     [[ -f "$GENERATE_LOG" ]] && tail -n 120 "$GENERATE_LOG"
     exit 1

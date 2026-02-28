@@ -88,6 +88,7 @@ export const TugPlayerState = __t.object("TugPlayerState", {
   tugPlayerStateId: __t.string(),
   matchId: __t.string(),
   playerId: __t.string(),
+  currentWord: __t.string(),
   correctCount: __t.i32(),
   lastSubmitAtMicros: __t.i64(),
   deadlineAtMicros: __t.i64(),

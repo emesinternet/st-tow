@@ -14,6 +14,7 @@ export default __t.row({
   tugPlayerStateId: __t.string().primaryKey().name("tug_player_state_id"),
   matchId: __t.string().name("match_id"),
   playerId: __t.string().name("player_id"),
+  currentWord: __t.string().name("current_word"),
   correctCount: __t.i32().name("correct_count"),
   lastSubmitAtMicros: __t.i64().name("last_submit_at_micros"),
   deadlineAtMicros: __t.i64().name("deadline_at_micros"),
