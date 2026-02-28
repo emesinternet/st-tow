@@ -11,6 +11,7 @@ interface MatchHudProps {
   teamAPlayers: TeamPlayerViewModel[];
   teamBPlayers: TeamPlayerViewModel[];
   lobbyCode?: string;
+  onCopyLobbyCode?: () => void;
 }
 
 const CHEER_PHRASES = [
@@ -233,6 +234,7 @@ export function MatchHud({
   teamAPlayers,
   teamBPlayers,
   lobbyCode,
+  onCopyLobbyCode,
 }: MatchHudProps) {
   const isLobbyPreview = hud.matchId.endsWith(":pre");
   const isRpsTieBreak = hud.phase === "TieBreakRps";
@@ -273,7 +275,19 @@ export function MatchHud({
             {lobbyCode ? (
               <Badge
                 variant="accent"
-                className="pointer-events-none absolute left-1/2 top-0 z-40 -translate-x-1/2 -translate-y-[115%] rounded-[12px] border-4 px-5 py-1 text-2xl font-black tracking-[0.18em] sm:text-3xl"
+                className="absolute left-1/2 top-0 z-40 -translate-x-1/2 -translate-y-[115%] cursor-pointer select-text rounded-[12px] border-4 px-5 py-1 text-2xl font-black tracking-[0.18em] sm:text-3xl"
+                role="button"
+                tabIndex={0}
+                title="Copy lobby code"
+                onClick={() => {
+                  onCopyLobbyCode?.();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onCopyLobbyCode?.();
+                  }
+                }}
               >
                 {lobbyCode}
               </Badge>

@@ -580,6 +580,31 @@ export default function App() {
       confettiTimeoutRef.current = null;
     }, 8200);
   }, []);
+  const handleCopyLobbyCode = useCallback(async () => {
+    const code = ui.lobby?.joinCode?.trim();
+    if (!code) {
+      return;
+    }
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(code);
+      } else {
+        const input = document.createElement('textarea');
+        input.value = code;
+        input.setAttribute('readonly', 'true');
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+      }
+      pushToast('Copied', `Lobby code ${code} copied to clipboard.`, 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Clipboard unavailable';
+      pushToast('Copy failed', message, 'danger');
+    }
+  }, [pushToast, ui.lobby]);
 
   const myTeam = useMemo(() => {
     if (!ui.lobby) {
@@ -730,6 +755,9 @@ export default function App() {
             teamAPlayers={ui.lobby?.teamA ?? []}
             teamBPlayers={ui.lobby?.teamB ?? []}
             lobbyCode={ui.lobby?.joinCode ?? ''}
+            onCopyLobbyCode={() => {
+              void handleCopyLobbyCode();
+            }}
           />
         ) : null}
         {ui.playerInput ? (
