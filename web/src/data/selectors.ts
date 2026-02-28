@@ -70,6 +70,7 @@ export interface NormalizedTugPlayerState {
   playerId: string;
   currentWord: string;
   correctCount: number;
+  submitCount: number;
   lastSubmitAtMicros: bigint;
   deadlineAtMicros: bigint;
 }
@@ -279,6 +280,7 @@ function normalizeTugPlayerState(row: GenericRow): NormalizedTugPlayerState {
     playerId: field<string>(row, 'playerId', 'player_id') ?? '',
     currentWord: field<string>(row, 'currentWord', 'current_word') ?? '',
     correctCount: toNumber(field(row, 'correctCount', 'correct_count')),
+    submitCount: toNumber(field(row, 'submitCount', 'submit_count')),
     lastSubmitAtMicros: toBigInt(field(row, 'lastSubmitAtMicros', 'last_submit_at_micros')),
     deadlineAtMicros: toBigInt(field(row, 'deadlineAtMicros', 'deadline_at_micros')),
   };

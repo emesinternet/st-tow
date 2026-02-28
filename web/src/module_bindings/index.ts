@@ -42,6 +42,7 @@ import ResetLobbyReducer from "./reset_lobby_reducer";
 import SetLobbySettingReducer from "./set_lobby_setting_reducer";
 import StartMatchReducer from "./start_match_reducer";
 import TugInitReducer from "./tug_init_reducer";
+import TugRecordMissReducer from "./tug_record_miss_reducer";
 import TugSubmitReducer from "./tug_submit_reducer";
 import TugTickReducer from "./tug_tick_reducer";
 
@@ -263,6 +264,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_lobby_setting", SetLobbySettingReducer),
   __reducerSchema("start_match", StartMatchReducer),
   __reducerSchema("tug_init", TugInitReducer),
+  __reducerSchema("tug_record_miss", TugRecordMissReducer),
   __reducerSchema("tug_submit", TugSubmitReducer),
   __reducerSchema("tug_tick", TugTickReducer),
 );

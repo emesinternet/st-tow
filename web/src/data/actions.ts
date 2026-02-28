@@ -42,6 +42,7 @@ export interface GameActions {
   resetLobby: (lobbyId: string) => Promise<void>;
   endMatch: (lobbyId: string) => Promise<void>;
   submitWord: (matchId: string, wordVersion: number, typed: string) => Promise<void>;
+  recordMistake: (matchId: string) => Promise<void>;
 }
 
 export function buildActions(connection: DbConnection | null): GameActions {
@@ -83,6 +84,12 @@ export function buildActions(connection: DbConnection | null): GameActions {
         matchId,
         wordVersion,
         typed,
+      });
+    },
+    recordMistake: async (matchId: string) => {
+      const conn = assertConnection(connection);
+      await callReducer(conn, 'tug_record_miss', {
+        matchId,
       });
     },
   };

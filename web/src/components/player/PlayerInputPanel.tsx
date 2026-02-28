@@ -7,12 +7,14 @@ import { evaluateTypingProgress } from '@/components/player/typingProgress';
 interface PlayerInputPanelProps {
   model: PlayerInputViewModel | null;
   onSubmitWord: (typed: string) => Promise<void>;
+  onRecordMistake: () => Promise<void>;
   preMatch?: boolean;
 }
 
 export function PlayerInputPanel({
   model,
   onSubmitWord,
+  onRecordMistake,
   preMatch = false,
 }: PlayerInputPanelProps) {
   const [typed, setTyped] = useState('');
@@ -39,6 +41,9 @@ export function PlayerInputPanel({
     setTyped(progress.nextTyped);
 
     if (progress.feedback === 'rejected') {
+      void onRecordMistake().catch(() => {
+        // Mistake telemetry is best-effort and should never block local typing flow.
+      });
       return;
     }
 
@@ -55,7 +60,7 @@ export function PlayerInputPanel({
     } finally {
       setSubmitting(false);
     }
-  }, [canType, onSubmitWord, targetWord]);
+  }, [canType, onRecordMistake, onSubmitWord, targetWord]);
 
   useEffect(() => {
     if (!canType) {

@@ -4,7 +4,9 @@ import { ConnectionBanner } from '@/components/layout/ConnectionBanner';
 import { HeaderBar } from '@/components/layout/HeaderBar';
 import { HostControlsPanel } from '@/components/host/HostControlsPanel';
 import { LandingPanel } from '@/components/lobby/LandingPanel';
+import { CountdownOverlay } from '@/components/match/CountdownOverlay';
 import { MatchHud } from '@/components/match/MatchHud';
+import { PostGameStatsModal } from '@/components/match/PostGameStatsModal';
 import { PlayerInputPanel } from '@/components/player/PlayerInputPanel';
 import { EventFeed } from '@/components/shared/EventFeed';
 import { Button } from '@/components/shared/ui/button';
@@ -47,6 +49,8 @@ export default function App() {
   const [pendingJoinCode, setPendingJoinCode] = useState('');
   const [selectedLobbyId, setSelectedLobbyId] = useState('');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [postGameModalOpen, setPostGameModalOpen] = useState(false);
+  const [lastPostGameMatchId, setLastPostGameMatchId] = useState('');
 
   const ui = useMemo(
     () =>
@@ -65,6 +69,23 @@ export default function App() {
       setSelectedLobbyId(ui.lobby.lobbyId);
     }
   }, [selectedLobbyId, ui.lobby]);
+
+  useEffect(() => {
+    if (ui.phase !== 'post' || !ui.matchHud?.matchId) {
+      return;
+    }
+
+    if (ui.matchHud.matchId !== lastPostGameMatchId) {
+      setLastPostGameMatchId(ui.matchHud.matchId);
+      setPostGameModalOpen(true);
+    }
+  }, [lastPostGameMatchId, ui.matchHud, ui.phase]);
+
+  useEffect(() => {
+    if (ui.phase !== 'post' && postGameModalOpen) {
+      setPostGameModalOpen(false);
+    }
+  }, [postGameModalOpen, ui.phase]);
 
   const pushToast = useCallback(
     (
@@ -210,6 +231,17 @@ export default function App() {
     },
     [actions, ui.matchHud, withActionErrorToast]
   );
+  const handleRecordMistake = useCallback(async () => {
+    if (!ui.matchHud) {
+      return;
+    }
+
+    try {
+      await actions.recordMistake(ui.matchHud.matchId);
+    } catch {
+      // Ignore transient errors; mistakes are telemetry and should not interrupt typing.
+    }
+  }, [actions, ui.matchHud]);
   const teamTone = ui.lobby ? resolveTeamTone(ui.lobby) : 'neutral';
   const backgroundClassName =
     teamTone === 'teamA'
@@ -243,6 +275,7 @@ export default function App() {
           <PlayerInputPanel
             model={ui.playerInput}
             onSubmitWord={handleSubmitWord}
+            onRecordMistake={handleRecordMistake}
             preMatch={!ui.matchHud || ui.matchHud.phase === 'PreGame'}
           />
         ) : null}
@@ -267,6 +300,11 @@ export default function App() {
       }
     />
   );
+
+  const showCountdownOverlay =
+    ui.matchHud?.phase === 'PreGame' &&
+    ui.matchHud.secondsRemaining != null &&
+    ui.matchHud.secondsRemaining > 0;
 
   return (
     <ToastProvider duration={2200} swipeDirection="right">
@@ -297,6 +335,16 @@ export default function App() {
         }
         primary={primary}
         secondary={secondary}
+      />
+      <CountdownOverlay
+        visible={showCountdownOverlay}
+        secondsRemaining={ui.matchHud?.secondsRemaining ?? null}
+      />
+      <PostGameStatsModal
+        open={postGameModalOpen}
+        onClose={() => setPostGameModalOpen(false)}
+        lobby={ui.lobby}
+        hud={ui.matchHud}
       />
 
       {toasts.map(toast => (

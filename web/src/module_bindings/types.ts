@@ -100,6 +100,7 @@ export const TugPlayerState = __t.object("TugPlayerState", {
   playerId: __t.string(),
   currentWord: __t.string(),
   correctCount: __t.i32(),
+  submitCount: __t.i32(),
   lastSubmitAtMicros: __t.i64(),
   deadlineAtMicros: __t.i64(),
 });

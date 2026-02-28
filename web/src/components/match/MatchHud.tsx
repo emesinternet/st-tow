@@ -89,21 +89,24 @@ function TeamMarkers({
 
 export function MatchHud({ hud, teamAPlayers, teamBPlayers }: MatchHudProps) {
   const hostScore = hud.hostScore ?? 0;
+  const isLobbyPreview = hud.matchId.endsWith(':pre');
+  const timerText =
+    hud.phase === 'PreGame' && !isLobbyPreview ? 'READY' : formatSeconds(hud.secondsRemaining);
 
   return (
     <Card className="overflow-hidden">
       <CardContent className="space-y-4 p-4">
         <div className="flex flex-wrap items-end justify-center gap-2 text-center font-display font-black tracking-wide sm:gap-3">
           <p className="text-3xl tabular-nums text-neo-teamA sm:text-4xl">
-            A {hud.teamAPulls}
+            RED TEAM {hud.teamAPulls}
           </p>
           <span className="pb-1 text-xl text-neo-muted sm:text-2xl">|</span>
           <p className="text-4xl tabular-nums text-neo-ink sm:text-5xl">
-            {formatSeconds(hud.secondsRemaining)}
+            {timerText}
           </p>
           <span className="pb-1 text-xl text-neo-muted sm:text-2xl">|</span>
           <p className="text-3xl tabular-nums text-neo-teamB sm:text-4xl">
-            B {hud.teamBPulls}
+            BLUE TEAM {hud.teamBPulls}
           </p>
           <span className="pb-1 text-xl text-neo-muted sm:text-2xl">|</span>
           <p className="text-3xl tabular-nums text-neo-ink sm:text-4xl">

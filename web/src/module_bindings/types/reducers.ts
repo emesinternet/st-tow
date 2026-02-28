@@ -14,6 +14,7 @@ import ResetLobbyReducer from "../reset_lobby_reducer";
 import SetLobbySettingReducer from "../set_lobby_setting_reducer";
 import StartMatchReducer from "../start_match_reducer";
 import TugInitReducer from "../tug_init_reducer";
+import TugRecordMissReducer from "../tug_record_miss_reducer";
 import TugSubmitReducer from "../tug_submit_reducer";
 import TugTickReducer from "../tug_tick_reducer";
 
@@ -25,6 +26,7 @@ export type ResetLobbyParams = __Infer<typeof ResetLobbyReducer>;
 export type SetLobbySettingParams = __Infer<typeof SetLobbySettingReducer>;
 export type StartMatchParams = __Infer<typeof StartMatchReducer>;
 export type TugInitParams = __Infer<typeof TugInitReducer>;
+export type TugRecordMissParams = __Infer<typeof TugRecordMissReducer>;
 export type TugSubmitParams = __Infer<typeof TugSubmitReducer>;
 export type TugTickParams = __Infer<typeof TugTickReducer>;
 

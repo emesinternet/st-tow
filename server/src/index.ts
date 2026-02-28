@@ -141,6 +141,7 @@ const tugPlayerStateRow = {
   player_id: t.string().index(),
   current_word: t.string(),
   correct_count: t.i32(),
+  submit_count: t.i32(),
   last_submit_at_micros: t.i64(),
   deadline_at_micros: t.i64(),
 };
@@ -470,6 +471,7 @@ function ensureTugPlayerStateForActiveMatch(
     player_id: player.player_id,
     current_word: pickWordForPlayer(ctx, match.match_id, player.player_id),
     correct_count: 0,
+    submit_count: 0,
     last_submit_at_micros: 0n,
     deadline_at_micros: deadline,
   });
@@ -704,6 +706,7 @@ function initializeTugState(
       player_id: player.player_id,
       current_word: pickWordForPlayer(ctx, match.match_id, player.player_id),
       correct_count: 0,
+      submit_count: 0,
       last_submit_at_micros: 0n,
       deadline_at_micros: 0n,
     });
@@ -1314,6 +1317,40 @@ export const tug_init = spacetimedb.reducer(
   }
 );
 
+export const tug_record_miss = spacetimedb.reducer(
+  { match_id: t.string() },
+  (ctx, { match_id }) => {
+    const match = getMatchOrThrow(ctx, match_id);
+    if (
+      match.phase !== MATCH_PHASE_IN_GAME &&
+      match.phase !== MATCH_PHASE_SUDDEN_DEATH
+    ) {
+      return;
+    }
+
+    const lobby = getLobbyOrThrow(ctx, match.lobby_id);
+    if (lobby.host_identity.equals(ctx.sender)) {
+      return;
+    }
+
+    const player = findMembershipInLobby(ctx, lobby.lobby_id);
+    if (!player || player.status !== PLAYER_STATUS_ACTIVE) {
+      return;
+    }
+
+    const stateId = tugPlayerStateId(match_id, player.player_id);
+    const playerState = getTugPlayerStateById(ctx, stateId);
+    if (!playerState) {
+      return;
+    }
+
+    replaceRow(ctx.db.tug_player_state, playerState, {
+      ...playerState,
+      submit_count: playerState.submit_count + 1,
+    });
+  }
+);
+
 export const tug_submit = spacetimedb.reducer(
   {
     match_id: t.string(),
@@ -1391,16 +1428,17 @@ export const tug_submit = spacetimedb.reducer(
 
     const now = nowMicros(ctx);
     const correct = isCorrectWordSubmission(typed, playerState.current_word);
+    const playerStateNext: TugPlayerStateRow = {
+      ...playerState,
+      submit_count: playerState.submit_count + 1,
+      last_submit_at_micros: now,
+    };
 
     if (!correct && shouldEliminateOnWrongSubmission(tug.mode)) {
+      replaceRow(ctx.db.tug_player_state, playerState, playerStateNext);
       eliminatePlayer(ctx, lobby.lobby_id, match_id, player, 'misspelling');
       return;
     }
-
-    const playerStateNext: TugPlayerStateRow = {
-      ...playerState,
-      last_submit_at_micros: now,
-    };
 
     if (correct) {
       playerStateNext.correct_count += 1;

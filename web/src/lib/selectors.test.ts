@@ -87,6 +87,7 @@ function makeBaseSnapshot(): SessionSnapshot {
         playerId: 'player-a',
         currentWord: 'anchor',
         correctCount: 3,
+        submitCount: 4,
         lastSubmitAtMicros: 0n,
         deadlineAtMicros: 0n,
       },
@@ -96,6 +97,7 @@ function makeBaseSnapshot(): SessionSnapshot {
         playerId: 'player-b',
         currentWord: 'bridge',
         correctCount: 5,
+        submitCount: 6,
         lastSubmitAtMicros: 0n,
         deadlineAtMicros: 0n,
       },
@@ -142,6 +144,8 @@ test('selector keeps force fields physical and pull fields cumulative', () => {
   assert.equal(vm.matchHud?.teamBForce, 4);
   assert.equal(vm.matchHud?.teamAPulls, 3);
   assert.equal(vm.matchHud?.teamBPulls, 5);
+  assert.equal(vm.lobby?.teamA[0]?.accuracy, 75);
+  assert.equal(vm.lobby?.teamB[0]?.accuracy, 83);
 });
 
 test('selector exposes host score from tug_host_state when present', () => {
@@ -201,4 +205,3 @@ test('selector derives pre-match seconds from round_seconds setting with fallbac
   assert.equal(withFallback.preMatchSecondsRemaining, 90);
   assert.equal(withFallback.preMatchHud?.secondsRemaining, 90);
 });
-

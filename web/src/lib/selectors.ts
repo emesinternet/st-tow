@@ -134,15 +134,24 @@ function buildTeamPlayerViewModel(
   playerStateByPlayerId: Map<string, NormalizedTugPlayerState>
 ): TeamPlayerViewModel[] {
   return players
-    .map(player => ({
-      playerId: player.playerId,
-      displayName: player.displayName,
-      team: player.team,
-      status: player.status,
-      correctCount: playerStateByPlayerId.get(player.playerId)?.correctCount ?? 0,
-      eliminatedReason: player.eliminatedReason,
-      isYou: isSameIdentity(player.identity, identity),
-    }))
+    .map(player => {
+      const playerState = playerStateByPlayerId.get(player.playerId);
+      const correctCount = playerState?.correctCount ?? 0;
+      const submitCount = playerState?.submitCount ?? 0;
+      const accuracy = submitCount > 0 ? Math.round((correctCount / submitCount) * 100) : 0;
+
+      return {
+        playerId: player.playerId,
+        displayName: player.displayName,
+        team: player.team,
+        status: player.status,
+        correctCount,
+        submitCount,
+        accuracy,
+        eliminatedReason: player.eliminatedReason,
+        isYou: isSameIdentity(player.identity, identity),
+      };
+    })
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 

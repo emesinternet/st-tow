@@ -10,6 +10,8 @@ export interface TeamPlayerViewModel {
   team: string;
   status: string;
   correctCount: number;
+  submitCount: number;
+  accuracy: number;
   eliminatedReason: string;
   isYou: boolean;
 }

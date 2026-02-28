@@ -10,13 +10,13 @@ export function LobbyOverview({ lobby }: LobbyOverviewProps) {
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         <TeamRosterCard
-          title="Team A"
+          title="Red Team"
           badgeVariant="teamA"
           players={lobby.teamA}
           counts={lobby.teamACounts}
         />
         <TeamRosterCard
-          title="Team B"
+          title="Blue Team"
           badgeVariant="teamB"
           players={lobby.teamB}
           counts={lobby.teamBCounts}
