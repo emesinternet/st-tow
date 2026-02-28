@@ -100,58 +100,57 @@ body {
   );
 }
 
-.tie-zone-disco {
-  position: relative;
+.tie-zone-floor {
+  position: absolute;
   overflow: hidden;
-  background-color: hsl(var(--accent));
+  --disco-tile: 16px;
   background-image:
     linear-gradient(
-      45deg,
-      hsl(var(--bg) / 0.14) 25%,
-      transparent 25%,
-      transparent 75%,
-      hsl(var(--bg) / 0.14) 75%
+      110deg,
+      hsl(var(--team-a)) 0%,
+      hsl(var(--accent)) 22%,
+      hsl(var(--success)) 42%,
+      hsl(var(--team-b)) 62%,
+      hsl(var(--danger)) 80%,
+      hsl(var(--team-a)) 100%
     ),
-    linear-gradient(
+    repeating-linear-gradient(
       45deg,
-      transparent 25%,
-      hsl(var(--fg) / 0.15) 25%,
-      hsl(var(--fg) / 0.15) 75%,
-      transparent 75%
+      rgb(255 255 255 / 20%) 0 8px,
+      rgb(15 24 54 / 24%) 8px 16px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      rgb(255 255 255 / 12%) 0 8px,
+      rgb(31 43 85 / 22%) 8px 16px
     );
-  background-size: 16px 16px;
-  background-position: 0 0, 8px 8px;
-  box-shadow: inset 0 0 0 2px hsl(var(--border) / 0.4);
-  animation: tie-zone-disco-pan 900ms linear infinite;
+  background-size:
+    220% 220%,
+    var(--disco-tile) var(--disco-tile),
+    var(--disco-tile) var(--disco-tile);
+  background-blend-mode: screen;
+  animation:
+    tie-zone-floor-slide 700ms linear infinite,
+    tie-zone-floor-rainbow 3200ms linear infinite alternate,
+    tie-zone-floor-pulse 1200ms ease-in-out infinite;
 }
 
-.tie-zone-disco::before {
-  content: '';
+.tie-zone-floor__shimmer {
   position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 18% 30%, hsl(var(--card) / 0.5) 0 9%, transparent 26%),
-    radial-gradient(circle at 74% 66%, hsl(var(--card) / 0.4) 0 7%, transparent 22%);
-  mix-blend-mode: screen;
-}
-
-.tie-zone-disco::after {
-  content: '';
-  position: absolute;
-  inset: -30% -60%;
+  inset: -38% -82%;
   pointer-events: none;
   background: linear-gradient(
-    115deg,
+    100deg,
     transparent 0%,
-    transparent 40%,
-    hsl(var(--card) / 0.2) 50%,
-    hsl(var(--card) / 0.75) 58%,
+    transparent 34%,
+    rgb(255 255 255 / 14%) 41%,
+    rgb(255 255 255 / 90%) 52%,
+    rgb(255 255 255 / 18%) 63%,
     transparent 70%,
     transparent 100%
   );
-  mix-blend-mode: soft-light;
-  animation: tie-zone-shimmer 1800ms ease-in-out infinite;
+  mix-blend-mode: screen;
+  animation: tie-zone-shimmer 1450ms ease-in-out infinite;
 }
 
 .fade-enter {
@@ -203,25 +202,46 @@ body {
   }
 }
 
-@keyframes tie-zone-disco-pan {
+@keyframes tie-zone-floor-slide {
   from {
-    background-position: 0 0, 8px 8px;
+    background-position: 50% 50%, 0 0, 0 0;
   }
   to {
-    background-position: 16px 16px, 24px 24px;
+    background-position: 50% 50%, 16px 16px, -16px 16px;
+  }
+}
+
+@keyframes tie-zone-floor-rainbow {
+  from {
+    background-position: 0% 50%, 0 0, 0 0;
+  }
+  to {
+    background-position: 100% 50%, 0 0, 0 0;
+  }
+}
+
+@keyframes tie-zone-floor-pulse {
+  0% {
+    filter: saturate(1) brightness(0.92);
+  }
+  50% {
+    filter: saturate(1.35) brightness(1.16);
+  }
+  100% {
+    filter: saturate(1) brightness(0.92);
   }
 }
 
 @keyframes tie-zone-shimmer {
   0% {
-    transform: translateX(-48%) skewX(-18deg);
-    opacity: 0.25;
+    transform: translateX(-52%) skewX(-16deg);
+    opacity: 0.2;
   }
   50% {
-    opacity: 0.95;
+    opacity: 1;
   }
   100% {
-    transform: translateX(48%) skewX(-18deg);
-    opacity: 0.25;
+    transform: translateX(52%) skewX(-16deg);
+    opacity: 0.2;
   }
 }

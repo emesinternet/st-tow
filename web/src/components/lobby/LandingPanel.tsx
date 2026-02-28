@@ -28,7 +28,7 @@ export function LandingPanel({
   onCreateLobby,
 }: LandingPanelProps) {
   return (
-    <Card className="mx-auto max-w-2xl">
+    <Card className="mx-auto w-full max-w-[1200px]">
       <CardHeader>
         <CardTitle>Join or Host a Match</CardTitle>
         <CardDescription>

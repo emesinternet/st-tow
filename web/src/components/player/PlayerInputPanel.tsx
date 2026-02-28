@@ -4,7 +4,6 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type CSSProperties,
 } from 'react';
 import { Card, CardContent } from '@/components/shared/ui/card';
 import { cn } from '@/lib/utils';
@@ -26,7 +25,8 @@ export function PlayerInputPanel({
 }: PlayerInputPanelProps) {
   const [typed, setTyped] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [tileScale, setTileScale] = useState(1);
+  const [rowScale, setRowScale] = useState(1);
+  const [scaledRowHeight, setScaledRowHeight] = useState(64);
   const scaleTrackRef = useRef<HTMLDivElement | null>(null);
   const scaleRowRef = useRef<HTMLDivElement | null>(null);
 
@@ -37,48 +37,34 @@ export function PlayerInputPanel({
   const displayWord = isEliminated ? 'ELIMINATED' : targetWord || '...';
   const canType = Boolean(model?.canSubmit) && Boolean(targetWord) && !submitting;
 
-  const recomputeTileScale = useCallback(() => {
+  const recomputeScale = useCallback(() => {
     const track = scaleTrackRef.current;
     const row = scaleRowRef.current;
     if (!track || !row) {
       return;
     }
-    const availableWidth = track.clientWidth;
+
+    const availableWidth = Math.max(0, track.clientWidth - 2);
     const contentWidth = row.scrollWidth;
-    if (availableWidth <= 0 || contentWidth <= 0) {
-      setTileScale(1);
+    const contentHeight = row.scrollHeight;
+    if (availableWidth <= 0 || contentWidth <= 0 || contentHeight <= 0) {
+      setRowScale(1);
+      if (contentHeight > 0) {
+        setScaledRowHeight(contentHeight);
+      }
       return;
     }
+
     const nextScale = Math.max(0.01, Math.min(1, availableWidth / contentWidth));
-    setTileScale(current => (Math.abs(current - nextScale) < 0.01 ? current : nextScale));
+    setRowScale(current => (Math.abs(current - nextScale) < 0.002 ? current : nextScale));
+    const nextHeight = Math.max(1, Math.ceil(contentHeight * nextScale));
+    setScaledRowHeight(current => (Math.abs(current - nextHeight) < 1 ? current : nextHeight));
   }, []);
 
   useEffect(() => {
     setTyped('');
     setSubmitting(false);
   }, [targetWord]);
-
-  useLayoutEffect(() => {
-    recomputeTileScale();
-  }, [displayWord, recomputeTileScale]);
-
-  useEffect(() => {
-    const track = scaleTrackRef.current;
-    const row = scaleRowRef.current;
-    if (!track || !row || typeof ResizeObserver === 'undefined') {
-      return;
-    }
-
-    const observer = new ResizeObserver(() => {
-      recomputeTileScale();
-    });
-    observer.observe(track);
-    observer.observe(row);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [recomputeTileScale]);
 
   const handleProgressInput = useCallback(async (value: string): Promise<void> => {
     if (!canType) {
@@ -143,46 +129,93 @@ export function PlayerInputPanel({
     };
   }, [canType, handleProgressInput, typed]);
 
+  useLayoutEffect(() => {
+    recomputeScale();
+  }, [displayWord, recomputeScale]);
+
+  useEffect(() => {
+    const track = scaleTrackRef.current;
+    const row = scaleRowRef.current;
+    if (!track || !row) {
+      return;
+    }
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', recomputeScale);
+      return () => {
+        window.removeEventListener('resize', recomputeScale);
+      };
+    }
+
+    const observer = new ResizeObserver(() => {
+      recomputeScale();
+    });
+    observer.observe(track);
+    observer.observe(row);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [recomputeScale]);
+
+  useEffect(() => {
+    const fonts = (document as Document & { fonts?: { ready?: Promise<unknown> } }).fonts;
+    if (!fonts?.ready) {
+      return;
+    }
+    let cancelled = false;
+    void fonts.ready.then(() => {
+      if (!cancelled) {
+        recomputeScale();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [displayWord, recomputeScale]);
+
   return (
     <Card>
       <CardContent className="space-y-3">
-        <div className="p-4">
+        <div className="py-3">
           {showReadyMessage ? (
             <p className="text-center font-display text-2xl font-extrabold uppercase tracking-wide text-neo-muted sm:text-3xl">
               Get ready to type {readyName}!
             </p>
           ) : (
-            <div ref={scaleTrackRef} className="w-full">
-              <div
-                ref={scaleRowRef}
-                className="mx-auto flex w-max flex-nowrap justify-center gap-2"
-                style={
-                  {
-                    transform: `scale(${tileScale})`,
+            <div ref={scaleTrackRef} className="w-full overflow-x-hidden overflow-y-visible pb-1">
+              <div className="flex w-full justify-center overflow-visible">
+                <div
+                  className="w-max overflow-visible"
+                  style={{
+                    transform: rowScale < 0.999 ? `scale(${rowScale})` : 'none',
                     transformOrigin: 'top center',
-                  } as CSSProperties
-                }
-              >
-                {displayWord.split('').map((char, index) => {
-                  const isFilled = index < typed.length;
-                  const isActive = index === typed.length;
-                  return (
-                    <span
-                      key={`${char}-${index}`}
-                      className={cn(
-                        'inline-flex min-h-14 min-w-11 items-center justify-center rounded-[10px] border-2 border-neo-ink px-2 font-display text-3xl font-extrabold uppercase shadow-neo-sm sm:min-h-16 sm:min-w-12 sm:text-4xl',
-                        isEliminated
-                          ? 'bg-neo-danger text-neo-paper'
-                          : isFilled
-                            ? 'bg-neo-success text-neo-paper'
-                            : 'bg-neo-paper text-neo-ink',
-                        !isEliminated && isActive && canType ? 'bg-neo-yellow' : ''
-                      )}
-                    >
-                      {char}
-                    </span>
-                  );
-                })}
+                    height: `${scaledRowHeight}px`,
+                  }}
+                >
+                  <div ref={scaleRowRef} className="flex w-max flex-nowrap justify-center gap-2 overflow-visible">
+                    {displayWord.split('').map((char, index) => {
+                      const isFilled = index < typed.length;
+                      const isActive = index === typed.length;
+                      return (
+                        <span
+                          key={`${char}-${index}`}
+                          className={cn(
+                            'inline-flex h-14 w-11 shrink-0 items-center justify-center rounded-[10px] border-2 border-neo-ink px-2 font-display text-3xl font-extrabold uppercase leading-none shadow-neo-sm sm:h-16 sm:w-12 sm:text-4xl',
+                            isEliminated
+                              ? 'bg-neo-danger text-neo-paper'
+                              : isFilled
+                                ? 'bg-neo-success text-neo-paper'
+                                : 'bg-neo-paper text-neo-ink',
+                            !isEliminated && isActive && canType ? 'bg-neo-yellow' : ''
+                          )}
+                        >
+                          {char}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
           )}

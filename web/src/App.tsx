@@ -12,7 +12,9 @@ import { RpsTieBreakModal } from '@/components/match/RpsTieBreakModal';
 import { PlayerInputPanel } from '@/components/player/PlayerInputPanel';
 import { EventFeed } from '@/components/shared/EventFeed';
 import { ConfettiBurst } from '@/components/shared/ConfettiBurst';
+import { Badge } from '@/components/shared/ui/badge';
 import { Button } from '@/components/shared/ui/button';
+import { Volume2, VolumeX } from 'lucide-react';
 import {
   Toast,
   ToastDescription,
@@ -20,6 +22,9 @@ import {
   ToastTitle,
   ToastViewport,
 } from '@/components/shared/ui/toast';
+import chillhouseTrack from '@/assets/music/chillhouse.mp3';
+import discoTrack from '@/assets/music/disco.mp3';
+import funkyTrack from '@/assets/music/funky.mp3';
 import { useSpacetimeSession } from '@/data/useSpacetimeSession';
 import { selectUiViewModel } from '@/lib/selectors';
 import type { RpsTieBreakViewModel, ToastMessage } from '@/types/ui';
@@ -34,6 +39,13 @@ const TIE_ZONE_PERCENT_BY_SIZE: Record<TieZoneSize, number> = {
   large: 30,
   xlarge: 40,
 };
+
+const MUSIC_TRACKS = [
+  { id: 'disco', label: 'Disco', src: discoTrack },
+  { id: 'chillhouse', label: 'Chillhouse', src: chillhouseTrack },
+  { id: 'funky', label: 'Funky', src: funkyTrack },
+] as const;
+type MusicTrackId = (typeof MUSIC_TRACKS)[number]['id'];
 
 function toBigIntOrNull(value: unknown): bigint | null {
   if (typeof value === 'bigint') {
@@ -69,6 +81,29 @@ function makeToastId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+const MUSIC_TRACK_STORAGE_KEY = 'sttow_music_track';
+const MUSIC_MUTED_STORAGE_KEY = 'sttow_music_muted';
+
+function loadStoredTrackId(): MusicTrackId {
+  try {
+    const stored = localStorage.getItem(MUSIC_TRACK_STORAGE_KEY);
+    if (stored && MUSIC_TRACKS.some(track => track.id === stored)) {
+      return stored as MusicTrackId;
+    }
+  } catch {
+    // Ignore localStorage failures and fall back to default.
+  }
+  return MUSIC_TRACKS[0].id;
+}
+
+function loadStoredMuted(): boolean {
+  try {
+    return localStorage.getItem(MUSIC_MUTED_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 function resolveTeamTone(
   lobby: NonNullable<ReturnType<typeof selectUiViewModel>['lobby']>
 ): 'teamA' | 'teamB' | 'neutral' {
@@ -101,7 +136,15 @@ export default function App() {
   const [debugModal, setDebugModal] = useState<DebugModal>('none');
   const [debugRpsVote, setDebugRpsVote] = useState<'rock' | 'paper' | 'scissors' | ''>('');
   const [nowMillis, setNowMillis] = useState(() => Date.now());
+  const [selectedMusicTrackId, setSelectedMusicTrackId] = useState<MusicTrackId>(() =>
+    loadStoredTrackId()
+  );
+  const [musicMuted, setMusicMuted] = useState<boolean>(() => loadStoredMuted());
   const confettiTimeoutRef = useRef<number | null>(null);
+  const musicAudioRef = useRef<HTMLAudioElement | null>(null);
+  const musicVolumeRampFrameRef = useRef<number | null>(null);
+  const currentMusicVolumeRef = useRef(0.05);
+  const currentMusicTrackIdRef = useRef<MusicTrackId | ''>('');
 
   const ui = useMemo(
     () =>
@@ -115,6 +158,25 @@ export default function App() {
       }),
     [dismissedLobbyId, identity, pendingJoinCode, selectedLobbyId, snapshot, state]
   );
+
+  const selectedMusicTrack = useMemo(
+    () =>
+      MUSIC_TRACKS.find(track => track.id === selectedMusicTrackId) ?? MUSIC_TRACKS[0],
+    [selectedMusicTrackId]
+  );
+
+  const attemptPlayMusic = useCallback(() => {
+    const audio = musicAudioRef.current;
+    if (!audio) {
+      return;
+    }
+    const playPromise = audio.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      void playPromise.catch(() => {
+        // Autoplay may be blocked until user interaction.
+      });
+    }
+  }, []);
 
   useEffect(() => {
     if (ui.lobby && ui.lobby.lobbyId !== selectedLobbyId) {
@@ -153,6 +215,121 @@ export default function App() {
     }, 250);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    const audio = new Audio();
+    audio.loop = true;
+    audio.preload = 'auto';
+    audio.volume = currentMusicVolumeRef.current;
+    musicAudioRef.current = audio;
+
+    return () => {
+      if (musicVolumeRampFrameRef.current != null) {
+        window.cancelAnimationFrame(musicVolumeRampFrameRef.current);
+        musicVolumeRampFrameRef.current = null;
+      }
+      audio.pause();
+      audio.src = '';
+      musicAudioRef.current = null;
+      currentMusicTrackIdRef.current = '';
+    };
+  }, []);
+
+  useEffect(() => {
+    const audio = musicAudioRef.current;
+    if (!audio) {
+      return;
+    }
+    if (currentMusicTrackIdRef.current !== selectedMusicTrack.id) {
+      audio.src = selectedMusicTrack.src;
+      audio.currentTime = 0;
+      audio.load();
+      currentMusicTrackIdRef.current = selectedMusicTrack.id;
+    }
+    if (!musicMuted) {
+      attemptPlayMusic();
+    }
+  }, [attemptPlayMusic, musicMuted, selectedMusicTrack]);
+
+  useEffect(() => {
+    const audio = musicAudioRef.current;
+    if (!audio) {
+      return;
+    }
+    const targetVolume = ui.phase === 'landing' ? 0.05 : 0.2;
+    if (musicVolumeRampFrameRef.current != null) {
+      window.cancelAnimationFrame(musicVolumeRampFrameRef.current);
+      musicVolumeRampFrameRef.current = null;
+    }
+
+    if (musicMuted) {
+      audio.muted = true;
+      currentMusicVolumeRef.current = audio.volume;
+      return;
+    }
+
+    audio.muted = false;
+    attemptPlayMusic();
+
+    const startVolume = audio.volume;
+    if (Math.abs(startVolume - targetVolume) < 0.001) {
+      audio.volume = targetVolume;
+      currentMusicVolumeRef.current = targetVolume;
+      return;
+    }
+
+    const rampDurationMs = 2000;
+    const rampStart = performance.now();
+    const easeOut = (t: number) => 1 - (1 - t) ** 3;
+    const animateVolume = (now: number) => {
+      const elapsed = now - rampStart;
+      const progress = Math.max(0, Math.min(1, elapsed / rampDurationMs));
+      const nextVolume = startVolume + (targetVolume - startVolume) * easeOut(progress);
+      audio.volume = nextVolume;
+      currentMusicVolumeRef.current = nextVolume;
+      if (progress < 1) {
+        musicVolumeRampFrameRef.current = window.requestAnimationFrame(animateVolume);
+        return;
+      }
+      musicVolumeRampFrameRef.current = null;
+      audio.volume = targetVolume;
+      currentMusicVolumeRef.current = targetVolume;
+    };
+
+    musicVolumeRampFrameRef.current = window.requestAnimationFrame(animateVolume);
+
+    return () => {
+      if (musicVolumeRampFrameRef.current != null) {
+        window.cancelAnimationFrame(musicVolumeRampFrameRef.current);
+        musicVolumeRampFrameRef.current = null;
+      }
+    };
+  }, [attemptPlayMusic, musicMuted, ui.phase]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MUSIC_TRACK_STORAGE_KEY, selectedMusicTrackId);
+      localStorage.setItem(MUSIC_MUTED_STORAGE_KEY, musicMuted ? '1' : '0');
+    } catch {
+      // Ignore localStorage failures.
+    }
+  }, [musicMuted, selectedMusicTrackId]);
+
+  useEffect(() => {
+    if (musicMuted) {
+      return;
+    }
+    const unlockPlayback = () => {
+      attemptPlayMusic();
+    };
+
+    window.addEventListener('pointerdown', unlockPlayback);
+    window.addEventListener('keydown', unlockPlayback);
+    return () => {
+      window.removeEventListener('pointerdown', unlockPlayback);
+      window.removeEventListener('keydown', unlockPlayback);
+    };
+  }, [attemptPlayMusic, musicMuted, selectedMusicTrackId]);
 
   useEffect(() => {
     if (ui.phase === 'landing' && debugModal !== 'none') {
@@ -499,6 +676,38 @@ export default function App() {
         ? 'team-bg-b'
         : '';
 
+  const headerMusicControls = (
+    <div className="flex items-center gap-2">
+      <select
+        value={selectedMusicTrackId}
+        onChange={event =>
+          setSelectedMusicTrackId(event.target.value as MusicTrackId)
+        }
+        className="neo-focus h-9 rounded-[10px] border-4 border-neo-ink bg-neo-paper px-2 font-display text-xs font-bold uppercase tracking-wide text-neo-ink shadow-neo-sm"
+        aria-label="Music track"
+      >
+        {MUSIC_TRACKS.map(track => (
+          <option key={track.id} value={track.id}>
+            {track.label}
+          </option>
+        ))}
+      </select>
+      <Button
+        type="button"
+        size="icon"
+        variant="neutral"
+        className="h-9 w-9"
+        onClick={() => {
+          setMusicMuted(current => !current);
+        }}
+        aria-label={musicMuted ? 'Unmute music' : 'Mute music'}
+        title={musicMuted ? 'Unmute music' : 'Mute music'}
+      >
+        {musicMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+      </Button>
+    </div>
+  );
+
   const primary =
     ui.phase === 'landing' ? (
       <LandingPanel
@@ -520,6 +729,7 @@ export default function App() {
             hud={ui.matchHud ?? ui.preMatchHud!}
             teamAPlayers={ui.lobby?.teamA ?? []}
             teamBPlayers={ui.lobby?.teamB ?? []}
+            lobbyCode={ui.lobby?.joinCode ?? ''}
           />
         ) : null}
         {ui.playerInput ? (
@@ -547,6 +757,7 @@ export default function App() {
       events={ui.events}
       headerAction={
         <div className="flex flex-wrap items-center justify-end gap-1">
+          <Badge variant="neutral">Role {ui.role}</Badge>
           <Button
             type="button"
             size="sm"
@@ -619,10 +830,8 @@ export default function App() {
         header={
           <HeaderBar
             connectionState={state}
-            role={ui.role}
-            phase={ui.phase}
-            lobbyCode={ui.lobby?.joinCode ?? ''}
             lobbyStatus={ui.lobby?.status ?? ''}
+            musicControls={headerMusicControls}
             controls={
               ui.role === 'host' ? (
                 <HostControlsPanel

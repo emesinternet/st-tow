@@ -1,14 +1,47 @@
-import { motion } from 'framer-motion';
-import { useEffect, useRef, useState } from 'react';
-import dragonGif from '@/assets/dragon.gif';
-import { Card, CardContent } from '@/components/shared/ui/card';
-import { formatSeconds } from '@/lib/format';
-import type { MatchHudViewModel, TeamPlayerViewModel } from '@/types/ui';
+import { motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import dragonGif from "@/assets/dragon.gif";
+import { Badge } from "@/components/shared/ui/badge";
+import { Card, CardContent } from "@/components/shared/ui/card";
+import { formatSeconds } from "@/lib/format";
+import type { MatchHudViewModel, TeamPlayerViewModel } from "@/types/ui";
 
 interface MatchHudProps {
   hud: MatchHudViewModel;
   teamAPlayers: TeamPlayerViewModel[];
   teamBPlayers: TeamPlayerViewModel[];
+  lobbyCode?: string;
+}
+
+const CHEER_PHRASES = [
+  "Get it!",
+  "Go go!",
+  "Nice!",
+  "Oh yeah!",
+  "Let's go!",
+  "Keep going!",
+  "So good!",
+  "Big energy!",
+  "Slay!",
+  "Stay hype!",
+  "Feel it!",
+  "Fire!",
+  "Pop off!",
+  "Good vibes!",
+  "Keep grooving!",
+  "Dance baby!",
+  "Night on fire!",
+];
+
+function randomCheerPhrase(): string {
+  return (
+    CHEER_PHRASES[Math.floor(Math.random() * CHEER_PHRASES.length)] ??
+    CHEER_PHRASES[0]
+  );
+}
+
+function randomIntInclusive(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 function TeamMarkers({
@@ -16,88 +49,198 @@ function TeamMarkers({
   tone,
 }: {
   players: TeamPlayerViewModel[];
-  tone: 'teamA' | 'teamB';
+  tone: "teamA" | "teamB";
 }) {
-  const connected = players.filter(player => player.status !== 'Left');
-  const ballClassName = tone === 'teamA' ? 'bg-neo-teamA' : 'bg-neo-teamB';
+  const connected = players.filter((player) => player.status !== "Left");
+  const ballClassName = tone === "teamA" ? "bg-neo-teamA" : "bg-neo-teamB";
   const prevCountsRef = useRef(new Map<string, number>());
   const [bounceTokens, setBounceTokens] = useState<Record<string, number>>({});
+  const [cheerByPlayer, setCheerByPlayer] = useState<
+    Record<
+      string,
+      { token: number; phrase: string; jumpHeight: number; bubbleLift: number }
+    >
+  >({});
+  const cheerTimeoutsRef = useRef(new Map<string, number>());
 
   useEffect(() => {
-    setBounceTokens(current => {
-      let changed = false;
-      let next = current;
-      const seen = new Set<string>();
+    const triggeredPlayerIds: string[] = [];
+    const disconnectedPlayerIds: string[] = [];
+    const seen = new Set<string>();
 
-      for (const player of connected) {
-        seen.add(player.playerId);
-        const previous = prevCountsRef.current.get(player.playerId);
-        if (previous != null && player.correctCount > previous) {
-          if (!changed) {
-            next = { ...current };
-            changed = true;
-          }
-          next[player.playerId] = (next[player.playerId] ?? 0) + 1;
-        }
-        prevCountsRef.current.set(player.playerId, player.correctCount);
+    for (const player of connected) {
+      seen.add(player.playerId);
+      const previous = prevCountsRef.current.get(player.playerId);
+      if (previous != null && player.correctCount > previous) {
+        triggeredPlayerIds.push(player.playerId);
+      }
+      prevCountsRef.current.set(player.playerId, player.correctCount);
+    }
+
+    for (const playerId of Array.from(prevCountsRef.current.keys())) {
+      if (!seen.has(playerId)) {
+        prevCountsRef.current.delete(playerId);
+        disconnectedPlayerIds.push(playerId);
+      }
+    }
+
+    setBounceTokens((current) => {
+      let changed = false;
+      const next = { ...current };
+
+      for (const playerId of triggeredPlayerIds) {
+        next[playerId] = (next[playerId] ?? 0) + 1;
+        changed = true;
       }
 
-      for (const playerId of Array.from(prevCountsRef.current.keys())) {
-        if (!seen.has(playerId)) {
-          prevCountsRef.current.delete(playerId);
-          if (!changed && current[playerId] != null) {
-            next = { ...current };
-            changed = true;
-          }
-          if (changed) {
-            delete next[playerId];
-          }
+      for (const playerId of disconnectedPlayerIds) {
+        if (next[playerId] != null) {
+          delete next[playerId];
+          changed = true;
         }
+      }
+
+      return changed ? next : current;
+    });
+
+    setCheerByPlayer((current) => {
+      let changed = false;
+      const next = { ...current };
+
+      for (const playerId of disconnectedPlayerIds) {
+        if (next[playerId]) {
+          delete next[playerId];
+          changed = true;
+        }
+        const timeoutId = cheerTimeoutsRef.current.get(playerId);
+        if (timeoutId != null) {
+          window.clearTimeout(timeoutId);
+          cheerTimeoutsRef.current.delete(playerId);
+        }
+      }
+
+      for (const playerId of triggeredPlayerIds) {
+        const token = (next[playerId]?.token ?? 0) + 1;
+        next[playerId] = {
+          token,
+          phrase: randomCheerPhrase(),
+          jumpHeight: randomIntInclusive(8, 14),
+          bubbleLift: randomIntInclusive(7, 12),
+        };
+        changed = true;
+
+        const existingTimeout = cheerTimeoutsRef.current.get(playerId);
+        if (existingTimeout != null) {
+          window.clearTimeout(existingTimeout);
+        }
+
+        const timeoutId = window.setTimeout(() => {
+          setCheerByPlayer((currentCheer) => {
+            const active = currentCheer[playerId];
+            if (!active || active.token !== token) {
+              return currentCheer;
+            }
+            const after = { ...currentCheer };
+            delete after[playerId];
+            return after;
+          });
+          cheerTimeoutsRef.current.delete(playerId);
+        }, 1100);
+        cheerTimeoutsRef.current.set(playerId, timeoutId);
       }
 
       return changed ? next : current;
     });
   }, [connected]);
 
+  useEffect(() => {
+    return () => {
+      for (const timeoutId of cheerTimeoutsRef.current.values()) {
+        window.clearTimeout(timeoutId);
+      }
+      cheerTimeoutsRef.current.clear();
+    };
+  }, []);
+
   return (
-    <div className="flex h-full items-end overflow-auto px-1">
+    <div className="flex h-full items-end overflow-x-auto overflow-y-visible px-1">
       <div className="grid min-h-full w-full grid-cols-[repeat(auto-fill,minmax(48px,1fr))] content-end items-end gap-x-1 gap-y-1">
-        {connected.map(player => (
-          (bounceTokens[player.playerId] ?? 0) > 0 ? (
-            <motion.div
-              key={`${player.playerId}:${bounceTokens[player.playerId]}`}
-              className="flex h-7 flex-col items-center justify-end text-center"
-              initial={{ y: 0 }}
-              animate={{ y: [0, -10, 0] }}
-              transition={{ duration: 0.28, ease: 'easeOut' }}
+        {connected.map((player) => {
+          const cheer = cheerByPlayer[player.playerId];
+          const bubble = cheer ? (
+            <motion.span
+              key={`${player.playerId}:cheer:${cheer.token}`}
+              className="pointer-events-none absolute -top-3 z-10 max-w-[80px] truncate rounded-[8px] border border-neo-ink bg-neo-paper px-1 py-0.5 text-[9px] font-black uppercase leading-none text-neo-ink"
+              initial={{ opacity: 0, y: 6, scale: 0.9 }}
+              animate={{
+                opacity: [0, 1, 1, 0],
+                y: [
+                  6,
+                  -Math.round(cheer.bubbleLift * 0.35),
+                  -Math.round(cheer.bubbleLift * 0.65),
+                  -cheer.bubbleLift,
+                ],
+                scale: [0.9, 1, 1, 0.98],
+              }}
+              transition={{ duration: 1.05, ease: "easeOut" }}
             >
-              <span className="max-w-[52px] truncate text-[8px] font-bold uppercase leading-tight text-neo-ink/85">
+              {cheer.phrase}
+            </motion.span>
+          ) : null;
+
+          if ((bounceTokens[player.playerId] ?? 0) > 0) {
+            return (
+              <motion.div
+                key={`${player.playerId}:${bounceTokens[player.playerId]}`}
+                className="relative flex h-7 flex-col items-center justify-end text-center"
+                initial={{ y: 0 }}
+                animate={{ y: [0, -(cheer?.jumpHeight ?? 10), 0] }}
+                transition={{ duration: 0.28, ease: "easeOut" }}
+              >
+                {bubble}
+                <span className="max-w-[56px] truncate text-[9px] font-bold uppercase leading-tight text-neo-ink/85">
+                  {player.displayName}
+                </span>
+                <span
+                  className={`mt-0.5 h-2.5 w-2.5 rounded-full border border-neo-ink ${ballClassName}`}
+                />
+              </motion.div>
+            );
+          }
+
+          return (
+            <div
+              key={player.playerId}
+              className="relative flex h-7 flex-col items-center justify-end text-center"
+            >
+              {bubble}
+              <span className="max-w-[56px] truncate text-[9px] font-bold uppercase leading-tight text-neo-ink/85">
                 {player.displayName}
               </span>
-              <span className={`mt-0.5 h-2.5 w-2.5 rounded-full border border-neo-ink ${ballClassName}`} />
-            </motion.div>
-          ) : (
-            <div key={player.playerId} className="flex h-7 flex-col items-center justify-end text-center">
-              <span className="max-w-[52px] truncate text-[8px] font-bold uppercase leading-tight text-neo-ink/85">
-                {player.displayName}
-              </span>
-              <span className={`mt-0.5 h-2.5 w-2.5 rounded-full border border-neo-ink ${ballClassName}`} />
+              <span
+                className={`mt-0.5 h-2.5 w-2.5 rounded-full border border-neo-ink ${ballClassName}`}
+              />
             </div>
-          )
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
-export function MatchHud({ hud, teamAPlayers, teamBPlayers }: MatchHudProps) {
-  const isLobbyPreview = hud.matchId.endsWith(':pre');
-  const isRpsTieBreak = hud.phase === 'TieBreakRps';
+export function MatchHud({
+  hud,
+  teamAPlayers,
+  teamBPlayers,
+  lobbyCode,
+}: MatchHudProps) {
+  const isLobbyPreview = hud.matchId.endsWith(":pre");
+  const isRpsTieBreak = hud.phase === "TieBreakRps";
   const timerText =
-    hud.phase === 'PreGame' && !isLobbyPreview
-      ? 'READY'
+    hud.phase === "PreGame" && !isLobbyPreview
+      ? "READY"
       : isRpsTieBreak
-        ? 'RPS'
+        ? "RPS"
         : formatSeconds(hud.secondsRemaining);
   const hostPowerPercent = Math.max(0, Math.min(100, hud.hostPowerMeter));
   const clampPercent = (value: number): number =>
@@ -108,24 +251,37 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers }: MatchHudProps) {
     tieZoneEndPercentRaw > tieZoneStartPercent
       ? tieZoneEndPercentRaw
       : Math.min(100, tieZoneStartPercent + 10);
-  const tieZoneWidthPercent = Math.max(0, tieZoneEndPercent - tieZoneStartPercent);
+  const tieZoneWidthPercent = Math.max(
+    0,
+    tieZoneEndPercent - tieZoneStartPercent,
+  );
 
   const activePowerLabel: Record<string, string> = {
-    tech_mode_burst: 'Tech Mode',
-    symbols_mode_burst: 'Symbols Mode',
-    difficulty_up_burst: 'Difficulty Up',
+    tech_mode_burst: "Tech Mode",
+    symbols_mode_burst: "Symbols Mode",
+    difficulty_up_burst: "Difficulty Up",
   };
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-visible">
       <CardContent className="space-y-4 p-4">
         <div className="flex flex-wrap items-end justify-around gap-3 text-center font-display font-black tracking-wide">
           <p className="text-4xl tabular-nums text-neo-teamA sm:text-5xl">
             {hud.teamAPulls}
           </p>
-          <p className="text-4xl tabular-nums text-neo-ink sm:text-5xl">
-            {timerText}
-          </p>
+          <div className="relative flex min-w-[180px] justify-center pt-3">
+            {lobbyCode ? (
+              <Badge
+                variant="accent"
+                className="pointer-events-none absolute left-1/2 top-0 z-40 -translate-x-1/2 -translate-y-[115%] rounded-[12px] border-4 px-5 py-1 text-2xl font-black tracking-[0.18em] sm:text-3xl"
+              >
+                {lobbyCode}
+              </Badge>
+            ) : null}
+            <p className="text-4xl tabular-nums text-neo-ink sm:text-5xl">
+              {timerText}
+            </p>
+          </div>
           <p className="text-4xl tabular-nums text-neo-teamB sm:text-5xl">
             {hud.teamBPulls}
           </p>
@@ -135,9 +291,11 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers }: MatchHudProps) {
             <p className="font-display text-xs font-black uppercase tracking-wide text-neo-ink">
               Host Power
             </p>
-            <p className="font-mono text-xs font-bold text-neo-ink">{hostPowerPercent}%</p>
+            <p className="font-mono text-xs font-bold text-neo-ink">
+              {hostPowerPercent}%
+            </p>
           </div>
-          <div className="h-6 overflow-hidden rounded-[12px] border-4 border-neo-ink bg-neo-paper">
+          <div className="h-7 overflow-hidden rounded-[12px] border-4 border-neo-ink bg-neo-paper">
             <div
               className="h-full bg-neo-yellow transition-[width]"
               style={{ width: `${hostPowerPercent}%` }}
@@ -152,7 +310,7 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers }: MatchHudProps) {
                 {activePowerLabel[hud.activePowerId] ?? hud.activePowerId}
                 {hud.activePowerSecondsRemaining != null
                   ? ` ${hud.activePowerSecondsRemaining}s`
-                  : ''}
+                  : ""}
               </p>
             ) : (
               <p className="font-display text-[11px] font-bold uppercase tracking-wide text-neo-muted">
@@ -161,36 +319,42 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers }: MatchHudProps) {
             )}
           </div>
         </div>
-        <div className="bg-tug-war-gradient relative h-24 overflow-hidden rounded-[16px] border-4 border-neo-ink sm:h-28">
+        <div className="bg-tug-war-gradient relative h-40 overflow-hidden rounded-[16px] border-4 border-neo-ink sm:h-48">
+          <div className="absolute inset-0 z-0 grid grid-cols-2">
+            <div className="bg-neo-teamA/10" />
+            <div className="bg-neo-teamB/10" />
+          </div>
           <div
-            className="tie-zone-disco absolute inset-y-0 z-20 border-x-4 border-neo-ink/85"
+            className="tie-zone-floor absolute inset-y-0 z-10"
             style={{
               left: `${tieZoneStartPercent}%`,
               width: `${tieZoneWidthPercent}%`,
             }}
-          />
+          >
+            <div className="tie-zone-floor__shimmer" />
+          </div>
           <div
-            className="pointer-events-none absolute inset-y-0 z-30 w-[3px] bg-neo-ink/75"
+            className="pointer-events-none absolute inset-y-0 z-20 w-[3px] bg-neo-ink"
             style={{ left: `calc(${tieZoneStartPercent}% - 1.5px)` }}
           />
           <div
-            className="pointer-events-none absolute inset-y-0 z-30 w-[3px] bg-neo-ink/75"
+            className="pointer-events-none absolute inset-y-0 z-20 w-[3px] bg-neo-ink"
             style={{ left: `calc(${tieZoneEndPercent}% - 1.5px)` }}
           />
-          <div className="absolute inset-1.5 grid grid-cols-2 gap-1 overflow-hidden rounded-[12px] sm:inset-2">
-            <div className="pr-1.5 pl-2 pt-9 pb-0 sm:pr-2 sm:pl-3 sm:pt-10">
+          <div className="absolute inset-1.5 z-20 grid grid-cols-2 gap-1 overflow-visible rounded-[12px] sm:inset-2">
+            <div className="pr-1.5 pl-2 pt-16 pb-0 sm:pr-2 sm:pl-3 sm:pt-20">
               <TeamMarkers players={teamAPlayers} tone="teamA" />
             </div>
-            <div className="pl-1.5 pr-2 pt-9 pb-0 sm:pl-2 sm:pr-3 sm:pt-10">
+            <div className="pl-1.5 pr-2 pt-16 pb-0 sm:pl-2 sm:pr-3 sm:pt-20">
               <TeamMarkers players={teamBPlayers} tone="teamB" />
             </div>
           </div>
           <motion.img
             src={dragonGif}
             alt="Dragon rope marker"
-            className="pointer-events-none absolute top-1/2 z-30 block h-[86%] w-auto max-w-none -translate-x-1/2 -translate-y-1/2 object-contain"
+            className="pointer-events-none absolute top-1/2 z-30 block h-[86%] max-h-[96px] w-auto max-w-none -translate-x-1/2 -translate-y-1/2 object-contain"
             animate={{ left: `${hud.normalizedRopePosition}%` }}
-            transition={{ type: 'spring', stiffness: 150, damping: 24 }}
+            transition={{ type: "spring", stiffness: 150, damping: 24 }}
           />
         </div>
       </CardContent>
