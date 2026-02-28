@@ -53,6 +53,7 @@ export function PostGameStatsModal({
 
   const teamASuccessful = lobby.teamA.reduce((total, player) => total + player.correctCount, 0);
   const teamBSuccessful = lobby.teamB.reduce((total, player) => total + player.correctCount, 0);
+  const hostSuccessful = Math.max(0, hud?.hostSuccessfulWords ?? 0);
   const rows = playerRows(lobby);
   const winnerLabel =
     hud?.winnerTeam === 'A' ? 'Red Team' : hud?.winnerTeam === 'B' ? 'Blue Team' : 'No winner';
@@ -64,7 +65,7 @@ export function PostGameStatsModal({
           <p className="text-center font-display text-3xl font-black uppercase tracking-wide text-neo-ink sm:text-5xl">
             Winner: {winnerLabel}
           </p>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-3">
             <div className="rounded-[12px] border-2 border-neo-ink bg-neo-paper px-3 py-2 shadow-neo-sm">
               <p className="font-display text-xs font-bold uppercase tracking-wide text-neo-teamA">
                 Red Team Successful Words
@@ -76,6 +77,12 @@ export function PostGameStatsModal({
                 Blue Team Successful Words
               </p>
               <p className="font-display text-2xl font-black">{teamBSuccessful}</p>
+            </div>
+            <div className="rounded-[12px] border-2 border-neo-ink bg-neo-paper px-3 py-2 shadow-neo-sm">
+              <p className="font-display text-xs font-bold uppercase tracking-wide text-neo-ink">
+                Host Successful Words
+              </p>
+              <p className="font-display text-2xl font-black">{hostSuccessful}</p>
             </div>
           </div>
 

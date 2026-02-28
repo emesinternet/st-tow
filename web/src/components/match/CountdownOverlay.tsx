@@ -23,8 +23,8 @@ export function CountdownOverlay({ visible, secondsRemaining }: CountdownOverlay
           <motion.span
             className="font-display text-[70vw] font-black leading-none text-white sm:text-[560px]"
             style={{
-              WebkitTextStroke: '12px #1b2745',
-              textShadow: '22px 22px 0 #1b2745',
+              WebkitTextStroke: '12px hsl(var(--fg))',
+              textShadow: '22px 22px 0 hsl(var(--fg))',
             }}
             initial={{ scale: 0.72 }}
             animate={{ scale: [0.72, 1.14] }}

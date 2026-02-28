@@ -58,6 +58,11 @@ export interface NormalizedTugState {
   currentWord: string;
   wordVersion: number;
   mode: string;
+  wordMode: string;
+  rampTier: number;
+  difficultyBonusTier: number;
+  activePowerId: string;
+  powerExpiresAtMicros: bigint;
   wordRotateMs: number;
   eliminationWordTimeMs: number;
   nextWordAtMicros: bigint;
@@ -69,6 +74,7 @@ export interface NormalizedTugPlayerState {
   matchId: string;
   playerId: string;
   currentWord: string;
+  lastWordType: string;
   correctCount: number;
   submitCount: number;
   lastSubmitAtMicros: bigint;
@@ -79,7 +85,10 @@ export interface NormalizedTugHostState {
   matchId: string;
   hostIdentity: string;
   score: number;
+  correctCount: number;
+  powerMeter: number;
   currentWord: string;
+  lastWordType: string;
   wordVersion: number;
   lastSubmitAtMicros: bigint;
 }
@@ -266,6 +275,11 @@ function normalizeTugState(row: GenericRow): NormalizedTugState {
     currentWord: field<string>(row, 'currentWord', 'current_word') ?? '',
     wordVersion: toNumber(field(row, 'wordVersion', 'word_version')),
     mode: field<string>(row, 'mode', 'mode') ?? '',
+    wordMode: field<string>(row, 'wordMode', 'word_mode') ?? '',
+    rampTier: toNumber(field(row, 'rampTier', 'ramp_tier')),
+    difficultyBonusTier: toNumber(field(row, 'difficultyBonusTier', 'difficulty_bonus_tier')),
+    activePowerId: field<string>(row, 'activePowerId', 'active_power_id') ?? '',
+    powerExpiresAtMicros: toBigInt(field(row, 'powerExpiresAtMicros', 'power_expires_at_micros')),
     wordRotateMs: toNumber(field(row, 'wordRotateMs', 'word_rotate_ms')),
     eliminationWordTimeMs: toNumber(field(row, 'eliminationWordTimeMs', 'elimination_word_time_ms')),
     nextWordAtMicros: toBigInt(field(row, 'nextWordAtMicros', 'next_word_at_micros')),
@@ -279,6 +293,7 @@ function normalizeTugPlayerState(row: GenericRow): NormalizedTugPlayerState {
     matchId: field<string>(row, 'matchId', 'match_id') ?? '',
     playerId: field<string>(row, 'playerId', 'player_id') ?? '',
     currentWord: field<string>(row, 'currentWord', 'current_word') ?? '',
+    lastWordType: field<string>(row, 'lastWordType', 'last_word_type') ?? '',
     correctCount: toNumber(field(row, 'correctCount', 'correct_count')),
     submitCount: toNumber(field(row, 'submitCount', 'submit_count')),
     lastSubmitAtMicros: toBigInt(field(row, 'lastSubmitAtMicros', 'last_submit_at_micros')),
@@ -291,7 +306,10 @@ function normalizeTugHostState(row: GenericRow): NormalizedTugHostState {
     matchId: field<string>(row, 'matchId', 'match_id') ?? '',
     hostIdentity: toIdentityHex(field(row, 'hostIdentity', 'host_identity')),
     score: toNumber(field(row, 'score', 'score')),
+    correctCount: toNumber(field(row, 'correctCount', 'correct_count')),
+    powerMeter: toNumber(field(row, 'powerMeter', 'power_meter')),
     currentWord: field<string>(row, 'currentWord', 'current_word') ?? '',
+    lastWordType: field<string>(row, 'lastWordType', 'last_word_type') ?? '',
     wordVersion: toNumber(field(row, 'wordVersion', 'word_version')),
     lastSubmitAtMicros: toBigInt(field(row, 'lastSubmitAtMicros', 'last_submit_at_micros')),
   };

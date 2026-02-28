@@ -3,6 +3,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { ConnectionBanner } from '@/components/layout/ConnectionBanner';
 import { HeaderBar } from '@/components/layout/HeaderBar';
 import { HostControlsPanel } from '@/components/host/HostControlsPanel';
+import { HostPowerPanel } from '@/components/host/HostPowerPanel';
 import { LandingPanel } from '@/components/lobby/LandingPanel';
 import { CountdownOverlay } from '@/components/match/CountdownOverlay';
 import { MatchHud } from '@/components/match/MatchHud';
@@ -219,6 +220,18 @@ export default function App() {
     );
   }, [actions, ui.lobby, withActionErrorToast]);
 
+  const handleActivatePower = useCallback(
+    async (powerId: string) => {
+      if (!ui.matchHud) {
+        return;
+      }
+      await withActionErrorToast('Could not activate power', () =>
+        actions.activatePower(ui.matchHud!.matchId, powerId)
+      );
+    },
+    [actions, ui.matchHud, withActionErrorToast]
+  );
+
   const handleSubmitWord = useCallback(
     async (typed: string) => {
       if (!ui.matchHud) {
@@ -277,6 +290,15 @@ export default function App() {
             onSubmitWord={handleSubmitWord}
             onRecordMistake={handleRecordMistake}
             preMatch={!ui.matchHud || ui.matchHud.phase === 'PreGame'}
+          />
+        ) : null}
+        {ui.role === 'host' &&
+        ui.hostPanel &&
+        ui.matchHud &&
+        (ui.matchHud.phase === 'InGame' || ui.matchHud.phase === 'SuddenDeath') ? (
+          <HostPowerPanel
+            powers={ui.hostPanel.powers}
+            onActivatePower={handleActivatePower}
           />
         ) : null}
       </>

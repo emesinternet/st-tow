@@ -4,6 +4,7 @@ import { TEAM_A, TEAM_B } from '../../core/constants';
 import {
   applyHostSubmission,
   applyPlayerCorrectSubmission,
+  deriveDifficultyTier,
   deriveSecondsRemaining,
   isPhaseExpired,
 } from './runtime';
@@ -18,6 +19,19 @@ test('countdown timing helpers model 3s pregame expiration', () => {
 
   assert.equal(isPhaseExpired(phaseEndsAt, 2_999_999n), false);
   assert.equal(isPhaseExpired(phaseEndsAt, 3_000_000n), true);
+});
+
+test('deriveDifficultyTier maps elapsed progress to five tiers', () => {
+  const startedAt = 1_000_000n;
+  const roundSeconds = 100;
+
+  assert.equal(deriveDifficultyTier(startedAt, startedAt, roundSeconds), 1);
+  assert.equal(deriveDifficultyTier(startedAt + 19_000_000n, startedAt, roundSeconds), 1);
+  assert.equal(deriveDifficultyTier(startedAt + 20_000_000n, startedAt, roundSeconds), 2);
+  assert.equal(deriveDifficultyTier(startedAt + 45_000_000n, startedAt, roundSeconds), 3);
+  assert.equal(deriveDifficultyTier(startedAt + 79_000_000n, startedAt, roundSeconds), 4);
+  assert.equal(deriveDifficultyTier(startedAt + 80_000_000n, startedAt, roundSeconds), 5);
+  assert.equal(deriveDifficultyTier(startedAt + 150_000_000n, startedAt, roundSeconds), 5);
 });
 
 test('host correct submit increments host score only and keeps host non-eliminable', () => {
@@ -81,4 +95,3 @@ test('player correct submit increments team force and cumulative pulls', () => {
   assert.equal(teamB.teamBForce, 4);
   assert.equal(teamB.teamBPulls, 3);
 });
-

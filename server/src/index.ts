@@ -10,6 +10,9 @@ import {
 import {
   DEFAULT_LOBBY_SETTINGS,
   GAME_TYPE_TUG_OF_WAR,
+  HOST_POWER_DIFFICULTY_UP_BURST,
+  HOST_POWER_SYMBOLS_MODE_BURST,
+  HOST_POWER_TECH_MODE_BURST,
   LOBBY_SETTING_KEYS,
   LOBBY_STATUS_FINISHED,
   LOBBY_STATUS_RUNNING,
@@ -26,6 +29,9 @@ import {
   TEAM_B,
   TUG_MODE_ELIMINATION,
   TUG_MODE_NORMAL,
+  WORD_MODE_NORMAL,
+  WORD_MODE_SYMBOLS,
+  WORD_MODE_TECH,
 } from './core/constants';
 import {
   lobbyIdentityKey,
@@ -39,7 +45,7 @@ import {
   settingId,
   tugPlayerStateId,
 } from './core/helpers';
-import { pickRandomWord, pickRandomWordExcluding } from './games/tug_of_war/words';
+import { pickWordForContext } from './games/tug_of_war/words';
 import {
   buildExcludedWordsForPlayer,
   isCorrectWordSubmission,
@@ -49,9 +55,16 @@ import {
 import {
   applyHostSubmission,
   applyPlayerCorrectSubmission,
+  deriveDifficultyTier,
   deriveSecondsRemaining,
   isPhaseExpired,
 } from './games/tug_of_war/runtime';
+import type {
+  WordDifficultyTier,
+  WordEntry,
+  WordMode,
+  WordType,
+} from './games/tug_of_war/word_catalog';
 
 const lobbyRow = {
   lobby_id: t.string().primaryKey(),
@@ -129,6 +142,11 @@ const tugStateRow = {
   current_word: t.string(),
   word_version: t.i32(),
   mode: t.string().index(),
+  word_mode: t.string().index(),
+  ramp_tier: t.i32(),
+  difficulty_bonus_tier: t.i32(),
+  active_power_id: t.string(),
+  power_expires_at_micros: t.i64(),
   word_rotate_ms: t.i32(),
   elimination_word_time_ms: t.i32(),
   next_word_at_micros: t.i64(),
@@ -140,6 +158,7 @@ const tugPlayerStateRow = {
   match_id: t.string().index(),
   player_id: t.string().index(),
   current_word: t.string(),
+  last_word_type: t.string(),
   correct_count: t.i32(),
   submit_count: t.i32(),
   last_submit_at_micros: t.i64(),
@@ -150,7 +169,10 @@ const tugHostStateRow = {
   match_id: t.string().primaryKey(),
   host_identity: t.identity().index(),
   score: t.i32(),
+  correct_count: t.i32(),
+  power_meter: t.i32(),
   current_word: t.string(),
+  last_word_type: t.string(),
   word_version: t.i32(),
   last_submit_at_micros: t.i64(),
 };
@@ -249,6 +271,62 @@ type TugHostStateRow = InferTypeOfRow<typeof tugHostStateRow>;
 type MatchScheduleRow = Infer<typeof matchScheduleRow>;
 
 const PRE_GAME_COUNTDOWN_SECONDS = 3;
+const HOST_POWER_METER_MAX = 100;
+
+type HostPowerId =
+  | typeof HOST_POWER_TECH_MODE_BURST
+  | typeof HOST_POWER_SYMBOLS_MODE_BURST
+  | typeof HOST_POWER_DIFFICULTY_UP_BURST;
+
+interface HostPowerConfig {
+  id: HostPowerId;
+  cost: number;
+  durationMs: number;
+  wordMode: WordMode | null;
+  difficultyBonusTier: number;
+}
+
+const HOST_POWER_CONFIG: Record<HostPowerId, HostPowerConfig> = {
+  [HOST_POWER_TECH_MODE_BURST]: {
+    id: HOST_POWER_TECH_MODE_BURST,
+    cost: 1,
+    durationMs: 20_000,
+    wordMode: WORD_MODE_TECH,
+    difficultyBonusTier: 0,
+  },
+  [HOST_POWER_SYMBOLS_MODE_BURST]: {
+    id: HOST_POWER_SYMBOLS_MODE_BURST,
+    cost: 1,
+    durationMs: 20_000,
+    wordMode: WORD_MODE_SYMBOLS,
+    difficultyBonusTier: 0,
+  },
+  [HOST_POWER_DIFFICULTY_UP_BURST]: {
+    id: HOST_POWER_DIFFICULTY_UP_BURST,
+    cost: 1,
+    durationMs: 20_000,
+    wordMode: null,
+    difficultyBonusTier: 1,
+  },
+};
+
+function isWordMode(value: string): value is WordMode {
+  return (
+    value === WORD_MODE_NORMAL ||
+    value === WORD_MODE_TECH ||
+    value === WORD_MODE_SYMBOLS
+  );
+}
+
+function clampTier(value: number): WordDifficultyTier {
+  if (value <= 1) {
+    return 1;
+  }
+  if (value >= 5) {
+    return 5;
+  }
+  return value as WordDifficultyTier;
+}
 
 function replaceRow(table: any, current: any, next: any): void {
   table.delete(current);
@@ -384,13 +462,51 @@ function listTugPlayerStatesByMatch(
   return rows;
 }
 
+function resolveWordMode(value: string): WordMode {
+  if (isWordMode(value)) {
+    return value;
+  }
+  return WORD_MODE_NORMAL;
+}
+
+function deriveBaseDifficultyTier(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  match: MatchRow
+): WordDifficultyTier {
+  if (match.phase === MATCH_PHASE_SUDDEN_DEATH) {
+    return 5;
+  }
+  const roundSeconds = getLobbySettingInt(
+    ctx,
+    lobby.lobby_id,
+    LOBBY_SETTING_KEYS.round_seconds,
+    DEFAULT_LOBBY_SETTINGS.round_seconds
+  );
+  return deriveDifficultyTier(
+    nowMicros(ctx),
+    match.started_at.microsSinceUnixEpoch,
+    roundSeconds
+  );
+}
+
+function deriveEffectiveDifficultyTier(
+  baseTier: WordDifficultyTier,
+  difficultyBonusTier: number
+): WordDifficultyTier {
+  return clampTier(baseTier + Math.max(0, difficultyBonusTier));
+}
+
 function pickWordForPlayer(
   ctx: ReducerCtx<any>,
-  matchId: string,
+  lobby: LobbyRow,
+  match: MatchRow,
+  tug: TugStateRow,
   playerId: string,
+  lastWordType: string,
   includeSelfCurrentWord = false
-): string {
-  const playerStates = listTugPlayerStatesByMatch(ctx, matchId).map(row => ({
+): WordEntry {
+  const playerStates = listTugPlayerStatesByMatch(ctx, match.match_id).map(row => ({
     playerId: row.player_id,
     currentWord: row.current_word,
   }));
@@ -399,30 +515,53 @@ function pickWordForPlayer(
     playerId,
     { includeSelfCurrentWord }
   );
-  return pickRandomWordExcluding(ctx, excluded);
+  const baseTier = deriveBaseDifficultyTier(ctx, lobby, match);
+  const maxDifficultyTier = deriveEffectiveDifficultyTier(
+    baseTier,
+    tug.difficulty_bonus_tier
+  );
+  return pickWordForContext(ctx, {
+    mode: resolveWordMode(tug.word_mode),
+    maxDifficultyTier,
+    excluded,
+    lastWordType: (lastWordType || null) as WordType | null,
+  });
 }
 
 function pickWordForHost(
   ctx: ReducerCtx<any>,
-  matchId: string,
+  lobby: LobbyRow,
+  match: MatchRow,
+  tug: TugStateRow,
+  lastWordType: string,
   includeCurrentWord = false
-): string {
+): WordEntry {
   const excluded = new Set<string>();
 
-  for (const row of listTugPlayerStatesByMatch(ctx, matchId)) {
+  for (const row of listTugPlayerStatesByMatch(ctx, match.match_id)) {
     if (row.current_word) {
       excluded.add(row.current_word);
     }
   }
 
   if (includeCurrentWord) {
-    const hostState = getTugHostStateByMatchId(ctx, matchId);
+    const hostState = getTugHostStateByMatchId(ctx, match.match_id);
     if (hostState?.current_word) {
       excluded.add(hostState.current_word);
     }
   }
 
-  return pickRandomWordExcluding(ctx, excluded);
+  const baseTier = deriveBaseDifficultyTier(ctx, lobby, match);
+  const maxDifficultyTier = deriveEffectiveDifficultyTier(
+    baseTier,
+    tug.difficulty_bonus_tier
+  );
+  return pickWordForContext(ctx, {
+    mode: resolveWordMode(tug.word_mode),
+    maxDifficultyTier,
+    excluded,
+    lastWordType: (lastWordType || null) as WordType | null,
+  });
 }
 
 function ensureTugPlayerStateForActiveMatch(
@@ -450,26 +589,49 @@ function ensureTugPlayerStateForActiveMatch(
   const id = tugPlayerStateId(match.match_id, player.player_id);
   const existing = getTugPlayerStateById(ctx, id);
   const tug = getTugStateByMatchId(ctx, match.match_id);
+  if (!tug) {
+    return;
+  }
   const now = nowMicros(ctx);
   const deadline =
-    match.phase === MATCH_PHASE_SUDDEN_DEATH && tug
+    match.phase === MATCH_PHASE_SUDDEN_DEATH
       ? now + msToMicros(tug.elimination_word_time_ms)
       : 0n;
 
   if (existing) {
+    const nextWord = existing.current_word
+      ? null
+      : pickWordForPlayer(
+          ctx,
+          lobby,
+          match,
+          tug,
+          player.player_id,
+          existing.last_word_type
+        );
     replaceRow(ctx.db.tug_player_state, existing, {
       ...existing,
-      current_word: existing.current_word || pickWordForPlayer(ctx, match.match_id, player.player_id),
+      current_word: nextWord?.value ?? existing.current_word,
+      last_word_type: nextWord?.type ?? existing.last_word_type,
       deadline_at_micros: deadline,
     });
     return;
   }
 
+  const firstWord = pickWordForPlayer(
+    ctx,
+    lobby,
+    match,
+    tug,
+    player.player_id,
+    ''
+  );
   ctx.db.tug_player_state.insert({
     tug_player_state_id: id,
     match_id: match.match_id,
     player_id: player.player_id,
-    current_word: pickWordForPlayer(ctx, match.match_id, player.player_id),
+    current_word: firstWord.value,
+    last_word_type: firstWord.type,
     correct_count: 0,
     submit_count: 0,
     last_submit_at_micros: 0n,
@@ -668,15 +830,25 @@ function initializeTugState(
   const now = nowMicros(ctx);
 
   const tugCurrent = getTugStateByMatchId(ctx, match.match_id);
+  const firstCenterWord = pickWordForContext(ctx, {
+    mode: WORD_MODE_NORMAL,
+    maxDifficultyTier: 1,
+    excluded: new Set<string>(),
+  });
   const tugNext: TugStateRow = {
     match_id: match.match_id,
     rope_position: 0,
     win_threshold: winThreshold,
     team_a_force: 0,
     team_b_force: 0,
-    current_word: pickRandomWord(ctx),
+    current_word: firstCenterWord.value,
     word_version: 1,
     mode: TUG_MODE_NORMAL,
+    word_mode: WORD_MODE_NORMAL,
+    ramp_tier: 1,
+    difficulty_bonus_tier: 0,
+    active_power_id: '',
+    power_expires_at_micros: 0n,
     word_rotate_ms: wordRotateMs,
     elimination_word_time_ms: eliminationWordTimeMs,
     next_word_at_micros: now + msToMicros(wordRotateMs),
@@ -700,11 +872,20 @@ function initializeTugState(
       ctx.db.tug_player_state.delete(existing);
     }
 
+    const firstWord = pickWordForPlayer(
+      ctx,
+      lobby,
+      match,
+      tugNext,
+      player.player_id,
+      ''
+    );
     ctx.db.tug_player_state.insert({
       tug_player_state_id: id,
       match_id: match.match_id,
       player_id: player.player_id,
-      current_word: pickWordForPlayer(ctx, match.match_id, player.player_id),
+      current_word: firstWord.value,
+      last_word_type: firstWord.type,
       correct_count: 0,
       submit_count: 0,
       last_submit_at_micros: 0n,
@@ -713,11 +894,22 @@ function initializeTugState(
   }
 
   const hostStateCurrent = getTugHostStateByMatchId(ctx, match.match_id);
+  const firstHostWord = pickWordForHost(
+    ctx,
+    lobby,
+    match,
+    tugNext,
+    '',
+    false
+  );
   const hostStateNext: TugHostStateRow = {
     match_id: match.match_id,
     host_identity: lobby.host_identity,
     score: 0,
-    current_word: pickWordForHost(ctx, match.match_id),
+    correct_count: 0,
+    power_meter: 0,
+    current_word: firstHostWord.value,
+    last_word_type: firstHostWord.type,
     word_version: 1,
     last_submit_at_micros: 0n,
   };
@@ -744,11 +936,14 @@ function finishMatch(
     return;
   }
 
+  const resolvedWinnerTeam =
+    winnerTeam === TEAM_A || winnerTeam === TEAM_B ? winnerTeam : '';
+
   const matchNext: MatchRow = {
     ...match,
     phase: MATCH_PHASE_POST_GAME,
     ends_at_micros: nowMicros(ctx),
-    winner_team: winnerTeam,
+    winner_team: resolvedWinnerTeam,
   };
   replaceRow(ctx.db.match, match, matchNext);
 
@@ -760,7 +955,7 @@ function finishMatch(
 
   removeTickSchedule(ctx, match.match_id);
   emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'match_finished', {
-    winner_team: winnerTeam,
+    winner_team: resolvedWinnerTeam,
   });
 }
 
@@ -882,6 +1077,158 @@ function transitionPreGameToInGame(
   };
 }
 
+function getHostPowerConfig(powerId: string): HostPowerConfig | null {
+  if (
+    powerId === HOST_POWER_TECH_MODE_BURST ||
+    powerId === HOST_POWER_SYMBOLS_MODE_BURST ||
+    powerId === HOST_POWER_DIFFICULTY_UP_BURST
+  ) {
+    return HOST_POWER_CONFIG[powerId];
+  }
+  return null;
+}
+
+function computeCurrentTiers(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  match: MatchRow,
+  tug: TugStateRow
+): { rampTier: WordDifficultyTier; effectiveTier: WordDifficultyTier } {
+  const rampTier = deriveBaseDifficultyTier(ctx, lobby, match);
+  const effectiveTier = deriveEffectiveDifficultyTier(
+    rampTier,
+    tug.difficulty_bonus_tier
+  );
+  return { rampTier, effectiveTier };
+}
+
+function updateTiersOnTugState(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  match: MatchRow,
+  tug: TugStateRow
+): TugStateRow {
+  const tiers = computeCurrentTiers(ctx, lobby, match, tug);
+  if (tug.ramp_tier === tiers.rampTier) {
+    return tug;
+  }
+
+  const tugNext: TugStateRow = {
+    ...tug,
+    ramp_tier: tiers.rampTier,
+  };
+  replaceRow(ctx.db.tug_state, tug, tugNext);
+  emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'difficulty_tier_changed', {
+    ramp_tier: tiers.rampTier,
+    effective_tier: tiers.effectiveTier,
+  });
+  return tugNext;
+}
+
+function rerollAllActiveWords(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  match: MatchRow,
+  tug: TugStateRow
+): void {
+  for (const player of listPlayersInLobby(ctx, lobby.lobby_id)) {
+    if (player.status !== PLAYER_STATUS_ACTIVE) {
+      continue;
+    }
+    const id = tugPlayerStateId(match.match_id, player.player_id);
+    const playerState = getTugPlayerStateById(ctx, id);
+    if (!playerState) {
+      continue;
+    }
+    const nextWord = pickWordForPlayer(
+      ctx,
+      lobby,
+      match,
+      tug,
+      player.player_id,
+      playerState.last_word_type,
+      true
+    );
+    replaceRow(ctx.db.tug_player_state, playerState, {
+      ...playerState,
+      current_word: nextWord.value,
+      last_word_type: nextWord.type,
+    });
+  }
+
+  const hostState = getTugHostStateByMatchId(ctx, match.match_id);
+  if (hostState) {
+    const hostWord = pickWordForHost(
+      ctx,
+      lobby,
+      match,
+      tug,
+      hostState.last_word_type,
+      true
+    );
+    replaceRow(ctx.db.tug_host_state, hostState, {
+      ...hostState,
+      current_word: hostWord.value,
+      last_word_type: hostWord.type,
+      word_version: hostState.word_version + 1,
+    });
+  }
+
+  const tiers = computeCurrentTiers(ctx, lobby, match, tug);
+  emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'global_words_rerolled', {
+    word_mode: tug.word_mode,
+    ramp_tier: tiers.rampTier,
+    effective_tier: tiers.effectiveTier,
+  });
+}
+
+function maybeExpireTimedPower(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  match: MatchRow,
+  tug: TugStateRow,
+  nowMicrosValue: bigint
+): TugStateRow {
+  if (
+    !tug.active_power_id ||
+    tug.power_expires_at_micros <= 0n ||
+    nowMicrosValue < tug.power_expires_at_micros
+  ) {
+    return tug;
+  }
+
+  const previousPower = tug.active_power_id;
+  const previousMode = tug.word_mode;
+  const tugNext: TugStateRow = {
+    ...tug,
+    active_power_id: '',
+    power_expires_at_micros: 0n,
+    word_mode: WORD_MODE_NORMAL,
+    difficulty_bonus_tier: 0,
+  };
+  replaceRow(ctx.db.tug_state, tug, tugNext);
+
+  const tiers = computeCurrentTiers(ctx, lobby, match, tugNext);
+  emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'difficulty_tier_changed', {
+    ramp_tier: tiers.rampTier,
+    effective_tier: tiers.effectiveTier,
+  });
+  emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'host_power_expired', {
+    power_id: previousPower,
+    word_mode: tugNext.word_mode,
+    ramp_tier: tiers.rampTier,
+    effective_tier: tiers.effectiveTier,
+  });
+  if (previousMode !== tugNext.word_mode) {
+    emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'word_mode_changed', {
+      from: previousMode,
+      to: tugNext.word_mode,
+    });
+  }
+
+  return tugNext;
+}
+
 function resolveWinnerFromTugState(tug: TugStateRow): string {
   return resolveWinnerFromRopePosition(tug.rope_position);
 }
@@ -933,6 +1280,9 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
     return;
   }
 
+  tug = maybeExpireTimedPower(ctx, lobby, match, tug, now);
+  tug = updateTiersOnTugState(ctx, lobby, match, tug);
+
   if (match.phase === MATCH_PHASE_IN_GAME && secondsRemaining > 0) {
     const tugNext: TugStateRow = {
       ...tug,
@@ -964,6 +1314,7 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
     lobby = transitioned.lobby;
     match = transitioned.match;
     tug = transitioned.tug;
+    tug = updateTiersOnTugState(ctx, lobby, match, tug);
   }
 
   if (match.phase === MATCH_PHASE_SUDDEN_DEATH) {
@@ -1281,6 +1632,38 @@ export const reset_lobby = spacetimedb.reducer(
 
     if (lobby.active_match_id) {
       removeTickSchedule(ctx, lobby.active_match_id);
+
+      const tug = getTugStateByMatchId(ctx, lobby.active_match_id);
+      if (tug) {
+        replaceRow(ctx.db.tug_state, tug, {
+          ...tug,
+          mode: TUG_MODE_NORMAL,
+          word_mode: WORD_MODE_NORMAL,
+          ramp_tier: 1,
+          difficulty_bonus_tier: 0,
+          active_power_id: '',
+          power_expires_at_micros: 0n,
+        });
+      }
+
+      const hostState = getTugHostStateByMatchId(ctx, lobby.active_match_id);
+      if (hostState) {
+        replaceRow(ctx.db.tug_host_state, hostState, {
+          ...hostState,
+          score: 0,
+          correct_count: 0,
+          power_meter: 0,
+          last_word_type: '',
+        });
+      }
+
+      for (const playerState of listTugPlayerStatesByMatch(ctx, lobby.active_match_id)) {
+        replaceRow(ctx.db.tug_player_state, playerState, {
+          ...playerState,
+          last_word_type: '',
+          deadline_at_micros: 0n,
+        });
+      }
     }
 
     replaceRow(ctx.db.lobby, lobby, {
@@ -1351,6 +1734,103 @@ export const tug_record_miss = spacetimedb.reducer(
   }
 );
 
+export const tug_activate_power = spacetimedb.reducer(
+  {
+    match_id: t.string(),
+    power_id: t.string(),
+  },
+  (ctx, { match_id, power_id }) => {
+    const match = getMatchOrThrow(ctx, match_id);
+    if (
+      match.phase !== MATCH_PHASE_IN_GAME &&
+      match.phase !== MATCH_PHASE_SUDDEN_DEATH
+    ) {
+      throw new Error('Match is not accepting power usage');
+    }
+
+    const lobby = getLobbyOrThrow(ctx, match.lobby_id);
+    assertHost(ctx, lobby);
+
+    const tug = getTugStateByMatchId(ctx, match_id);
+    if (!tug) {
+      throw new Error('Tug state not initialized');
+    }
+    const hostState = getTugHostStateByMatchId(ctx, match_id);
+    if (!hostState) {
+      throw new Error('Host state not initialized');
+    }
+    const config = getHostPowerConfig(power_id);
+    if (!config) {
+      emitGameEvent(ctx, lobby.lobby_id, match_id, 'host_power_rejected', {
+        power_id,
+        reason: 'unknown_power',
+      });
+      throw new Error('Unknown power id');
+    }
+
+    if (hostState.power_meter < config.cost) {
+      emitGameEvent(ctx, lobby.lobby_id, match_id, 'host_power_rejected', {
+        power_id,
+        reason: 'insufficient_meter',
+        meter_before: hostState.power_meter,
+        cost: config.cost,
+      });
+      throw new Error('Not enough host power meter');
+    }
+
+    const meterBefore = hostState.power_meter;
+    const hostStateNext: TugHostStateRow = {
+      ...hostState,
+      power_meter: meterBefore - config.cost,
+    };
+    replaceRow(ctx.db.tug_host_state, hostState, hostStateNext);
+
+    const tiersBefore = computeCurrentTiers(ctx, lobby, match, tug);
+    const modeBefore = tug.word_mode;
+    const now = nowMicros(ctx);
+    const tugNext: TugStateRow = {
+      ...tug,
+      active_power_id: config.id,
+      power_expires_at_micros: now + msToMicros(config.durationMs),
+      word_mode: config.wordMode ?? WORD_MODE_NORMAL,
+      difficulty_bonus_tier: config.difficultyBonusTier,
+    };
+    replaceRow(ctx.db.tug_state, tug, tugNext);
+    let tugActive = tugNext;
+
+    tugActive = updateTiersOnTugState(ctx, lobby, match, tugActive);
+
+    const tiersAfter = computeCurrentTiers(ctx, lobby, match, tugActive);
+    if (
+      tiersBefore.rampTier !== tiersAfter.rampTier ||
+      tiersBefore.effectiveTier !== tiersAfter.effectiveTier
+    ) {
+      emitGameEvent(ctx, lobby.lobby_id, match_id, 'difficulty_tier_changed', {
+        ramp_tier: tiersAfter.rampTier,
+        effective_tier: tiersAfter.effectiveTier,
+      });
+    }
+    if (modeBefore !== tugActive.word_mode) {
+      emitGameEvent(ctx, lobby.lobby_id, match_id, 'word_mode_changed', {
+        from: modeBefore,
+        to: tugActive.word_mode,
+      });
+    }
+
+    emitGameEvent(ctx, lobby.lobby_id, match_id, 'host_power_used', {
+      power_id: config.id,
+      meter_before: meterBefore,
+      meter_after: hostStateNext.power_meter,
+      word_mode: tugActive.word_mode,
+      ramp_tier: tiersAfter.rampTier,
+      effective_tier: tiersAfter.effectiveTier,
+      duration_ms: config.durationMs,
+    });
+
+    rerollAllActiveWords(ctx, lobby, match, tugActive);
+  }
+);
+
 export const tug_submit = spacetimedb.reducer(
   {
     match_id: t.string(),
@@ -1379,7 +1859,14 @@ export const tug_submit = spacetimedb.reducer(
       }
 
       const now = nowMicros(ctx);
-      const nextHostWord = pickWordForHost(ctx, match_id, true);
+      const nextHostWord = pickWordForHost(
+        ctx,
+        lobby,
+        match,
+        tug,
+        hostState.last_word_type,
+        true
+      );
       const hostResult = applyHostSubmission(
         {
           score: hostState.score,
@@ -1388,7 +1875,7 @@ export const tug_submit = spacetimedb.reducer(
           lastSubmitAtMicros: hostState.last_submit_at_micros,
         },
         typed,
-        nextHostWord,
+        nextHostWord.value,
         now
       );
       const hostStateNext: TugHostStateRow = {
@@ -1400,8 +1887,15 @@ export const tug_submit = spacetimedb.reducer(
       };
 
       if (hostResult.correct) {
+        hostStateNext.correct_count += 1;
+        hostStateNext.power_meter = Math.min(
+          HOST_POWER_METER_MAX,
+          hostStateNext.power_meter + 1
+        );
+        hostStateNext.last_word_type = nextHostWord.type;
         emitGameEvent(ctx, lobby.lobby_id, match_id, 'host_submit_ok', {
           score: hostStateNext.score,
+          power_meter: hostStateNext.power_meter,
         });
       } else {
         emitGameEvent(ctx, lobby.lobby_id, match_id, 'host_submit_bad', {});
@@ -1441,13 +1935,18 @@ export const tug_submit = spacetimedb.reducer(
     }
 
     if (correct) {
-      playerStateNext.correct_count += 1;
-      playerStateNext.current_word = pickWordForPlayer(
+      const nextWord = pickWordForPlayer(
         ctx,
-        match_id,
+        lobby,
+        match,
+        tug,
         player.player_id,
+        playerState.last_word_type,
         true
       );
+      playerStateNext.correct_count += 1;
+      playerStateNext.current_word = nextWord.value;
+      playerStateNext.last_word_type = nextWord.type;
       if (tug.mode === TUG_MODE_ELIMINATION) {
         playerStateNext.deadline_at_micros =
           now + msToMicros(tug.elimination_word_time_ms);

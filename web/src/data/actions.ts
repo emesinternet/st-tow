@@ -43,6 +43,7 @@ export interface GameActions {
   endMatch: (lobbyId: string) => Promise<void>;
   submitWord: (matchId: string, wordVersion: number, typed: string) => Promise<void>;
   recordMistake: (matchId: string) => Promise<void>;
+  activatePower: (matchId: string, powerId: string) => Promise<void>;
 }
 
 export function buildActions(connection: DbConnection | null): GameActions {
@@ -90,6 +91,13 @@ export function buildActions(connection: DbConnection | null): GameActions {
       const conn = assertConnection(connection);
       await callReducer(conn, 'tug_record_miss', {
         matchId,
+      });
+    },
+    activatePower: async (matchId: string, powerId: string) => {
+      const conn = assertConnection(connection);
+      await callReducer(conn, 'tug_activate_power', {
+        matchId,
+        powerId,
       });
     },
   };

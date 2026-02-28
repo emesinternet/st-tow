@@ -41,6 +41,7 @@ import LeaveLobbyReducer from "./leave_lobby_reducer";
 import ResetLobbyReducer from "./reset_lobby_reducer";
 import SetLobbySettingReducer from "./set_lobby_setting_reducer";
 import StartMatchReducer from "./start_match_reducer";
+import TugActivatePowerReducer from "./tug_activate_power_reducer";
 import TugInitReducer from "./tug_init_reducer";
 import TugRecordMissReducer from "./tug_record_miss_reducer";
 import TugSubmitReducer from "./tug_submit_reducer";
@@ -247,6 +248,9 @@ const tablesSchema = __schema({
       { name: 'mode', algorithm: 'btree', columns: [
         'mode',
       ] },
+      { name: 'word_mode', algorithm: 'btree', columns: [
+        'wordMode',
+      ] },
     ],
     constraints: [
       { name: 'tug_state_match_id_key', constraint: 'unique', columns: ['matchId'] },
@@ -263,6 +267,7 @@ const reducersSchema = __reducers(
   __reducerSchema("reset_lobby", ResetLobbyReducer),
   __reducerSchema("set_lobby_setting", SetLobbySettingReducer),
   __reducerSchema("start_match", StartMatchReducer),
+  __reducerSchema("tug_activate_power", TugActivatePowerReducer),
   __reducerSchema("tug_init", TugInitReducer),
   __reducerSchema("tug_record_miss", TugRecordMissReducer),
   __reducerSchema("tug_submit", TugSubmitReducer),

@@ -52,8 +52,15 @@ export interface MatchHudViewModel {
   teamAPulls: number;
   // Cumulative correct submissions for scoreboard display.
   teamBPulls: number;
-  // Display-only host score (no gameplay impact yet).
+  hostPowerMeter: number;
+  wordMode: string;
+  rampTier: number;
+  effectiveTier: number;
+  activePowerId: string;
+  activePowerSecondsRemaining: number | null;
+  // Kept for compatibility with existing post-game/stats surfaces.
   hostScore: number | null;
+  hostSuccessfulWords: number | null;
   hostCurrentWord: string;
   aliveTeamA: number;
   aliveTeamB: number;
@@ -63,6 +70,14 @@ export interface MatchHudViewModel {
   suddenDeathDeadlineMicros: bigint | null;
 }
 
+export interface HostPowerActionViewModel {
+  id: string;
+  label: string;
+  cost: number;
+  enabled: boolean;
+  disabledReason: string | null;
+}
+
 export interface HostPanelViewModel {
   canStart: boolean;
   canReset: boolean;
@@ -70,6 +85,7 @@ export interface HostPanelViewModel {
   startDisabledReason: string | null;
   resetDisabledReason: string | null;
   endDisabledReason: string | null;
+  powers: HostPowerActionViewModel[];
 }
 
 export interface PlayerInputViewModel {

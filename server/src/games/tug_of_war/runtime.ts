@@ -1,5 +1,6 @@
 import { TEAM_A, TEAM_B } from '../../core/constants';
 import { isCorrectWordSubmission } from './gameplay';
+import type { WordDifficultyTier } from './word_catalog';
 
 export interface TeamSubmitState {
   teamAForce: number;
@@ -30,6 +31,40 @@ export function deriveSecondsRemaining(
     return 0;
   }
   return Number((remainingMicros + 999_999n) / 1_000_000n);
+}
+
+export function deriveDifficultyTier(
+  nowMicros: bigint,
+  startedAtMicros: bigint,
+  roundSeconds: number
+): WordDifficultyTier {
+  if (roundSeconds <= 0) {
+    return 5;
+  }
+  const elapsedMicros = nowMicros - startedAtMicros;
+  if (elapsedMicros <= 0n) {
+    return 1;
+  }
+
+  const roundMicros = BigInt(roundSeconds) * 1_000_000n;
+  if (roundMicros <= 0n) {
+    return 5;
+  }
+
+  const progress = Number(elapsedMicros > roundMicros ? roundMicros : elapsedMicros) / Number(roundMicros);
+  if (progress < 0.2) {
+    return 1;
+  }
+  if (progress < 0.4) {
+    return 2;
+  }
+  if (progress < 0.6) {
+    return 3;
+  }
+  if (progress < 0.8) {
+    return 4;
+  }
+  return 5;
 }
 
 export function isPhaseExpired(
@@ -84,4 +119,3 @@ export function applyHostSubmission(
     nextState,
   };
 }
-

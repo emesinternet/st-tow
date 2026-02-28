@@ -65,22 +65,27 @@ function TeamMarkers({
     <div className="flex h-full items-end overflow-auto px-1">
       <div className="grid min-h-full w-full grid-cols-[repeat(auto-fill,minmax(48px,1fr))] content-end items-end gap-x-1 gap-y-1">
         {connected.map(player => (
-          <div key={player.playerId} className="flex h-7 flex-col items-center justify-end text-center">
-            <span className="max-w-[52px] truncate text-[8px] font-bold uppercase leading-tight text-neo-ink/85">
-              {player.displayName}
-            </span>
-            {(bounceTokens[player.playerId] ?? 0) > 0 ? (
-              <motion.span
-                key={`${player.playerId}:${bounceTokens[player.playerId]}`}
-                className={`mt-0.5 h-2.5 w-2.5 rounded-full border border-neo-ink ${ballClassName}`}
-                initial={{ y: 0 }}
-                animate={{ y: [0, -10, 0] }}
-                transition={{ duration: 0.28, ease: 'easeOut' }}
-              />
-            ) : (
+          (bounceTokens[player.playerId] ?? 0) > 0 ? (
+            <motion.div
+              key={`${player.playerId}:${bounceTokens[player.playerId]}`}
+              className="flex h-7 flex-col items-center justify-end text-center"
+              initial={{ y: 0 }}
+              animate={{ y: [0, -10, 0] }}
+              transition={{ duration: 0.28, ease: 'easeOut' }}
+            >
+              <span className="max-w-[52px] truncate text-[8px] font-bold uppercase leading-tight text-neo-ink/85">
+                {player.displayName}
+              </span>
               <span className={`mt-0.5 h-2.5 w-2.5 rounded-full border border-neo-ink ${ballClassName}`} />
-            )}
-          </div>
+            </motion.div>
+          ) : (
+            <div key={player.playerId} className="flex h-7 flex-col items-center justify-end text-center">
+              <span className="max-w-[52px] truncate text-[8px] font-bold uppercase leading-tight text-neo-ink/85">
+                {player.displayName}
+              </span>
+              <span className={`mt-0.5 h-2.5 w-2.5 rounded-full border border-neo-ink ${ballClassName}`} />
+            </div>
+          )
         ))}
       </div>
     </div>
@@ -88,30 +93,61 @@ function TeamMarkers({
 }
 
 export function MatchHud({ hud, teamAPlayers, teamBPlayers }: MatchHudProps) {
-  const hostScore = hud.hostScore ?? 0;
   const isLobbyPreview = hud.matchId.endsWith(':pre');
   const timerText =
     hud.phase === 'PreGame' && !isLobbyPreview ? 'READY' : formatSeconds(hud.secondsRemaining);
+  const hostPowerPercent = Math.max(0, Math.min(100, hud.hostPowerMeter));
+
+  const activePowerLabel: Record<string, string> = {
+    tech_mode_burst: 'Tech Mode',
+    symbols_mode_burst: 'Symbols Mode',
+    difficulty_up_burst: 'Difficulty Up',
+  };
 
   return (
     <Card className="overflow-hidden">
       <CardContent className="space-y-4 p-4">
-        <div className="flex flex-wrap items-end justify-center gap-2 text-center font-display font-black tracking-wide sm:gap-3">
-          <p className="text-3xl tabular-nums text-neo-teamA sm:text-4xl">
-            RED TEAM {hud.teamAPulls}
+        <div className="flex flex-wrap items-end justify-around gap-3 text-center font-display font-black tracking-wide">
+          <p className="text-4xl tabular-nums text-neo-teamA sm:text-5xl">
+            {hud.teamAPulls}
           </p>
-          <span className="pb-1 text-xl text-neo-muted sm:text-2xl">|</span>
           <p className="text-4xl tabular-nums text-neo-ink sm:text-5xl">
             {timerText}
           </p>
-          <span className="pb-1 text-xl text-neo-muted sm:text-2xl">|</span>
-          <p className="text-3xl tabular-nums text-neo-teamB sm:text-4xl">
-            BLUE TEAM {hud.teamBPulls}
+          <p className="text-4xl tabular-nums text-neo-teamB sm:text-5xl">
+            {hud.teamBPulls}
           </p>
-          <span className="pb-1 text-xl text-neo-muted sm:text-2xl">|</span>
-          <p className="text-3xl tabular-nums text-neo-ink sm:text-4xl">
-            H {hostScore}
-          </p>
+        </div>
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <p className="font-display text-xs font-black uppercase tracking-wide text-neo-ink">
+              Host Power
+            </p>
+            <p className="font-mono text-xs font-bold text-neo-ink">{hostPowerPercent}%</p>
+          </div>
+          <div className="h-6 overflow-hidden rounded-[12px] border-4 border-neo-ink bg-neo-paper">
+            <div
+              className="h-full bg-neo-yellow transition-[width]"
+              style={{ width: `${hostPowerPercent}%` }}
+            />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-display text-[11px] font-bold uppercase tracking-wide text-neo-muted">
+              Mode {hud.wordMode} | Tier {hud.effectiveTier}
+            </p>
+            {hud.activePowerId ? (
+              <p className="font-display text-[11px] font-black uppercase tracking-wide text-neo-danger">
+                {activePowerLabel[hud.activePowerId] ?? hud.activePowerId}
+                {hud.activePowerSecondsRemaining != null
+                  ? ` ${hud.activePowerSecondsRemaining}s`
+                  : ''}
+              </p>
+            ) : (
+              <p className="font-display text-[11px] font-bold uppercase tracking-wide text-neo-muted">
+                No Active Effect
+              </p>
+            )}
+          </div>
         </div>
         <div className="relative h-24 overflow-hidden rounded-[16px] border-4 border-neo-ink bg-gradient-to-r from-neo-teamA/25 via-neo-yellow/25 to-neo-teamB/25 sm:h-28">
           <div className="absolute inset-1.5 grid grid-cols-2 gap-1 overflow-hidden rounded-[12px] sm:inset-2">

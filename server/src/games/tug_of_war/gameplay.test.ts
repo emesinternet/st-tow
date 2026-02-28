@@ -36,9 +36,11 @@ test('buildExcludedWordsForPlayer can also exclude the player current word', () 
   assert.equal(excluded.has('beacon'), true);
 });
 
-test('isCorrectWordSubmission requires exact match', () => {
+test('isCorrectWordSubmission is case-insensitive while preserving exact symbols', () => {
   assert.equal(isCorrectWordSubmission('anchor', 'anchor'), true);
-  assert.equal(isCorrectWordSubmission('Anchor', 'anchor'), false);
+  assert.equal(isCorrectWordSubmission('Anchor', 'anchor'), true);
+  assert.equal(isCorrectWordSubmission('a|B', 'a|b'), true);
+  assert.equal(isCorrectWordSubmission('a||b', 'a|b'), false);
   assert.equal(isCorrectWordSubmission('anch', 'anchor'), false);
 });
 

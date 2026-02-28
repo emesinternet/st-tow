@@ -36,7 +36,7 @@ export function buildExcludedWordsForPlayer(
 }
 
 export function isCorrectWordSubmission(typed: string, targetWord: string): boolean {
-  return typed === targetWord;
+  return typed.toLowerCase() === targetWord.toLowerCase();
 }
 
 export function shouldEliminateOnWrongSubmission(mode: string): boolean {

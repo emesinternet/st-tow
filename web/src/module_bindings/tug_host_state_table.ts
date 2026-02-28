@@ -14,7 +14,10 @@ export default __t.row({
   matchId: __t.string().primaryKey().name("match_id"),
   hostIdentity: __t.identity().name("host_identity"),
   score: __t.i32(),
+  correctCount: __t.i32().name("correct_count"),
+  powerMeter: __t.i32().name("power_meter"),
   currentWord: __t.string().name("current_word"),
+  lastWordType: __t.string().name("last_word_type"),
   wordVersion: __t.i32().name("word_version"),
   lastSubmitAtMicros: __t.i64().name("last_submit_at_micros"),
 });

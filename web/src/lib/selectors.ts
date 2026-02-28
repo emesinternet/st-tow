@@ -13,6 +13,7 @@ import { formatEventPayload } from '@/lib/format';
 import type {
   ConnectionState,
   EventFeedItemViewModel,
+  HostPowerActionViewModel,
   HostPanelViewModel,
   LobbyViewModel,
   MatchHudViewModel,
@@ -25,6 +26,11 @@ import type {
 } from '@/types/ui';
 
 const DEFAULT_ROUND_SECONDS = 90;
+const HOST_POWER_SPECS: Array<{ id: string; label: string; cost: number }> = [
+  { id: 'tech_mode_burst', label: 'Tech Burst', cost: 1 },
+  { id: 'symbols_mode_burst', label: 'Symbols Burst', cost: 1 },
+  { id: 'difficulty_up_burst', label: 'Difficulty Up', cost: 1 },
+];
 
 export interface SelectUiViewModelInput {
   connectionState: ConnectionState;
@@ -215,7 +221,8 @@ function normalizeRopePosition(ropePosition: number, winThreshold: number): numb
 function buildHostPanelModel(
   isHost: boolean,
   lobby: NormalizedLobby,
-  match: NormalizedMatch | null
+  match: NormalizedMatch | null,
+  hostState: NormalizedTugHostState | null
 ): HostPanelViewModel {
   const canStart = isHost && lobby.status === 'Waiting';
   const canReset = isHost;
@@ -237,6 +244,44 @@ function buildHostPanelModel(
     endDisabledReason = 'There is no active match to end.';
   }
 
+  const powers: HostPowerActionViewModel[] = HOST_POWER_SPECS.map(spec => {
+    if (!isHost) {
+      return {
+        id: spec.id,
+        label: spec.label,
+        cost: spec.cost,
+        enabled: false,
+        disabledReason: 'Only the host can trigger powers.',
+      };
+    }
+    if (!match || (match.phase !== 'InGame' && match.phase !== 'SuddenDeath')) {
+      return {
+        id: spec.id,
+        label: spec.label,
+        cost: spec.cost,
+        enabled: false,
+        disabledReason: 'Powers are only available during an active match.',
+      };
+    }
+    const meter = hostState?.powerMeter ?? 0;
+    if (meter < spec.cost) {
+      return {
+        id: spec.id,
+        label: spec.label,
+        cost: spec.cost,
+        enabled: false,
+        disabledReason: `Need ${spec.cost} power.`,
+      };
+    }
+    return {
+      id: spec.id,
+      label: spec.label,
+      cost: spec.cost,
+      enabled: true,
+      disabledReason: null,
+    };
+  });
+
   return {
     canStart,
     canReset,
@@ -244,6 +289,7 @@ function buildHostPanelModel(
     startDisabledReason,
     resetDisabledReason,
     endDisabledReason,
+    powers,
   };
 }
 
@@ -380,6 +426,7 @@ function buildMatchHudModel(
   match: NormalizedMatch,
   clock: NormalizedMatchClock | null,
   tug: NormalizedTugState | null,
+  snapshotGeneratedAt: number,
   teamAPlayers: NormalizedPlayer[],
   teamBPlayers: NormalizedPlayer[],
   matchPlayerStates: NormalizedTugPlayerState[],
@@ -388,6 +435,24 @@ function buildMatchHudModel(
 ): MatchHudViewModel {
   const ropePosition = tug?.ropePosition ?? 0;
   const winThreshold = tug?.winThreshold ?? 100;
+  const rampTier = Math.max(1, Math.min(5, tug?.rampTier ?? 1));
+  const effectiveTier = Math.max(
+    1,
+    Math.min(5, rampTier + Math.max(0, tug?.difficultyBonusTier ?? 0))
+  );
+  const activePowerId = tug?.activePowerId ?? '';
+  const nowMicros = BigInt(Math.trunc(snapshotGeneratedAt)) * 1000n;
+  const remainingPowerMicros =
+    (tug?.powerExpiresAtMicros ?? 0n) > nowMicros
+      ? (tug?.powerExpiresAtMicros ?? 0n) - nowMicros
+      : 0n;
+  const activePowerSecondsRemaining =
+    activePowerId && (tug?.powerExpiresAtMicros ?? 0n) > 0n
+      ? Math.max(
+          0,
+          Math.ceil(Number(remainingPowerMicros) / 1_000_000)
+        )
+      : null;
   const teamAIds = new Set(teamAPlayers.map(player => player.playerId));
   const teamBIds = new Set(teamBPlayers.map(player => player.playerId));
 
@@ -415,7 +480,14 @@ function buildMatchHudModel(
     teamBForce: tug?.teamBForce ?? 0,
     teamAPulls,
     teamBPulls,
+    hostPowerMeter: hostState?.powerMeter ?? 0,
+    wordMode: tug?.wordMode ?? 'Normal',
+    rampTier,
+    effectiveTier,
+    activePowerId,
+    activePowerSecondsRemaining,
     hostScore: hostState ? hostState.score : null,
+    hostSuccessfulWords: hostState ? hostState.correctCount : null,
     hostCurrentWord: hostState?.currentWord ?? '',
     aliveTeamA: teamAPlayers.filter(player => player.status === 'Active').length,
     aliveTeamB: teamBPlayers.filter(player => player.status === 'Active').length,
@@ -443,7 +515,14 @@ function buildPreMatchHudModel(
     teamBForce: 0,
     teamAPulls: 0,
     teamBPulls: 0,
+    hostPowerMeter: 0,
+    wordMode: 'Normal',
+    rampTier: 1,
+    effectiveTier: 1,
+    activePowerId: '',
+    activePowerSecondsRemaining: null,
     hostScore: null,
+    hostSuccessfulWords: null,
     hostCurrentWord: '',
     aliveTeamA: 0,
     aliveTeamB: 0,
@@ -524,10 +603,11 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
     phase,
     lobby: buildLobbyModel(lobby, lobbyPlayers, identity, playerStateByPlayerId),
     matchHud: match
-      ? buildMatchHudModel(
+        ? buildMatchHudModel(
           match,
           clock,
           tug,
+          snapshot.generatedAt,
           teamAPlayers,
           teamBPlayers,
           matchPlayerStates,
@@ -537,7 +617,12 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
       : null,
     preMatchHud: match ? null : buildPreMatchHudModel(lobby.lobbyId, preMatchSecondsRemaining),
     preMatchSecondsRemaining,
-    hostPanel: buildHostPanelModel(isSameIdentity(lobby.hostIdentity, identity), lobby, match),
+    hostPanel: buildHostPanelModel(
+      isSameIdentity(lobby.hostIdentity, identity),
+      lobby,
+      match,
+      hostState
+    ),
     playerInput: buildPlayerInputModel(role, myPlayer, match, myTugState, hostState),
     events: buildEventFeed(snapshot, lobby.lobbyId),
   };

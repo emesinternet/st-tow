@@ -15,6 +15,7 @@ export default __t.row({
   matchId: __t.string().name("match_id"),
   playerId: __t.string().name("player_id"),
   currentWord: __t.string().name("current_word"),
+  lastWordType: __t.string().name("last_word_type"),
   correctCount: __t.i32().name("correct_count"),
   submitCount: __t.i32().name("submit_count"),
   lastSubmitAtMicros: __t.i64().name("last_submit_at_micros"),

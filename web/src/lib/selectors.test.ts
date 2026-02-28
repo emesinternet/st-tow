@@ -74,6 +74,11 @@ function makeBaseSnapshot(): SessionSnapshot {
         currentWord: '',
         wordVersion: 1,
         mode: 'Normal',
+        wordMode: 'Normal',
+        rampTier: 2,
+        difficultyBonusTier: 1,
+        activePowerId: 'tech_mode_burst',
+        powerExpiresAtMicros: 9_999_999_000n,
         wordRotateMs: 9999,
         eliminationWordTimeMs: 2000,
         nextWordAtMicros: 0n,
@@ -86,6 +91,7 @@ function makeBaseSnapshot(): SessionSnapshot {
         matchId: 'match-1',
         playerId: 'player-a',
         currentWord: 'anchor',
+        lastWordType: 'object',
         correctCount: 3,
         submitCount: 4,
         lastSubmitAtMicros: 0n,
@@ -96,6 +102,7 @@ function makeBaseSnapshot(): SessionSnapshot {
         matchId: 'match-1',
         playerId: 'player-b',
         currentWord: 'bridge',
+        lastWordType: 'object',
         correctCount: 5,
         submitCount: 6,
         lastSubmitAtMicros: 0n,
@@ -107,7 +114,10 @@ function makeBaseSnapshot(): SessionSnapshot {
         matchId: 'match-1',
         hostIdentity: 'c200host',
         score: 9,
+        correctCount: 9,
+        powerMeter: 42,
         currentWord: 'captain',
+        lastWordType: 'command',
         wordVersion: 3,
         lastSubmitAtMicros: 0n,
       },
@@ -159,7 +169,13 @@ test('selector exposes host score from tug_host_state when present', () => {
 
   assert.equal(vm.role, 'host');
   assert.equal(vm.matchHud?.hostScore, 9);
+  assert.equal(vm.matchHud?.hostSuccessfulWords, 9);
+  assert.equal(vm.matchHud?.hostPowerMeter, 42);
+  assert.equal(vm.matchHud?.wordMode, 'Normal');
+  assert.equal(vm.matchHud?.effectiveTier, 3);
+  assert.equal(vm.matchHud?.activePowerId, 'tech_mode_burst');
   assert.equal(vm.playerInput?.currentWord, 'captain');
+  assert.equal(vm.hostPanel?.powers.some(power => power.enabled), true);
 });
 
 test('selector derives pre-match seconds from round_seconds setting with fallback', () => {
