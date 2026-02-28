@@ -671,9 +671,6 @@ function transitionToSuddenDeath(
   const tugNext: TugStateRow = {
     ...tug,
     mode: TUG_MODE_ELIMINATION,
-    current_word: pickRandomWord(ctx),
-    word_version: tug.word_version + 1,
-    next_word_at_micros: now + msToMicros(tug.word_rotate_ms),
     last_tick_at_micros: now,
   };
   replaceRow(ctx.db.tug_state, tug, tugNext);
@@ -698,6 +695,16 @@ function transitionToSuddenDeath(
 
   emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'sudden_death_started', {});
   return { lobby: lobbyNext, match: matchNext, tug: tugNext };
+}
+
+function resolveWinnerFromTugState(tug: TugStateRow): string {
+  if (tug.rope_position > 0) {
+    return TEAM_A;
+  }
+  if (tug.rope_position < 0) {
+    return TEAM_B;
+  }
+  return '';
 }
 
 function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
@@ -743,12 +750,6 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
       last_tick_at_micros: now,
     };
 
-    if (now >= tugNext.next_word_at_micros) {
-      tugNext.current_word = pickRandomWord(ctx);
-      tugNext.word_version += 1;
-      tugNext.next_word_at_micros = now + msToMicros(tug.word_rotate_ms);
-    }
-
     replaceRow(ctx.db.tug_state, tug, tugNext);
     tug = tugNext;
 
@@ -771,18 +772,6 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
   }
 
   if (match.phase === MATCH_PHASE_SUDDEN_DEATH) {
-    if (now >= tug.next_word_at_micros) {
-      const tugNext: TugStateRow = {
-        ...tug,
-        current_word: pickRandomWord(ctx),
-        word_version: tug.word_version + 1,
-        next_word_at_micros: now + msToMicros(tug.word_rotate_ms),
-        last_tick_at_micros: now,
-      };
-      replaceRow(ctx.db.tug_state, tug, tugNext);
-      tug = tugNext;
-    }
-
     for (const playerState of listTugPlayerStatesByMatch(ctx, matchId)) {
       const player = getPlayerById(ctx, playerState.player_id);
       if (!player || player.status !== PLAYER_STATUS_ACTIVE) {
@@ -798,6 +787,10 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
     }
 
     const teamCounts = countActiveByTeam(listPlayersInLobby(ctx, lobby.lobby_id));
+    if (teamCounts.a === 0 && teamCounts.b === 0) {
+      finishMatch(ctx, lobby, match, resolveWinnerFromTugState(tug));
+      return;
+    }
     if (teamCounts.a === 0 && teamCounts.b > 0) {
       finishMatch(ctx, lobby, match, TEAM_B);
       return;

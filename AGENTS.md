@@ -1,36 +1,31 @@
 # AGENTS.md
 
-Operational guide for contributors working in this repository (`st-tow`).
+Operational guide for contributors working in `st-tow`.
 
 ## Purpose
 
-This repo contains a SpacetimeDB 2.0 tug-of-war MVP with:
+This repository contains a SpacetimeDB 2.0 tug-of-war game:
 
-- `server/`: SpacetimeDB TypeScript module (schema + reducers)
-- `web/`: Vite + TypeScript browser client
+- `server/`: authoritative game runtime (schema + reducers)
+- `web/`: realtime React client (Vite + Tailwind + neo-brutalist component system)
 
-This document defines a **known-good local workflow** for mixed Windows + WSL usage.
-
-## Application Architecture
+## Architecture
 
 ### System Boundaries
 
-- `server/` is the authoritative runtime.
-- `web/` is a realtime projection and input client.
-- There is no separate REST/backend service layer between browser and SpacetimeDB.
+- `server/` is the source of truth for all game state.
+- `web/` is a projection + input layer subscribed to database tables.
+- There is no REST API layer between browser and SpacetimeDB.
 
-### Server-Side Layers
+### Server Layering
 
-- Schema + reducers are centralized in `server/src/index.ts`.
-- `server/src/core/*` contains reusable runtime concepts:
-  - lobby lifecycle constants/enums
-  - ID/code/time helpers
-  - reusable key builders (`settingId`, `scheduleId`, etc.)
-- `server/src/games/tug_of_war/*` contains tug-specific domain assets and logic helpers.
+- `server/src/index.ts`: schema, reducers, and core game loop/tick logic.
+- `server/src/core/*`: constants and helpers (IDs, join codes, time math, setting parsing).
+- `server/src/games/tug_of_war/*`: tug-specific assets (word list).
 
-### Data Model Partitioning
+### Data Model
 
-Core/shared tables (cross-game runtime contract):
+Core/shared tables:
 
 - `lobby`
 - `lobby_settings`
@@ -38,16 +33,16 @@ Core/shared tables (cross-game runtime contract):
 - `match`
 - `match_clock`
 - `game_event`
-- `schedule` (private scheduled table backing tick execution)
+- `schedule` (private scheduled-tick backing table)
 
 Tug-specific tables:
 
-- `tug_state` (single row per match)
-- `tug_player_state` (per-player per-match state)
+- `tug_state`
+- `tug_player_state`
 
 Design rule:
 
-- All game state is keyed by `match_id` (not `lobby_id`) so rematches/history are possible without mutating previous match state.
+- Match state is keyed by `match_id`, not `lobby_id`, so rematches are clean.
 
 ### Reducer Topology
 
@@ -61,30 +56,18 @@ Core reducers:
 - `end_match`
 - `reset_lobby`
 
-Game reducers:
+Tug reducers:
 
 - `tug_init`
 - `tug_submit`
-- `tug_tick` (manual trigger)
-- `tug_tick_scheduled` (called by scheduled table entries)
+- `tug_tick`
+- `tug_tick_scheduled`
 
-Key rule:
+Integration seam:
 
-- `start_match` is the integration seam. It creates match/clock state, then dispatches to game init by `lobby.game_type`.
+- `start_match` creates match + clock rows, initializes game state, and schedules ticks.
 
-### Tick/Scheduling Architecture
-
-- SpacetimeDB scheduled tables require:
-  - `scheduled_id: u64`
-  - `scheduled_at: ScheduledAt`
-- `schedule` rows are used as durable scheduling records.
-- The tick loop is pull-based per schedule entry:
-  - schedule row invokes `tug_tick_scheduled`
-  - reducer verifies `active`/`kind`
-  - reducer runs core tick logic (`runTugTick`)
-  - match end states deactivate/remove schedule rows
-
-### Match Phase State Machine
+### Tick and State Machine
 
 Lobby statuses:
 
@@ -100,73 +83,73 @@ Match phases:
 - `SuddenDeath`
 - `PostGame`
 
-Transition summary:
+Flow:
 
 - `create_lobby` -> `Waiting`
-- `start_match` -> `InGame` + clock + tug init + tick schedule
-- timer expiry in tick -> `SuddenDeath` + elimination deadlines
-- win/last-team-standing -> `PostGame` + lobby `Finished`
-- `reset_lobby` returns lobby to `Waiting`
+- `start_match` -> `InGame`
+- timer expiry -> `SuddenDeath`
+- win condition -> `PostGame` + lobby `Finished`
+- `reset_lobby` -> `Waiting`
 
-### Web Client Architecture
+### Current Tug Rules (Important)
 
-- `web/src/app.ts` is a no-framework controller:
-  - connection bootstrap
-  - subscriptions
-  - reducer invocations
-  - UI derivation/render
-- `web/src/ui/games/tug_of_war.ts` is a pure render helper for game panel HTML.
-- `web/src/module_bindings/*` are generated typed bindings and must be treated as generated artifacts.
+- A word is chosen at match initialization.
+- The current word **does not rotate on a timer**.
+- Players are forced to type the current word to contribute force.
+- In sudden death:
+  - wrong submit eliminates player immediately
+  - deadline timeout eliminates player
+- If both teams reach zero active players in sudden death on the same tick, match now ends (no hang).
 
-Client render model:
+### Web Client Structure
 
-- subscribe to shared + tug tables
-- build derived view model from cached rows
-- render sections:
-  - landing/join
-  - lobby team lists + host controls
-  - match HUD + rope + word submit
-  - event feed
+Main entry and shell:
 
-### Naming/Binding Contract
+- `web/src/main.tsx`
+- `web/src/App.tsx`
 
-- Server schema field names are snake_case.
-- Generated TypeScript row/reducer bindings expose camelCase accessors/args in many contexts.
-- Client code currently uses a compatibility helper (`field(...)`) to read either style and avoid brittle runtime mismatches.
+Data/connection layer:
 
-### Eventing and Observability
+- `web/src/data/useSpacetimeSession.ts`: connection bootstrap + subscriptions + snapshot updates
+- `web/src/data/actions.ts`: typed reducer-call wrappers
+- `web/src/data/selectors.ts`: normalization boundary (camel/snake + identity/timestamp normalization)
+- `web/src/lib/selectors.ts`: derived role/phase/view models
 
-- `game_event` is used for operational trace and UI feed.
-- Emit events for:
-  - lobby creation
-  - join/reconnect/leave
-  - settings changes
-  - match start/end
-  - tug init/submission/elimination/sudden death transition
+UI component domains:
 
-### Extending to New Games
+- `web/src/components/layout/*`
+- `web/src/components/lobby/*`
+- `web/src/components/match/*`
+- `web/src/components/host/*`
+- `web/src/components/player/*`
+- `web/src/components/shared/*`
+- `web/src/components/shared/ui/*`
 
-To add a game module cleanly:
+Generated bindings:
 
-1. Add `server/src/games/<name>/`.
-2. Add `<name>_state` and `<name>_player_state` keyed by `match_id`.
-3. Add `<name>_init`, `<name>_action`, optional `<name>_tick`.
-4. Add dispatch branch in `start_match` game init integration seam.
-5. Add web panel under `web/src/ui/games/<name>.ts` and switch by `lobby.game_type`.
+- `web/src/module_bindings/*` are generated artifacts.
 
-## Environment Model (Important)
+### Frontend UX Model
 
-In the current setup, `spacetime` is installed in **Windows**, not native Linux WSL.
-Because of lock/path/identity issues, commands should be split like this:
+- Shared responsive shell with role-aware side panel.
+- Landing screen for host/create + join by code.
+- Host controls for start/end/reset.
+- Match HUD with rope/force/word/timer status.
+- Sticky-focus player input panel using Enter-submit.
+- Event feed from `game_event` telemetry.
+
+## Environment Model (Windows + WSL Split)
+
+Use this split consistently:
 
 - **PowerShell**: all `spacetime ...` commands
-- **WSL terminal (VSCode)**: `npm`, `vite`, and general code editing commands
+- **WSL terminal (VSCode)**: `npm`, `vite`, typecheck/build, editing
 
-Do not mix unless you intentionally know why.
+Avoid running Windows `spacetime` from WSL unless explicitly needed.
 
 ## Canonical Local Run Sequence
 
-### 1) Start local SpacetimeDB (PowerShell, terminal #1)
+### 1) Start local SpacetimeDB (PowerShell terminal #1)
 
 ```powershell
 taskkill /F /IM spacetimedb-standalone.exe 2>$null
@@ -175,16 +158,16 @@ New-Item -ItemType Directory -Force C:\temp\stdb-local\data | Out-Null
 spacetime start --data-dir "C:/temp/stdb-local/data" --listen-addr 127.0.0.1:3000 --in-memory --non-interactive
 ```
 
-Keep this terminal open.
+Keep it running.
 
-### 2) Publish module (PowerShell, terminal #2)
+### 2) Publish module (PowerShell terminal #2)
 
 ```powershell
 cd \\wsl.localhost\Ubuntu\home\tsuda\repos\st-tow\server
 spacetime publish st-tow-dev --server local -p . -y --anonymous
 ```
 
-### 3) Generate client bindings (WSL)
+### 3) Regenerate web bindings only when signatures/schema changed (WSL)
 
 ```bash
 cd ~/repos/st-tow/web
@@ -198,74 +181,22 @@ cd ~/repos/st-tow/web
 VITE_SPACETIMEDB_DB_NAME=st-tow-dev VITE_SPACETIMEDB_HOST=ws://127.0.0.1:3000 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-Open: `http://127.0.0.1:5173/`
-
-### 5) Reset stale browser token (if needed)
-
-In browser console:
-
-```js
-localStorage.removeItem('auth_token')
-location.reload()
-```
+Open `http://127.0.0.1:5173`.
 
 ## Hot Reload Expectations
 
-- `web/` edits: hot reload via Vite.
-- `server/` edits: **not** hot-reloaded automatically.
-  After server changes:
-  1. republish module (PowerShell)
-  2. regenerate bindings if schema/reducer signatures changed (WSL)
+- `web/` edits: Vite hot reload.
+- `server/` edits: not hot-reloaded.
 
-## Known Failure Modes and Fixes
+After any server logic change:
 
-### A) `403 ... not authorized to update database`
-
-Cause: database name already exists under a different local identity.
-
-Fix:
-
-- publish to a fresh name (recommended, e.g. `st-tow-dev`)
-- keep using same publish mode (`--anonymous`) consistently
-
-### B) `error while taking database lock on spacetime.pid` / `os error 1` / `os error 33`
-
-Cause: Windows-side lock contention (multiple `spacetime` processes / WSL invoking Windows binary unpredictably).
-
-Fix:
-
-```powershell
-taskkill /F /IM spacetimedb-standalone.exe 2>$null
-taskkill /F /IM spacetimedb-cli.exe 2>$null
-```
-
-Then restart using the canonical run sequence above.
-
-### C) `No connection could be made ... 127.0.0.1:3000`
-
-Cause: local server not running.
-
-Fix: start step (1) again in PowerShell.
-
-### D) WebSocket attempts `/database/st-tow/...` while module published as `st-tow-dev`
-
-Cause: DB name mismatch.
-
-Fix: launch Vite with:
-
-```bash
-VITE_SPACETIMEDB_DB_NAME=st-tow-dev
-```
-
-### E) `Could not detect the language of the module`
-
-Cause: running `spacetime publish` from wrong directory.
-
-Fix: run from `server/` (`-p .`) or pass correct module path.
+1. republish module (PowerShell)
+2. regenerate bindings if reducer/table signatures changed (WSL)
+3. refresh browser
 
 ## Build / Check Commands
 
-### WSL
+WSL:
 
 ```bash
 cd ~/repos/st-tow/server && npm run typecheck
@@ -273,49 +204,62 @@ cd ~/repos/st-tow/web && npm run typecheck
 cd ~/repos/st-tow/web && npm run build
 ```
 
-### PowerShell
+PowerShell:
 
 ```powershell
 cd \\wsl.localhost\Ubuntu\home\tsuda\repos\st-tow\server
 spacetime build
 ```
 
-## Repository Conventions
+## Known Failure Modes
 
-- Keep shared runtime logic under `server/src/core`.
-- Keep game-specific logic under `server/src/games/<game_name>`.
-- Keep client generic for core tables; switch game UI by `game_type`.
-- Prefer adding new reducers/tables modularly instead of special-casing tug logic in core.
+### A) `403 ... not authorized to update database`
 
-## When Adding/Changing Server Schema
+Cause: local DB owned by different identity.
 
-Always do this sequence:
+Fix:
 
-1. Edit server schema/reducers.
-2. `npm run typecheck` in `server/`.
-3. Publish (`spacetime publish ...`).
-4. Regenerate bindings in `web/src/module_bindings`.
-5. `npm run typecheck` in `web/`.
-6. Validate in browser with 2+ tabs.
+- publish to fresh DB name (e.g. `st-tow-dev`)
+- keep publish mode consistent (`--anonymous`)
 
-## Quick Stop Commands
+### B) `spacetime.pid` lock errors (`os error 1`/`33`)
 
-### PowerShell
+Cause: multiple Windows `spacetime` processes.
+
+Fix:
 
 ```powershell
 taskkill /F /IM spacetimedb-standalone.exe 2>$null
 taskkill /F /IM spacetimedb-cli.exe 2>$null
 ```
 
-### WSL
+Then restart server.
 
-```bash
-pkill -f "vite --host 127.0.0.1 --port 5173" || true
-pkill -f "npm run dev -- --host 127.0.0.1 --port 5173" || true
+### C) Connection refused on `127.0.0.1:3000`
+
+Cause: local SpacetimeDB not running.
+
+Fix: restart step (1).
+
+### D) Wrong DB name in browser connection
+
+Cause: published DB and web env mismatch.
+
+Fix: run web with matching `VITE_SPACETIMEDB_DB_NAME`.
+
+### E) Landing/join screen missing unexpectedly
+
+Cause: stale browser auth token auto-rejoins previous identity context.
+
+Fix in browser console:
+
+```js
+localStorage.removeItem('auth_token');
+location.reload();
 ```
 
-## Notes for Future Improvement
+## Repo Conventions
 
-- Install native `spacetime` inside a newer WSL distro (glibc >= 2.32) to avoid cross-OS command split.
-- Add scripted tasks (`Makefile` or npm scripts) to run publish + generate + dev with one command.
-- Consider introducing `spacetime dev` workflow once environment is fully native.
+- Keep shared primitives in `server/src/core` and game-specific logic in `server/src/games/<name>`.
+- Treat `web/src/module_bindings/*` as generated.
+- Keep backend contracts stable unless intentionally versioning schema/reducer signatures.
