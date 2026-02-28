@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import { Card, CardContent } from '@/components/shared/ui/card';
 import { cn } from '@/lib/utils';
 import type { PlayerInputViewModel } from '@/types/ui';
@@ -19,6 +26,9 @@ export function PlayerInputPanel({
 }: PlayerInputPanelProps) {
   const [typed, setTyped] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [tileScale, setTileScale] = useState(1);
+  const scaleTrackRef = useRef<HTMLDivElement | null>(null);
+  const scaleRowRef = useRef<HTMLDivElement | null>(null);
 
   const targetWord = model?.currentWord ?? '';
   const isEliminated = model?.playerStatus === 'Eliminated';
@@ -27,10 +37,48 @@ export function PlayerInputPanel({
   const displayWord = isEliminated ? 'ELIMINATED' : targetWord || '...';
   const canType = Boolean(model?.canSubmit) && Boolean(targetWord) && !submitting;
 
+  const recomputeTileScale = useCallback(() => {
+    const track = scaleTrackRef.current;
+    const row = scaleRowRef.current;
+    if (!track || !row) {
+      return;
+    }
+    const availableWidth = track.clientWidth;
+    const contentWidth = row.scrollWidth;
+    if (availableWidth <= 0 || contentWidth <= 0) {
+      setTileScale(1);
+      return;
+    }
+    const nextScale = Math.max(0.01, Math.min(1, availableWidth / contentWidth));
+    setTileScale(current => (Math.abs(current - nextScale) < 0.01 ? current : nextScale));
+  }, []);
+
   useEffect(() => {
     setTyped('');
     setSubmitting(false);
   }, [targetWord]);
+
+  useLayoutEffect(() => {
+    recomputeTileScale();
+  }, [displayWord, recomputeTileScale]);
+
+  useEffect(() => {
+    const track = scaleTrackRef.current;
+    const row = scaleRowRef.current;
+    if (!track || !row || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      recomputeTileScale();
+    });
+    observer.observe(track);
+    observer.observe(row);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [recomputeTileScale]);
 
   const handleProgressInput = useCallback(async (value: string): Promise<void> => {
     if (!canType) {
@@ -104,27 +152,38 @@ export function PlayerInputPanel({
               Get ready to type {readyName}!
             </p>
           ) : (
-            <div className="flex flex-wrap justify-center gap-2">
-              {displayWord.split('').map((char, index) => {
-                const isFilled = index < typed.length;
-                const isActive = index === typed.length;
-                return (
-                  <span
-                    key={`${char}-${index}`}
-                    className={cn(
-                      'inline-flex min-h-14 min-w-11 items-center justify-center rounded-[10px] border-2 border-neo-ink px-2 font-display text-3xl font-extrabold uppercase shadow-neo-sm sm:min-h-16 sm:min-w-12 sm:text-4xl',
-                      isEliminated
-                        ? 'bg-neo-danger text-neo-paper'
-                        : isFilled
-                          ? 'bg-neo-success text-neo-paper'
-                          : 'bg-neo-paper text-neo-ink',
-                      !isEliminated && isActive && canType ? 'bg-neo-yellow' : ''
-                    )}
-                  >
-                    {char}
-                  </span>
-                );
-              })}
+            <div ref={scaleTrackRef} className="w-full">
+              <div
+                ref={scaleRowRef}
+                className="mx-auto flex w-max flex-nowrap justify-center gap-2"
+                style={
+                  {
+                    transform: `scale(${tileScale})`,
+                    transformOrigin: 'top center',
+                  } as CSSProperties
+                }
+              >
+                {displayWord.split('').map((char, index) => {
+                  const isFilled = index < typed.length;
+                  const isActive = index === typed.length;
+                  return (
+                    <span
+                      key={`${char}-${index}`}
+                      className={cn(
+                        'inline-flex min-h-14 min-w-11 items-center justify-center rounded-[10px] border-2 border-neo-ink px-2 font-display text-3xl font-extrabold uppercase shadow-neo-sm sm:min-h-16 sm:min-w-12 sm:text-4xl',
+                        isEliminated
+                          ? 'bg-neo-danger text-neo-paper'
+                          : isFilled
+                            ? 'bg-neo-success text-neo-paper'
+                            : 'bg-neo-paper text-neo-ink',
+                        !isEliminated && isActive && canType ? 'bg-neo-yellow' : ''
+                      )}
+                    >
+                      {char}
+                    </span>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

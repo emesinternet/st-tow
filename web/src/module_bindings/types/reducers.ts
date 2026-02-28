@@ -6,6 +6,7 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import ClosePostGameReducer from "../close_post_game_reducer";
 import CreateLobbyReducer from "../create_lobby_reducer";
 import EndMatchReducer from "../end_match_reducer";
 import JoinLobbyReducer from "../join_lobby_reducer";
@@ -21,6 +22,7 @@ import TugRpsContinueReducer from "../tug_rps_continue_reducer";
 import TugSubmitReducer from "../tug_submit_reducer";
 import TugTickReducer from "../tug_tick_reducer";
 
+export type ClosePostGameParams = __Infer<typeof ClosePostGameReducer>;
 export type CreateLobbyParams = __Infer<typeof CreateLobbyReducer>;
 export type EndMatchParams = __Infer<typeof EndMatchReducer>;
 export type JoinLobbyParams = __Infer<typeof JoinLobbyReducer>;

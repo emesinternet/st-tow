@@ -137,6 +137,7 @@ test('selectUiViewModel resolves player by identity case and exposes current wor
     identity: 'C200ABCD',
     selectedLobbyId: '',
     pendingJoinCode: '',
+    ignoredLobbyId: '',
   });
 
   assert.equal(vm.role, 'player');
@@ -151,6 +152,7 @@ test('selector keeps force fields physical and pull fields cumulative', () => {
     identity: 'c200abcd',
     selectedLobbyId: '',
     pendingJoinCode: '',
+    ignoredLobbyId: '',
   });
 
   assert.equal(vm.matchHud?.teamAForce, 7);
@@ -168,6 +170,7 @@ test('selector exposes host score from tug_host_state when present', () => {
     identity: 'c200host',
     selectedLobbyId: '',
     pendingJoinCode: '',
+    ignoredLobbyId: '',
   });
 
   assert.equal(vm.role, 'host');
@@ -217,6 +220,7 @@ test('selector derives pre-match seconds from round_seconds setting with fallbac
     identity: 'c200abcd',
     selectedLobbyId: '',
     pendingJoinCode: '',
+    ignoredLobbyId: '',
   });
   assert.equal(withSetting.preMatchSecondsRemaining, 120);
   assert.equal(withSetting.preMatchHud?.secondsRemaining, 120);
@@ -230,6 +234,7 @@ test('selector derives pre-match seconds from round_seconds setting with fallbac
     identity: 'c200abcd',
     selectedLobbyId: '',
     pendingJoinCode: '',
+    ignoredLobbyId: '',
   });
   assert.equal(withFallback.preMatchSecondsRemaining, 90);
   assert.equal(withFallback.preMatchHud?.secondsRemaining, 90);
@@ -280,6 +285,7 @@ test('selector hides counts for host during voting and shows own team counts for
     identity: 'c200host',
     selectedLobbyId: '',
     pendingJoinCode: '',
+    ignoredLobbyId: '',
   });
   assert.equal(hostVm.rpsTieBreak?.stage, 'Voting');
   assert.equal(hostVm.rpsTieBreak?.myTeamCounts, null);
@@ -291,6 +297,7 @@ test('selector hides counts for host during voting and shows own team counts for
     identity: 'c200abcd',
     selectedLobbyId: '',
     pendingJoinCode: '',
+    ignoredLobbyId: '',
   });
   assert.equal(playerVm.rpsTieBreak?.stage, 'Voting');
   assert.equal(playerVm.rpsTieBreak?.myTeam, 'A');
@@ -324,6 +331,7 @@ test('selector exposes both team choices in reveal stage', () => {
     identity: 'c200host',
     selectedLobbyId: '',
     pendingJoinCode: '',
+    ignoredLobbyId: '',
   });
 
   assert.equal(vm.rpsTieBreak?.stage, 'Reveal');
@@ -331,4 +339,26 @@ test('selector exposes both team choices in reveal stage', () => {
   assert.equal(vm.rpsTieBreak?.teamBChoice, 'scissors');
   assert.equal(vm.rpsTieBreak?.winnerTeam, 'A');
   assert.equal(vm.rpsTieBreak?.canHostContinue, true);
+});
+
+test('selector does not resolve lobby from Left membership', () => {
+  const snapshot = makeBaseSnapshot();
+  snapshot.players[0] = {
+    ...snapshot.players[0],
+    status: 'Left',
+    leftAtMicros: 99n,
+  };
+
+  const vm = selectUiViewModel({
+    connectionState: 'connected',
+    snapshot,
+    identity: 'c200abcd',
+    selectedLobbyId: 'lobby-1',
+    pendingJoinCode: '',
+    ignoredLobbyId: '',
+  });
+
+  assert.equal(vm.phase, 'landing');
+  assert.equal(vm.lobby, null);
+  assert.equal(vm.role, 'observer');
 });

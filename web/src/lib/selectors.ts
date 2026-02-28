@@ -44,6 +44,7 @@ export interface SelectUiViewModelInput {
   identity: string;
   selectedLobbyId: string;
   pendingJoinCode: string;
+  ignoredLobbyId: string;
 }
 
 function normalizeIdentity(identity: string): string {
@@ -99,18 +100,41 @@ function findLobby(
   snapshot: SessionSnapshot,
   identity: string,
   selectedLobbyId: string,
-  pendingJoinCode: string
+  pendingJoinCode: string,
+  ignoredLobbyId: string
 ): NormalizedLobby | null {
+  const canAccessLobby = (lobby: NormalizedLobby): boolean => {
+    if (!identity) {
+      return false;
+    }
+    if (isSameIdentity(lobby.hostIdentity, identity)) {
+      return true;
+    }
+    return snapshot.players.some(
+      player =>
+        player.lobbyId === lobby.lobbyId &&
+        player.status !== 'Left' &&
+        isSameIdentity(player.identity, identity)
+    );
+  };
+
+  const isIgnoredLobby = (lobby: NormalizedLobby): boolean =>
+    !!ignoredLobbyId && lobby.lobbyId === ignoredLobbyId;
+
   if (selectedLobbyId) {
-    const selected = snapshot.lobbies.find(lobby => lobby.lobbyId === selectedLobbyId);
-    if (selected) {
+    const selected = snapshot.lobbies.find(
+      lobby => lobby.lobbyId === selectedLobbyId && !isIgnoredLobby(lobby)
+    );
+    if (selected && canAccessLobby(selected)) {
       return selected;
     }
   }
 
   if (pendingJoinCode) {
     const codeMatch = snapshot.lobbies.find(
-      lobby => lobby.joinCode.toUpperCase() === pendingJoinCode.toUpperCase()
+      lobby =>
+        lobby.joinCode.toUpperCase() === pendingJoinCode.toUpperCase() &&
+        !isIgnoredLobby(lobby)
     );
     if (codeMatch) {
       return codeMatch;
@@ -119,19 +143,24 @@ function findLobby(
 
   if (identity) {
     const hostLobby = [...snapshot.lobbies]
-      .filter(lobby => isSameIdentity(lobby.hostIdentity, identity))
+      .filter(
+        lobby => isSameIdentity(lobby.hostIdentity, identity) && !isIgnoredLobby(lobby)
+      )
       .sort(byCreatedAtDescending)[0];
     if (hostLobby) {
       return hostLobby;
     }
 
     const memberships = snapshot.players
-      .filter(player => isSameIdentity(player.identity, identity))
+      .filter(
+        player =>
+          player.status !== 'Left' && isSameIdentity(player.identity, identity)
+      )
       .sort((a, b) => compareBigIntDescending(a.joinedAtMicros, b.joinedAtMicros));
 
     for (const membership of memberships) {
       const memberLobby = snapshot.lobbies.find(lobby => lobby.lobbyId === membership.lobbyId);
-      if (memberLobby) {
+      if (memberLobby && !isIgnoredLobby(memberLobby)) {
         return memberLobby;
       }
     }
@@ -447,10 +476,7 @@ function buildRpsTieBreakModel(
   const nowMicros = BigInt(Math.trunc(snapshotGeneratedAt)) * 1000n;
   const remainingMicros =
     rpsState.votingEndsAtMicros > nowMicros ? rpsState.votingEndsAtMicros - nowMicros : 0n;
-  const secondsRemaining =
-    rpsState.stage === 'Voting'
-      ? Math.max(0, Math.ceil(Number(remainingMicros) / 1_000_000))
-      : 0;
+  const secondsRemaining = Math.max(0, Math.ceil(Number(remainingMicros) / 1_000_000));
 
   let myTeamCounts: RpsTieBreakViewModel['myTeamCounts'] = null;
   let opponentTeamCounts: RpsTieBreakViewModel['opponentTeamCounts'] = null;
@@ -659,9 +685,16 @@ function buildPreMatchHudModel(
 }
 
 export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
-  const { connectionState, snapshot, identity, selectedLobbyId, pendingJoinCode } = input;
+  const {
+    connectionState,
+    snapshot,
+    identity,
+    selectedLobbyId,
+    pendingJoinCode,
+    ignoredLobbyId,
+  } = input;
 
-  const lobby = findLobby(snapshot, identity, selectedLobbyId, pendingJoinCode);
+  const lobby = findLobby(snapshot, identity, selectedLobbyId, pendingJoinCode, ignoredLobbyId);
     if (!lobby) {
       return {
         connectionState,

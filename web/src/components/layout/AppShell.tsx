@@ -16,7 +16,7 @@ export function AppShell({
   backgroundClassName = '',
 }: AppShellProps) {
   return (
-    <div className={`min-h-screen pb-8 ${backgroundClassName}`}>
+    <div className={`min-h-screen ${backgroundClassName}`}>
       <div className="mx-auto flex min-h-screen w-full max-w-[1200px] flex-col px-3 py-4 sm:px-4 sm:py-6">
         {banner}
         {header}

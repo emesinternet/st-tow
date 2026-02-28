@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
+import dragonGif from '@/assets/dragon.gif';
 import { Card, CardContent } from '@/components/shared/ui/card';
 import { formatSeconds } from '@/lib/format';
 import type { MatchHudViewModel, TeamPlayerViewModel } from '@/types/ui';
@@ -9,9 +10,6 @@ interface MatchHudProps {
   teamAPlayers: TeamPlayerViewModel[];
   teamBPlayers: TeamPlayerViewModel[];
 }
-
-const SPIKE_WALL_CLIP_PATH =
-  'polygon(0% 0%, 75% 0%, 100% 10%, 75% 20%, 100% 30%, 75% 40%, 100% 50%, 75% 60%, 100% 70%, 75% 80%, 100% 90%, 75% 100%, 0% 100%, 25% 90%, 0% 80%, 25% 70%, 0% 60%, 25% 50%, 0% 40%, 25% 30%, 0% 20%, 25% 10%)';
 
 function TeamMarkers({
   players,
@@ -94,9 +92,23 @@ function TeamMarkers({
 
 export function MatchHud({ hud, teamAPlayers, teamBPlayers }: MatchHudProps) {
   const isLobbyPreview = hud.matchId.endsWith(':pre');
+  const isRpsTieBreak = hud.phase === 'TieBreakRps';
   const timerText =
-    hud.phase === 'PreGame' && !isLobbyPreview ? 'READY' : formatSeconds(hud.secondsRemaining);
+    hud.phase === 'PreGame' && !isLobbyPreview
+      ? 'READY'
+      : isRpsTieBreak
+        ? 'RPS'
+        : formatSeconds(hud.secondsRemaining);
   const hostPowerPercent = Math.max(0, Math.min(100, hud.hostPowerMeter));
+  const clampPercent = (value: number): number =>
+    Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 50;
+  const tieZoneStartPercent = clampPercent(hud.tieZoneStartPercent);
+  const tieZoneEndPercentRaw = clampPercent(hud.tieZoneEndPercent);
+  const tieZoneEndPercent =
+    tieZoneEndPercentRaw > tieZoneStartPercent
+      ? tieZoneEndPercentRaw
+      : Math.min(100, tieZoneStartPercent + 10);
+  const tieZoneWidthPercent = Math.max(0, tieZoneEndPercent - tieZoneStartPercent);
 
   const activePowerLabel: Record<string, string> = {
     tech_mode_burst: 'Tech Mode',
@@ -151,11 +163,19 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers }: MatchHudProps) {
         </div>
         <div className="bg-tug-war-gradient relative h-24 overflow-hidden rounded-[16px] border-4 border-neo-ink sm:h-28">
           <div
-            className="absolute inset-y-0 z-10 border-x-2 border-neo-ink/50 bg-neo-yellow/25"
+            className="tie-zone-disco absolute inset-y-0 z-20 border-x-4 border-neo-ink/85"
             style={{
-              left: `${hud.tieZoneStartPercent}%`,
-              width: `${Math.max(0, hud.tieZoneEndPercent - hud.tieZoneStartPercent)}%`,
+              left: `${tieZoneStartPercent}%`,
+              width: `${tieZoneWidthPercent}%`,
             }}
+          />
+          <div
+            className="pointer-events-none absolute inset-y-0 z-30 w-[3px] bg-neo-ink/75"
+            style={{ left: `calc(${tieZoneStartPercent}% - 1.5px)` }}
+          />
+          <div
+            className="pointer-events-none absolute inset-y-0 z-30 w-[3px] bg-neo-ink/75"
+            style={{ left: `calc(${tieZoneEndPercent}% - 1.5px)` }}
           />
           <div className="absolute inset-1.5 grid grid-cols-2 gap-1 overflow-hidden rounded-[12px] sm:inset-2">
             <div className="pr-1.5 pl-2 pt-9 pb-0 sm:pr-2 sm:pl-3 sm:pt-10">
@@ -165,10 +185,10 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers }: MatchHudProps) {
               <TeamMarkers players={teamBPlayers} tone="teamB" />
             </div>
           </div>
-          <div className="absolute inset-y-0 left-1/2 z-20 w-[3px] -translate-x-1/2 bg-neo-ink/35" />
-          <motion.div
-            className="absolute top-1/2 z-30 h-[84%] w-6 -translate-x-1/2 -translate-y-1/2 border-2 border-neo-ink bg-neo-ink sm:w-7"
-            style={{ clipPath: SPIKE_WALL_CLIP_PATH }}
+          <motion.img
+            src={dragonGif}
+            alt="Dragon rope marker"
+            className="pointer-events-none absolute top-1/2 z-30 block h-[86%] w-auto max-w-none -translate-x-1/2 -translate-y-1/2 object-contain"
             animate={{ left: `${hud.normalizedRopePosition}%` }}
             transition={{ type: 'spring', stiffness: 150, damping: 24 }}
           />

@@ -34,6 +34,7 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import ClosePostGameReducer from "./close_post_game_reducer";
 import CreateLobbyReducer from "./create_lobby_reducer";
 import EndMatchReducer from "./end_match_reducer";
 import JoinLobbyReducer from "./join_lobby_reducer";
@@ -302,6 +303,7 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("close_post_game", ClosePostGameReducer),
   __reducerSchema("create_lobby", CreateLobbyReducer),
   __reducerSchema("end_match", EndMatchReducer),
   __reducerSchema("join_lobby", JoinLobbyReducer),

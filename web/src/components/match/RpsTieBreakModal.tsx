@@ -71,6 +71,7 @@ export function RpsTieBreakModal({
   onContinue,
 }: RpsTieBreakModalProps) {
   const isReveal = model?.stage === 'Reveal';
+  const isTieReveal = isReveal && model?.winnerTeam !== 'A' && model?.winnerTeam !== 'B';
   const [revealResolved, setRevealResolved] = useState(false);
   const [revealAnimationVersion, setRevealAnimationVersion] = useState(0);
   const revealSignature = useMemo(() => {
@@ -117,24 +118,35 @@ export function RpsTieBreakModal({
           {isReveal ? (
             <div className="mt-1 space-y-0.5 text-center sm:mt-2 sm:space-y-1">
               {revealResolved ? (
-                <>
+                isTieReveal ? (
                   <motion.p
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.2, ease: 'easeOut' }}
-                    className="font-display text-2xl font-black uppercase tracking-wide text-neo-ink sm:text-4xl"
-                  >
-                    {beatsLabel(model)}
-                  </motion.p>
-                  <motion.p
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.22, delay: 0.04, ease: 'easeOut' }}
+                    transition={{ duration: 0.18, ease: 'easeOut' }}
                     className="font-display text-4xl font-black uppercase tracking-wide text-neo-ink sm:text-6xl"
                   >
-                    {winnerLabel(model.winnerTeam)}!
+                    TIE!
                   </motion.p>
-                </>
+                ) : (
+                  <>
+                    <motion.p
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.2, ease: 'easeOut' }}
+                      className="font-display text-2xl font-black uppercase tracking-wide text-neo-ink sm:text-4xl"
+                    >
+                      {beatsLabel(model)}
+                    </motion.p>
+                    <motion.p
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.22, delay: 0.04, ease: 'easeOut' }}
+                      className="font-display text-4xl font-black uppercase tracking-wide text-neo-ink sm:text-6xl"
+                    >
+                      {winnerLabel(model.winnerTeam)}!
+                    </motion.p>
+                  </>
+                )
               ) : (
                 <>
                   <p className="invisible font-display text-2xl font-black uppercase tracking-wide sm:text-4xl">
@@ -148,50 +160,58 @@ export function RpsTieBreakModal({
             </div>
           ) : (
             <p className="text-center font-display text-3xl font-black uppercase tracking-wide text-neo-ink sm:text-4xl">
-              VOTE!
+              {role === 'host' ? 'PLAYERS ARE VOTING!' : 'VOTE!'}
             </p>
           )}
 
           {model.stage === 'Voting' ? (
-            <>
-              <p className="mt-0 text-center font-display text-5xl font-black tabular-nums text-neo-ink sm:text-6xl">
-                {model.secondsRemaining}
-              </p>
-              <div className="grid gap-3 sm:grid-cols-3">
-                {CHOICES.map(choice => {
-                  const voteCount = model.myTeamCounts
-                    ? model.myTeamCounts[choice.id]
-                    : null;
-                  return (
-                    <Button
-                      key={choice.id}
-                      type="button"
-                      variant={voteButtonVariant}
-                      disabled={!model.canVote}
-                      onClick={() => void onVote(choice.id)}
-                      className={`h-44 flex-col gap-1 py-2 disabled:opacity-100 sm:h-52 ${
-                        model.myVote === choice.id ? 'ring-4 ring-neo-yellow' : ''
-                      }`}
-                    >
-                      <img
-                        src={placeholderForChoice(choice.id)}
-                        alt={choice.label}
-                        className={`h-auto w-[8.25rem] max-w-full object-contain sm:w-[9.9rem] ${mirrorVoteHands ? 'scale-x-[-1]' : ''}`}
-                      />
-                      <span className="text-base sm:text-lg">{choice.label}</span>
-                      <span className="min-h-[14px] text-[11px] font-mono font-semibold normal-case tracking-normal">
-                        {voteCount == null ? '' : `${voteCount} votes`}
-                      </span>
-                    </Button>
-                  );
-                })}
-              </div>
-              {!(role === 'player' && model.myTeamCounts) ? (
-                <p className="text-center font-display text-sm font-black uppercase tracking-wide text-neo-muted">
-                  Voting in progress...
+            role === 'host' ? (
+              <>
+                <p className="mt-0 text-center font-display text-5xl font-black tabular-nums text-neo-ink sm:text-6xl">
+                  {model.secondsRemaining}
                 </p>
-              ) : null}
-            </>
+              </>
+            ) : (
+              <>
+                <p className="mt-0 text-center font-display text-5xl font-black tabular-nums text-neo-ink sm:text-6xl">
+                  {model.secondsRemaining}
+                </p>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  {CHOICES.map(choice => {
+                    const voteCount = model.myTeamCounts
+                      ? model.myTeamCounts[choice.id]
+                      : null;
+                    return (
+                      <Button
+                        key={choice.id}
+                        type="button"
+                        variant={voteButtonVariant}
+                        disabled={!model.canVote}
+                        onClick={() => void onVote(choice.id)}
+                        className={`h-44 flex-col gap-1 py-2 disabled:opacity-100 sm:h-52 ${
+                          model.myVote === choice.id ? 'ring-4 ring-neo-yellow' : ''
+                        }`}
+                      >
+                        <img
+                          src={placeholderForChoice(choice.id)}
+                          alt={choice.label}
+                          className={`h-auto w-[8.25rem] max-w-full object-contain sm:w-[9.9rem] ${mirrorVoteHands ? 'scale-x-[-1]' : ''}`}
+                        />
+                        <span className="text-base sm:text-lg">{choice.label}</span>
+                        <span className="min-h-[14px] text-[11px] font-mono font-semibold normal-case tracking-normal">
+                          {voteCount == null ? '' : `${voteCount} votes`}
+                        </span>
+                      </Button>
+                    );
+                  })}
+                </div>
+                {!(role === 'player' && model.myTeamCounts) ? (
+                  <p className="text-center font-display text-sm font-black uppercase tracking-wide text-neo-muted">
+                    Voting in progress...
+                  </p>
+                ) : null}
+              </>
+            )
           ) : (
             <>
               <div className="grid flex-1 items-center gap-2 sm:grid-cols-2">
@@ -243,7 +263,11 @@ export function RpsTieBreakModal({
               </div>
               <div className="mt-1">
                 {revealResolved ? (
-                  model.canHostContinue ? (
+                  isTieReveal ? (
+                    <p className="invisible text-center font-display text-sm font-black uppercase tracking-wide">
+                      Waiting for host
+                    </p>
+                  ) : model.canHostContinue ? (
                     <div className="flex justify-center">
                       <Button type="button" variant="teamB" onClick={() => void onContinue()}>
                         Continue

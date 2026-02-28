@@ -42,9 +42,11 @@ export interface GameActions {
   ) => Promise<void>;
   joinLobby: (joinCode: string, displayName: string) => Promise<void>;
   setLobbySetting: (lobbyId: string, key: string, valueJson: string) => Promise<void>;
+  leaveLobby: (lobbyId: string) => Promise<void>;
   startMatch: (lobbyId: string) => Promise<void>;
   resetLobby: (lobbyId: string) => Promise<void>;
   endMatch: (lobbyId: string) => Promise<void>;
+  closePostGame: (lobbyId: string) => Promise<void>;
   submitWord: (matchId: string, wordVersion: number, typed: string) => Promise<void>;
   recordMistake: (matchId: string) => Promise<void>;
   activatePower: (matchId: string, powerId: string) => Promise<void>;
@@ -81,6 +83,10 @@ export function buildActions(connection: DbConnection | null): GameActions {
         valueJson,
       });
     },
+    leaveLobby: async (lobbyId: string) => {
+      const conn = assertConnection(connection);
+      await callReducer(conn, 'leave_lobby', { lobbyId });
+    },
     startMatch: async (lobbyId: string) => {
       const conn = assertConnection(connection);
       await callReducer(conn, 'start_match', { lobbyId });
@@ -92,6 +98,10 @@ export function buildActions(connection: DbConnection | null): GameActions {
     endMatch: async (lobbyId: string) => {
       const conn = assertConnection(connection);
       await callReducer(conn, 'end_match', { lobbyId });
+    },
+    closePostGame: async (lobbyId: string) => {
+      const conn = assertConnection(connection);
+      await callReducer(conn, 'close_post_game', { lobbyId });
     },
     submitWord: async (matchId: string, wordVersion: number, typed: string) => {
       const conn = assertConnection(connection);

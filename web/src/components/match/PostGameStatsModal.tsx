@@ -12,9 +12,11 @@ interface PostGameStatsModalProps {
   open: boolean;
   onClose: () => void;
   onResetMatch: () => Promise<void>;
+  onDebugConfetti: () => void;
   role: UiRole;
   lobby: LobbyViewModel | null;
   hud: MatchHudViewModel | null;
+  waitingForHostSeconds: number | null;
 }
 
 function teamLabel(team: string): string {
@@ -29,11 +31,11 @@ function teamLabel(team: string): string {
 
 function playerRows(lobby: LobbyViewModel): TeamPlayerViewModel[] {
   return [...lobby.teamA, ...lobby.teamB].sort((left, right) => {
-    if (left.team !== right.team) {
-      return left.team.localeCompare(right.team);
-    }
     if (left.correctCount !== right.correctCount) {
       return right.correctCount - left.correctCount;
+    }
+    if (left.accuracy !== right.accuracy) {
+      return right.accuracy - left.accuracy;
     }
     return left.displayName.localeCompare(right.displayName);
   });
@@ -43,9 +45,11 @@ export function PostGameStatsModal({
   open,
   onClose,
   onResetMatch,
+  onDebugConfetti,
   role,
   lobby,
   hud,
+  waitingForHostSeconds,
 }: PostGameStatsModalProps) {
   if (!open || !lobby) {
     return null;
@@ -55,12 +59,14 @@ export function PostGameStatsModal({
   const teamBSuccessful = lobby.teamB.reduce((total, player) => total + player.correctCount, 0);
   const hostSuccessful = Math.max(0, hud?.hostSuccessfulWords ?? 0);
   const rows = playerRows(lobby);
+  const visibleRowCount = Math.max(1, Math.min(10, rows.length));
+  const tableMaxHeightPx = 42 + visibleRowCount * 36;
   const winnerLabel =
     hud?.winnerTeam === 'A' ? 'Red Team' : hud?.winnerTeam === 'B' ? 'Blue Team' : 'No winner';
 
   return (
     <div className="fixed inset-0 z-[85] flex items-center justify-center bg-neo-ink/45 p-3">
-      <Card className="w-full max-w-5xl">
+      <Card className="relative z-[87] w-full max-w-5xl">
         <CardContent className="space-y-3">
           <p className="text-center font-display text-3xl font-black uppercase tracking-wide text-neo-ink sm:text-5xl">
             Winner: {winnerLabel}
@@ -86,7 +92,10 @@ export function PostGameStatsModal({
             </div>
           </div>
 
-          <div className="max-h-[46vh] overflow-auto rounded-[12px] border-2 border-neo-ink">
+          <div
+            className="overflow-auto rounded-[12px] border-2 border-neo-ink"
+            style={{ maxHeight: `${tableMaxHeightPx}px` }}
+          >
             <table className="w-full border-collapse text-left">
               <thead className="bg-neo-yellow/50">
                 <tr>
@@ -117,6 +126,9 @@ export function PostGameStatsModal({
               <Button type="button" size="sm" variant="neutral" onClick={onClose}>
                 Close
               </Button>
+              <Button type="button" size="sm" variant="neutral" onClick={onDebugConfetti}>
+                DBG Confetti
+              </Button>
               <Button
                 type="button"
                 size="sm"
@@ -130,7 +142,9 @@ export function PostGameStatsModal({
             </div>
           ) : (
             <p className="pt-1 text-center font-display text-sm font-black uppercase tracking-wide text-neo-muted">
-              Waiting for host
+              {waitingForHostSeconds == null
+                ? 'Waiting for host'
+                : `Lobby closing in ${waitingForHostSeconds}`}
             </p>
           )}
         </CardContent>

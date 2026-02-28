@@ -94,14 +94,102 @@ body {
 .bg-rps-reveal-gradient {
   background: linear-gradient(
     90deg,
-    oklch(0.89 0.1 30 / 0.9) 0%,
-    oklch(0.9 0.07 350 / 0.65) 46%,
-    oklch(0.86 0.11 250 / 0.9) 100%
+    oklch(0.89 0.1 30) 0%,
+    oklch(0.9 0.07 350) 46%,
+    oklch(0.86 0.11 250) 100%
   );
+}
+
+.tie-zone-disco {
+  position: relative;
+  overflow: hidden;
+  background-color: hsl(var(--accent));
+  background-image:
+    linear-gradient(
+      45deg,
+      hsl(var(--bg) / 0.14) 25%,
+      transparent 25%,
+      transparent 75%,
+      hsl(var(--bg) / 0.14) 75%
+    ),
+    linear-gradient(
+      45deg,
+      transparent 25%,
+      hsl(var(--fg) / 0.15) 25%,
+      hsl(var(--fg) / 0.15) 75%,
+      transparent 75%
+    );
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+  box-shadow: inset 0 0 0 2px hsl(var(--border) / 0.4);
+  animation: tie-zone-disco-pan 900ms linear infinite;
+}
+
+.tie-zone-disco::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 30%, hsl(var(--card) / 0.5) 0 9%, transparent 26%),
+    radial-gradient(circle at 74% 66%, hsl(var(--card) / 0.4) 0 7%, transparent 22%);
+  mix-blend-mode: screen;
+}
+
+.tie-zone-disco::after {
+  content: '';
+  position: absolute;
+  inset: -30% -60%;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    transparent 40%,
+    hsl(var(--card) / 0.2) 50%,
+    hsl(var(--card) / 0.75) 58%,
+    transparent 70%,
+    transparent 100%
+  );
+  mix-blend-mode: soft-light;
+  animation: tie-zone-shimmer 1800ms ease-in-out infinite;
 }
 
 .fade-enter {
   animation: fade-enter 280ms ease-out;
+}
+
+.confetti-piece {
+  opacity: 0;
+  border-radius: 2px;
+  border: 2px solid hsl(var(--border));
+  animation-name: confetti-burst-up;
+  animation-timing-function: cubic-bezier(0.25, 0.8, 0.3, 1);
+  animation-fill-mode: forwards;
+}
+
+@keyframes confetti-burst-up {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.85) rotate(0deg);
+    opacity: 1;
+  }
+  70% {
+    transform: translate3d(
+        var(--confetti-burst-x, 0px),
+        var(--confetti-burst-y, -420px),
+        0
+      )
+      rotate(var(--confetti-rotate, 540deg));
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(
+        var(--confetti-burst-x, 0px),
+        var(--confetti-burst-y, -420px),
+        0
+      )
+      rotate(var(--confetti-rotate, 540deg));
+    opacity: 0;
+  }
 }
 
 @keyframes fade-enter {
@@ -112,5 +200,28 @@ body {
   to {
     transform: translateY(0);
     opacity: 1;
+  }
+}
+
+@keyframes tie-zone-disco-pan {
+  from {
+    background-position: 0 0, 8px 8px;
+  }
+  to {
+    background-position: 16px 16px, 24px 24px;
+  }
+}
+
+@keyframes tie-zone-shimmer {
+  0% {
+    transform: translateX(-48%) skewX(-18deg);
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.95;
+  }
+  100% {
+    transform: translateX(48%) skewX(-18deg);
+    opacity: 0.25;
   }
 }

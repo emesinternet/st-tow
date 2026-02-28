@@ -315,6 +315,14 @@ type MatchScheduleRow = Infer<typeof matchScheduleRow>;
 const PRE_GAME_COUNTDOWN_SECONDS = 3;
 const HOST_POWER_METER_MAX = 100;
 const RPS_VOTE_SECONDS = 10;
+// Includes hand bounce animation time plus a 3s tie hold before revote.
+const RPS_TIE_REVEAL_SECONDS = 5;
+const POST_GAME_CLOSE_DELAY_SECONDS = 10;
+const POST_GAME_IDLE_CLOSE_DELAY_SECONDS = 300;
+const POST_GAME_CLOSE_AT_SETTING_KEY = '__postgame_close_at_micros';
+const POST_GAME_IDLE_CLOSE_AT_SETTING_KEY = '__postgame_idle_close_at_micros';
+const SCHEDULE_KIND_TICK = 'tick';
+const SCHEDULE_KIND_POST_GAME_CLOSE = 'postgame_close';
 const RPS_STAGE_VOTING = 'Voting';
 const RPS_STAGE_REVEAL = 'Reveal';
 const TIE_ZONE_PERCENT_OPTIONS = new Set([10, 20, 30, 40]);
@@ -526,6 +534,33 @@ function clearTugRpsStateForMatch(ctx: ReducerCtx<any>, matchId: string): void {
   if (row) {
     ctx.db.tug_rps_state.delete(row);
   }
+}
+
+function clearMatchRuntimeRows(ctx: ReducerCtx<any>, matchId: string): void {
+  removeTickSchedule(ctx, matchId);
+  removeMatchSchedule(ctx, matchId, SCHEDULE_KIND_POST_GAME_CLOSE);
+
+  const clock = getMatchClockByMatchId(ctx, matchId);
+  if (clock) {
+    ctx.db.match_clock.delete(clock);
+  }
+
+  const tugState = getTugStateByMatchId(ctx, matchId);
+  if (tugState) {
+    ctx.db.tug_state.delete(tugState);
+  }
+
+  const hostState = getTugHostStateByMatchId(ctx, matchId);
+  if (hostState) {
+    ctx.db.tug_host_state.delete(hostState);
+  }
+
+  for (const row of listTugPlayerStatesByMatch(ctx, matchId)) {
+    ctx.db.tug_player_state.delete(row);
+  }
+
+  clearTugRpsStateForMatch(ctx, matchId);
+  clearTugRpsVotesByMatch(ctx, matchId);
 }
 
 function getPlayerById(ctx: ReducerCtx<any>, playerId: string): PlayerRow | null {
@@ -753,6 +788,47 @@ function getLobbySettingInt(
   return parsed;
 }
 
+function parseBigIntJson(valueJson: string): bigint | null {
+  try {
+    const parsed = JSON.parse(valueJson) as unknown;
+    if (typeof parsed === 'bigint') {
+      return parsed;
+    }
+    if (typeof parsed === 'number' && Number.isFinite(parsed)) {
+      return BigInt(Math.trunc(parsed));
+    }
+    if (typeof parsed === 'string' && parsed.length > 0) {
+      return BigInt(parsed);
+    }
+    return null;
+  } catch {
+    if (valueJson.length === 0) {
+      return null;
+    }
+    try {
+      return BigInt(valueJson);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function getLobbySettingBigInt(
+  ctx: ReducerCtx<any>,
+  lobbyId: string,
+  key: string,
+  fallback: bigint
+): bigint {
+  const row = findFirst<InferTypeOfRow<typeof lobbySettingsRow>>(
+    ctx.db.lobby_settings.iter() as Iterable<InferTypeOfRow<typeof lobbySettingsRow>>,
+    item => item.setting_id === settingId(lobbyId, key)
+  );
+  if (!row) {
+    return fallback;
+  }
+  return parseBigIntJson(row.value_json) ?? fallback;
+}
+
 function upsertLobbySetting(
   ctx: ReducerCtx<any>,
   lobbyId: string,
@@ -782,8 +858,42 @@ function seedDefaultLobbySettings(ctx: ReducerCtx<any>, lobbyId: string): void {
   }
 }
 
-function removeTickSchedule(ctx: ReducerCtx<any>, matchId: string): void {
-  const key = scheduleId(matchId, 'tick');
+function removeLobbySetting(
+  ctx: ReducerCtx<any>,
+  lobbyId: string,
+  key: string
+): void {
+  const id = settingId(lobbyId, key);
+  const existing = findFirst<InferTypeOfRow<typeof lobbySettingsRow>>(
+    ctx.db.lobby_settings.iter() as Iterable<InferTypeOfRow<typeof lobbySettingsRow>>,
+    row => row.setting_id === id
+  );
+  if (existing) {
+    ctx.db.lobby_settings.delete(existing);
+  }
+}
+
+function listLobbySettings(
+  ctx: ReducerCtx<any>,
+  lobbyId: string
+): InferTypeOfRow<typeof lobbySettingsRow>[] {
+  const rows: InferTypeOfRow<typeof lobbySettingsRow>[] = [];
+  for (const row of ctx.db.lobby_settings.iter() as Iterable<
+    InferTypeOfRow<typeof lobbySettingsRow>
+  >) {
+    if (row.lobby_id === lobbyId) {
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+
+function removeMatchSchedule(
+  ctx: ReducerCtx<any>,
+  matchId: string,
+  kind: string
+): void {
+  const key = scheduleId(matchId, kind);
   const existing = findFirst<MatchScheduleRow>(
     ctx.db.match_schedule.iter() as Iterable<MatchScheduleRow>,
     row => row.schedule_key === key
@@ -791,6 +901,25 @@ function removeTickSchedule(ctx: ReducerCtx<any>, matchId: string): void {
   if (existing) {
     ctx.db.match_schedule.delete(existing);
   }
+}
+
+function removeTickSchedule(ctx: ReducerCtx<any>, matchId: string): void {
+  removeMatchSchedule(ctx, matchId, SCHEDULE_KIND_TICK);
+}
+
+function ensurePostGameCloseSchedule(
+  ctx: ReducerCtx<any>,
+  matchId: string
+): void {
+  removeMatchSchedule(ctx, matchId, SCHEDULE_KIND_POST_GAME_CLOSE);
+  ctx.db.match_schedule.insert({
+    scheduled_id: 0n,
+    schedule_key: scheduleId(matchId, SCHEDULE_KIND_POST_GAME_CLOSE),
+    match_id: matchId,
+    kind: SCHEDULE_KIND_POST_GAME_CLOSE,
+    active: true,
+    scheduled_at: ScheduleAt.interval(msToMicros(250)),
+  });
 }
 
 function listPlayersInLobby(ctx: ReducerCtx<any>, lobbyId: string): PlayerRow[] {
@@ -801,6 +930,43 @@ function listPlayersInLobby(ctx: ReducerCtx<any>, lobbyId: string): PlayerRow[] 
     }
   }
   return players;
+}
+
+function closeLobbyAfterPostGame(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  matchId: string
+): void {
+  const closedAt = nowMicros(ctx);
+
+  for (const player of listPlayersInLobby(ctx, lobby.lobby_id)) {
+    if (player.status === PLAYER_STATUS_LEFT) {
+      continue;
+    }
+    replaceRow(ctx.db.player, player, {
+      ...player,
+      status: PLAYER_STATUS_LEFT,
+      left_at_micros: closedAt,
+      eliminated_reason: '',
+    });
+  }
+
+  clearMatchRuntimeRows(ctx, matchId);
+
+  const match = getMatchById(ctx, matchId);
+  if (match) {
+    ctx.db.match.delete(match);
+  }
+
+  removeLobbySetting(ctx, lobby.lobby_id, POST_GAME_CLOSE_AT_SETTING_KEY);
+  removeLobbySetting(ctx, lobby.lobby_id, POST_GAME_IDLE_CLOSE_AT_SETTING_KEY);
+  for (const row of listLobbySettings(ctx, lobby.lobby_id)) {
+    ctx.db.lobby_settings.delete(row);
+  }
+  for (const player of listPlayersInLobby(ctx, lobby.lobby_id)) {
+    ctx.db.player.delete(player);
+  }
+  ctx.db.lobby.delete(lobby);
 }
 
 function countActiveByTeam(players: PlayerRow[]): { a: number; b: number } {
@@ -1047,13 +1213,96 @@ function finishMatch(
   replaceRow(ctx.db.lobby, lobby, lobbyNext);
 
   removeTickSchedule(ctx, match.match_id);
+  const idleCloseAtMicros =
+    nowMicros(ctx) + msToMicros(POST_GAME_IDLE_CLOSE_DELAY_SECONDS * 1000);
+  upsertLobbySetting(
+    ctx,
+    lobby.lobby_id,
+    POST_GAME_IDLE_CLOSE_AT_SETTING_KEY,
+    JSON.stringify(idleCloseAtMicros.toString())
+  );
+  removeLobbySetting(ctx, lobby.lobby_id, POST_GAME_CLOSE_AT_SETTING_KEY);
+  ensurePostGameCloseSchedule(ctx, match.match_id);
+  emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'postgame_idle_close_started', {
+    dismiss_at_micros: idleCloseAtMicros.toString(),
+    seconds: POST_GAME_IDLE_CLOSE_DELAY_SECONDS,
+  });
   emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'match_finished', {
     winner_team: resolvedWinnerTeam,
   });
 }
 
+function runPostGameCloseTick(
+  ctx: ReducerCtx<any>,
+  matchId: string
+): void {
+  const match = getMatchById(ctx, matchId);
+  if (!match) {
+    removeMatchSchedule(ctx, matchId, SCHEDULE_KIND_POST_GAME_CLOSE);
+    return;
+  }
+
+  const lobby = getLobbyById(ctx, match.lobby_id);
+  if (!lobby) {
+    clearMatchRuntimeRows(ctx, matchId);
+    ctx.db.match.delete(match);
+    return;
+  }
+
+  if (
+    match.phase !== MATCH_PHASE_POST_GAME ||
+    lobby.active_match_id !== matchId
+  ) {
+    removeMatchSchedule(ctx, matchId, SCHEDULE_KIND_POST_GAME_CLOSE);
+    removeLobbySetting(ctx, lobby.lobby_id, POST_GAME_CLOSE_AT_SETTING_KEY);
+    removeLobbySetting(ctx, lobby.lobby_id, POST_GAME_IDLE_CLOSE_AT_SETTING_KEY);
+    return;
+  }
+
+  const dismissAtMicros = getLobbySettingBigInt(
+    ctx,
+    lobby.lobby_id,
+    POST_GAME_CLOSE_AT_SETTING_KEY,
+    0n
+  );
+  const idleDismissAtMicros = getLobbySettingBigInt(
+    ctx,
+    lobby.lobby_id,
+    POST_GAME_IDLE_CLOSE_AT_SETTING_KEY,
+    0n
+  );
+  if (dismissAtMicros <= 0n && idleDismissAtMicros <= 0n) {
+    removeMatchSchedule(ctx, matchId, SCHEDULE_KIND_POST_GAME_CLOSE);
+    return;
+  }
+
+  const now = nowMicros(ctx);
+  const isManualDue = dismissAtMicros > 0n && now >= dismissAtMicros;
+  const isIdleDue = idleDismissAtMicros > 0n && now >= idleDismissAtMicros;
+  if (!isManualDue && !isIdleDue) {
+    return;
+  }
+
+  emitGameEvent(ctx, lobby.lobby_id, matchId, 'postgame_close_completed', {
+    closed_at_micros: now.toString(),
+    reason: isManualDue ? 'manual' : 'idle_timeout',
+  });
+  closeLobbyAfterPostGame(ctx, lobby, matchId);
+}
+
 function isValidRpsChoice(value: string): value is RpsChoice {
   return value === 'rock' || value === 'paper' || value === 'scissors';
+}
+
+function randomRpsChoice(ctx: ReducerCtx<any>): RpsChoice {
+  const roll = ctx.random.integerInRange(0, 2);
+  if (roll === 0) {
+    return 'rock';
+  }
+  if (roll === 1) {
+    return 'paper';
+  }
+  return 'scissors';
 }
 
 interface TeamVoteCounts {
@@ -1508,20 +1757,17 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
       return;
     }
 
-    if (rpsState.stage !== RPS_STAGE_VOTING) {
-      return;
-    }
+    if (rpsState.stage === RPS_STAGE_REVEAL) {
+      if (rpsState.winner_team === TEAM_A || rpsState.winner_team === TEAM_B) {
+        return;
+      }
+      if (
+        rpsState.voting_ends_at_micros <= 0n ||
+        !isPhaseExpired(rpsState.voting_ends_at_micros, now)
+      ) {
+        return;
+      }
 
-    if (!isPhaseExpired(rpsState.voting_ends_at_micros, now)) {
-      return;
-    }
-
-    const voteCounts = countRpsVotesByTeam(ctx, lobby, matchId);
-    const teamAChoice = resolveMajorityRpsChoiceFromCounts(voteCounts.a);
-    const teamBChoice = resolveMajorityRpsChoiceFromCounts(voteCounts.b);
-    const winnerTeam = resolveRpsWinner(teamAChoice, teamBChoice);
-
-    if (!winnerTeam) {
       const nextRound = rpsState.round_number + 1;
       const nextVotingEndsAt = now + msToMicros(RPS_VOTE_SECONDS * 1000);
       replaceRow(ctx.db.tug_rps_state, rpsState, {
@@ -1545,6 +1791,52 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
       emitGameEvent(ctx, lobby.lobby_id, matchId, 'rps_round_revote', {
         round_number: nextRound,
         voting_seconds: RPS_VOTE_SECONDS,
+      });
+      return;
+    }
+
+    if (rpsState.stage !== RPS_STAGE_VOTING) {
+      return;
+    }
+
+    if (!isPhaseExpired(rpsState.voting_ends_at_micros, now)) {
+      return;
+    }
+
+    const voteCounts = countRpsVotesByTeam(ctx, lobby, matchId);
+    let teamAChoice = resolveMajorityRpsChoiceFromCounts(voteCounts.a);
+    let teamBChoice = resolveMajorityRpsChoiceFromCounts(voteCounts.b);
+    if (!teamAChoice && !teamBChoice) {
+      teamAChoice = randomRpsChoice(ctx);
+      teamBChoice = randomRpsChoice(ctx);
+    }
+    const winnerTeam = resolveRpsWinner(teamAChoice, teamBChoice);
+
+    if (!winnerTeam) {
+      const tieRevealEndsAt = now + msToMicros(RPS_TIE_REVEAL_SECONDS * 1000);
+      replaceRow(ctx.db.tug_rps_state, rpsState, {
+        ...rpsState,
+        stage: RPS_STAGE_REVEAL,
+        voting_ends_at_micros: tieRevealEndsAt,
+        team_a_choice: teamAChoice,
+        team_b_choice: teamBChoice,
+        winner_team: '',
+      });
+
+      const clockNext: MatchClockRow = {
+        ...clock,
+        phase_ends_at: new Timestamp(tieRevealEndsAt),
+        seconds_remaining: RPS_TIE_REVEAL_SECONDS,
+      };
+      replaceRow(ctx.db.match_clock, clock, clockNext);
+
+      emitGameEvent(ctx, lobby.lobby_id, matchId, 'rps_reveal_ready', {
+        round_number: rpsState.round_number,
+        team_a_choice: teamAChoice,
+        team_b_choice: teamBChoice,
+        winner_team: '',
+        tie: true,
+        reveal_seconds: RPS_TIE_REVEAL_SECONDS,
       });
       return;
     }
@@ -1850,6 +2142,16 @@ export const start_match = spacetimedb.reducer(
       throw new Error('Match is already active');
     }
 
+    if (lobby.active_match_id) {
+      removeMatchSchedule(
+        ctx,
+        lobby.active_match_id,
+        SCHEDULE_KIND_POST_GAME_CLOSE
+      );
+    }
+    removeLobbySetting(ctx, lobby_id, POST_GAME_CLOSE_AT_SETTING_KEY);
+    removeLobbySetting(ctx, lobby_id, POST_GAME_IDLE_CLOSE_AT_SETTING_KEY);
+
     resetPlayersForNewMatch(ctx, lobby_id);
 
     const matchId = newId(ctx, 'match');
@@ -1902,9 +2204,9 @@ export const start_match = spacetimedb.reducer(
     removeTickSchedule(ctx, matchId);
     ctx.db.match_schedule.insert({
       scheduled_id: 0n,
-      schedule_key: scheduleId(matchId, 'tick'),
+      schedule_key: scheduleId(matchId, SCHEDULE_KIND_TICK),
       match_id: matchId,
-      kind: 'tick',
+      kind: SCHEDULE_KIND_TICK,
       active: true,
       scheduled_at: ScheduleAt.interval(msToMicros(tickRateMs)),
     });
@@ -1939,6 +2241,36 @@ export const end_match = spacetimedb.reducer(
   }
 );
 
+export const close_post_game = spacetimedb.reducer(
+  { lobby_id: t.string() },
+  (ctx, { lobby_id }) => {
+    const lobby = getLobbyOrThrow(ctx, lobby_id);
+    assertHost(ctx, lobby);
+
+    if (!lobby.active_match_id) {
+      throw new Error('No active match for this lobby');
+    }
+
+    const match = getMatchById(ctx, lobby.active_match_id);
+    if (!match || match.phase !== MATCH_PHASE_POST_GAME) {
+      throw new Error('Post-game is not active');
+    }
+
+    const dismissAtMicros = nowMicros(ctx) + msToMicros(POST_GAME_CLOSE_DELAY_SECONDS * 1000);
+    upsertLobbySetting(
+      ctx,
+      lobby_id,
+      POST_GAME_CLOSE_AT_SETTING_KEY,
+      JSON.stringify(dismissAtMicros.toString())
+    );
+    ensurePostGameCloseSchedule(ctx, match.match_id);
+    emitGameEvent(ctx, lobby_id, match.match_id, 'postgame_close_started', {
+      dismiss_at_micros: dismissAtMicros.toString(),
+      seconds: POST_GAME_CLOSE_DELAY_SECONDS,
+    });
+  }
+);
+
 export const reset_lobby = spacetimedb.reducer(
   { lobby_id: t.string() },
   (ctx, { lobby_id }) => {
@@ -1947,6 +2279,11 @@ export const reset_lobby = spacetimedb.reducer(
 
     if (lobby.active_match_id) {
       removeTickSchedule(ctx, lobby.active_match_id);
+      removeMatchSchedule(
+        ctx,
+        lobby.active_match_id,
+        SCHEDULE_KIND_POST_GAME_CLOSE
+      );
 
       const tug = getTugStateByMatchId(ctx, lobby.active_match_id);
       if (tug) {
@@ -1990,6 +2327,9 @@ export const reset_lobby = spacetimedb.reducer(
         });
       }
     }
+
+    removeLobbySetting(ctx, lobby_id, POST_GAME_CLOSE_AT_SETTING_KEY);
+    removeLobbySetting(ctx, lobby_id, POST_GAME_IDLE_CLOSE_AT_SETTING_KEY);
 
     replaceRow(ctx.db.lobby, lobby, {
       ...lobby,
@@ -2405,11 +2745,18 @@ export const tug_submit = spacetimedb.reducer(
 export const tug_tick_scheduled = spacetimedb.reducer(
   { entry: matchScheduleRow },
   (ctx, { entry }) => {
-    if (!entry.active || entry.kind !== 'tick') {
+    if (!entry.active) {
       return;
     }
 
-    runTugTick(ctx, entry.match_id);
+    if (entry.kind === SCHEDULE_KIND_TICK) {
+      runTugTick(ctx, entry.match_id);
+      return;
+    }
+
+    if (entry.kind === SCHEDULE_KIND_POST_GAME_CLOSE) {
+      runPostGameCloseTick(ctx, entry.match_id);
+    }
   }
 );
 

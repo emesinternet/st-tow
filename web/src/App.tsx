@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ConnectionBanner } from '@/components/layout/ConnectionBanner';
 import { HeaderBar } from '@/components/layout/HeaderBar';
@@ -11,6 +11,7 @@ import { PostGameStatsModal } from '@/components/match/PostGameStatsModal';
 import { RpsTieBreakModal } from '@/components/match/RpsTieBreakModal';
 import { PlayerInputPanel } from '@/components/player/PlayerInputPanel';
 import { EventFeed } from '@/components/shared/EventFeed';
+import { ConfettiBurst } from '@/components/shared/ConfettiBurst';
 import { Button } from '@/components/shared/ui/button';
 import {
   Toast,
@@ -33,6 +34,36 @@ const TIE_ZONE_PERCENT_BY_SIZE: Record<TieZoneSize, number> = {
   large: 30,
   xlarge: 40,
 };
+
+function toBigIntOrNull(value: unknown): bigint | null {
+  if (typeof value === 'bigint') {
+    return value;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return BigInt(Math.trunc(value));
+  }
+  if (typeof value === 'string' && value.length > 0) {
+    try {
+      return BigInt(value);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function parsePostGameDismissAtMicros(payloadJson: string): bigint | null {
+  try {
+    const payload = JSON.parse(payloadJson) as Record<string, unknown>;
+    return (
+      toBigIntOrNull(payload.dismiss_at_micros) ??
+      toBigIntOrNull(payload.dismissAtMicros) ??
+      null
+    );
+  } catch {
+    return null;
+  }
+}
 
 function makeToastId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -60,11 +91,17 @@ export default function App() {
   const [pendingRoundSeconds, setPendingRoundSeconds] = useState<number | null>(null);
   const [pendingJoinCode, setPendingJoinCode] = useState('');
   const [selectedLobbyId, setSelectedLobbyId] = useState('');
+  const [dismissedLobbyId, setDismissedLobbyId] = useState('');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [postGameModalOpen, setPostGameModalOpen] = useState(false);
   const [lastPostGameMatchId, setLastPostGameMatchId] = useState('');
+  const [lastConfettiMatchId, setLastConfettiMatchId] = useState('');
+  const [confettiBurstKey, setConfettiBurstKey] = useState(0);
+  const [confettiVisible, setConfettiVisible] = useState(false);
   const [debugModal, setDebugModal] = useState<DebugModal>('none');
   const [debugRpsVote, setDebugRpsVote] = useState<'rock' | 'paper' | 'scissors' | ''>('');
+  const [nowMillis, setNowMillis] = useState(() => Date.now());
+  const confettiTimeoutRef = useRef<number | null>(null);
 
   const ui = useMemo(
     () =>
@@ -74,8 +111,9 @@ export default function App() {
         identity,
         selectedLobbyId,
         pendingJoinCode,
+        ignoredLobbyId: dismissedLobbyId,
       }),
-    [identity, pendingJoinCode, selectedLobbyId, snapshot, state]
+    [dismissedLobbyId, identity, pendingJoinCode, selectedLobbyId, snapshot, state]
   );
 
   useEffect(() => {
@@ -102,11 +140,39 @@ export default function App() {
   }, [postGameModalOpen, ui.phase]);
 
   useEffect(() => {
+    return () => {
+      if (confettiTimeoutRef.current != null) {
+        window.clearTimeout(confettiTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setNowMillis(Date.now());
+    }, 250);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
     if (ui.phase === 'landing' && debugModal !== 'none') {
       setDebugModal('none');
       setDebugRpsVote('');
     }
   }, [debugModal, ui.phase]);
+
+  useEffect(() => {
+    if (ui.phase === 'post' || debugModal === 'postGame') {
+      return;
+    }
+    if (confettiTimeoutRef.current != null) {
+      window.clearTimeout(confettiTimeoutRef.current);
+      confettiTimeoutRef.current = null;
+    }
+    if (confettiVisible) {
+      setConfettiVisible(false);
+    }
+  }, [confettiVisible, debugModal, ui.phase]);
 
   const pushToast = useCallback(
     (
@@ -146,6 +212,7 @@ export default function App() {
 
   const handleCreateLobby = useCallback(async () => {
     setPendingJoinCode('');
+    setDismissedLobbyId('');
     const roundSeconds = Math.max(1, Math.min(60, Math.trunc(roundMinutes))) * 60;
     const tieZonePercent = TIE_ZONE_PERCENT_BY_SIZE[tieZoneSize];
     await withActionErrorToast('Could not create lobby', () =>
@@ -205,6 +272,7 @@ export default function App() {
 
     const nextName = displayName.trim() || 'Player';
     setPendingJoinCode(code);
+    setDismissedLobbyId('');
 
     await withActionErrorToast('Could not join lobby', () =>
       actions.joinLobby(code, nextName)
@@ -240,6 +308,26 @@ export default function App() {
       actions.endMatch(ui.lobby!.lobbyId)
     );
   }, [actions, ui.lobby, withActionErrorToast]);
+  const handleClosePostGame = useCallback(async () => {
+    const lobbyId = ui.lobby?.lobbyId;
+    if (!lobbyId) {
+      setPostGameModalOpen(false);
+      return;
+    }
+    if (ui.role !== 'host' || ui.phase !== 'post') {
+      setPostGameModalOpen(false);
+      return;
+    }
+
+    await withActionErrorToast('Could not close post-game', () =>
+      actions.closePostGame(lobbyId)
+    );
+
+    setDismissedLobbyId(lobbyId);
+    setSelectedLobbyId('');
+    setPendingJoinCode('');
+    setPostGameModalOpen(false);
+  }, [actions, ui.lobby, ui.phase, ui.role, withActionErrorToast]);
 
   const handleActivatePower = useCallback(
     async (powerId: string) => {
@@ -303,6 +391,18 @@ export default function App() {
       actions.continueTieBreak(ui.rpsTieBreak!.matchId)
     );
   }, [actions, debugModal, ui.rpsTieBreak, withActionErrorToast]);
+  const fireConfettiBurst = useCallback(() => {
+    setConfettiBurstKey(current => current + 1);
+    setConfettiVisible(true);
+
+    if (confettiTimeoutRef.current != null) {
+      window.clearTimeout(confettiTimeoutRef.current);
+    }
+    confettiTimeoutRef.current = window.setTimeout(() => {
+      setConfettiVisible(false);
+      confettiTimeoutRef.current = null;
+    }, 8200);
+  }, []);
 
   const myTeam = useMemo(() => {
     if (!ui.lobby) {
@@ -316,6 +416,56 @@ export default function App() {
     }
     return '';
   }, [ui.lobby]);
+  const postGameCloseSecondsRemaining = useMemo(() => {
+    if (ui.phase !== 'post' || !ui.lobby) {
+      return null;
+    }
+    const matchId = ui.matchHud?.matchId ?? '';
+    let latestAtMicros = 0n;
+    let dismissAtMicros: bigint | null = null;
+
+    for (const event of snapshot.events) {
+      if (event.lobbyId !== ui.lobby.lobbyId || event.type !== 'postgame_close_started') {
+        continue;
+      }
+      if (matchId && event.matchId && event.matchId !== matchId) {
+        continue;
+      }
+      if (event.atMicros < latestAtMicros) {
+        continue;
+      }
+      const parsedDismissAt = parsePostGameDismissAtMicros(event.payloadJson);
+      if (parsedDismissAt == null) {
+        continue;
+      }
+      latestAtMicros = event.atMicros;
+      dismissAtMicros = parsedDismissAt;
+    }
+
+    if (dismissAtMicros == null) {
+      return null;
+    }
+
+    const nowMicros = BigInt(Math.trunc(nowMillis)) * 1000n;
+    const remainingMicros = dismissAtMicros > nowMicros ? dismissAtMicros - nowMicros : 0n;
+    return Math.max(0, Math.ceil(Number(remainingMicros) / 1_000_000));
+  }, [nowMillis, snapshot.events, ui.lobby, ui.matchHud?.matchId, ui.phase]);
+
+  useEffect(() => {
+    if (ui.phase !== 'post' || !ui.matchHud?.matchId) {
+      return;
+    }
+    const winnerTeam = ui.matchHud.winnerTeam;
+    if ((winnerTeam !== 'A' && winnerTeam !== 'B') || myTeam !== winnerTeam) {
+      return;
+    }
+    if (ui.matchHud.matchId === lastConfettiMatchId) {
+      return;
+    }
+
+    setLastConfettiMatchId(ui.matchHud.matchId);
+    fireConfettiBurst();
+  }, [fireConfettiBurst, lastConfettiMatchId, myTeam, ui.matchHud, ui.phase]);
 
   const debugRpsModel = useMemo<RpsTieBreakViewModel | null>(() => {
     if (debugModal !== 'rpsVoting' && debugModal !== 'rpsReveal') {
@@ -495,6 +645,7 @@ export default function App() {
         visible={showCountdownOverlay}
         secondsRemaining={debugModal === 'countdown' ? 3 : ui.matchHud?.secondsRemaining ?? null}
       />
+      <ConfettiBurst burstKey={confettiBurstKey} visible={confettiVisible} />
       <RpsTieBreakModal
         model={debugRpsModel ?? ui.rpsTieBreak}
         role={ui.role}
@@ -508,12 +659,14 @@ export default function App() {
             setDebugModal('none');
             return;
           }
-          setPostGameModalOpen(false);
+          void handleClosePostGame();
         }}
         onResetMatch={handleResetLobby}
+        onDebugConfetti={fireConfettiBurst}
         role={ui.role}
         lobby={ui.lobby}
         hud={ui.matchHud}
+        waitingForHostSeconds={ui.role === 'player' ? postGameCloseSecondsRemaining : null}
       />
 
       {toasts.map(toast => (
