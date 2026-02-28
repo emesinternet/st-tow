@@ -12,10 +12,11 @@ Realtime SpacetimeDB tug-of-war game with a React web client.
 ## Current Gameplay Behavior
 
 - Host creates a lobby and shares a join code.
-- Players join, are balanced into team A/B, and submit words to add team force.
+- Players join, are balanced into team A/B, and complete words to add team force.
 - Match flow: `Waiting -> InGame -> SuddenDeath -> PostGame`.
-- The tug word is initialized at match start and **does not rotate on a timer**.
-- In sudden death, active players must submit the current word before their deadline.
+- Words are **per-player**. Each player gets their own random target word stream.
+- Words **do not rotate on a timer**; a new word is assigned only after that player completes the current one.
+- In sudden death, active players must complete their current word before their deadline.
 - If both teams are eliminated at the same tick, the match now ends deterministically (no hang).
 
 ## Reducers

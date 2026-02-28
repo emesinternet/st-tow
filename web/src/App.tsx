@@ -171,12 +171,7 @@ export default function App() {
       <>
         {ui.lobby ? <LobbyOverview lobby={ui.lobby} /> : null}
         {ui.matchHud ? <MatchHud hud={ui.matchHud} /> : null}
-        <PlayerInputPanel
-          model={ui.playerInput}
-          currentWord={ui.matchHud?.currentWord ?? ''}
-          wordVersion={ui.matchHud?.wordVersion ?? 0}
-          onSubmitWord={handleSubmitWord}
-        />
+        <PlayerInputPanel model={ui.playerInput} onSubmitWord={handleSubmitWord} />
         {ui.phase === 'post' ? (
           <Card className="bg-neo-yellow/70">
             <CardHeader>

@@ -206,6 +206,7 @@ function buildPlayerInputModel(
         playerName: 'Player',
         playerStatus: 'Missing',
         eliminatedReason: '',
+        currentWord: '',
         canSubmit: false,
         disabledReason: 'You are not currently in this lobby.',
         deadlineAtMicros: null,
@@ -226,6 +227,8 @@ function buildPlayerInputModel(
     disabledReason = 'Waiting for host to start the match.';
   } else if (match.phase !== 'InGame' && match.phase !== 'SuddenDeath') {
     disabledReason = 'Submissions are currently closed.';
+  } else if (!playerState || !playerState.currentWord) {
+    disabledReason = 'Waiting for your next word.';
   }
 
   return {
@@ -233,6 +236,7 @@ function buildPlayerInputModel(
     playerName: player.displayName,
     playerStatus: player.status,
     eliminatedReason: player.eliminatedReason,
+    currentWord: playerState?.currentWord ?? '',
     canSubmit: disabledReason == null,
     disabledReason,
     deadlineAtMicros:

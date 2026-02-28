@@ -127,6 +127,7 @@ const tugPlayerStateRow = {
   tug_player_state_id: t.string().primaryKey(),
   match_id: t.string().index(),
   player_id: t.string().index(),
+  current_word: t.string(),
   correct_count: t.i32(),
   last_submit_at_micros: t.i64(),
   deadline_at_micros: t.i64(),
@@ -574,6 +575,7 @@ function initializeTugState(
       tug_player_state_id: id,
       match_id: match.match_id,
       player_id: player.player_id,
+      current_word: pickRandomWord(ctx),
       correct_count: 0,
       last_submit_at_micros: 0n,
       deadline_at_micros: 0n,
@@ -1107,7 +1109,7 @@ export const tug_submit = spacetimedb.reducer(
     word_version: t.i32(),
     typed: t.string(),
   },
-  (ctx, { match_id, word_version, typed }) => {
+  (ctx, { match_id, typed }) => {
     const match = getMatchOrThrow(ctx, match_id);
     if (
       match.phase !== MATCH_PHASE_IN_GAME &&
@@ -1137,19 +1139,8 @@ export const tug_submit = spacetimedb.reducer(
       throw new Error('Player state not initialized for this match');
     }
 
-    if (word_version !== tug.word_version) {
-      throw new Error('Stale submission word_version');
-    }
-
     const now = nowMicros(ctx);
-    if (
-      playerState.last_submit_at_micros > 0n &&
-      now - playerState.last_submit_at_micros < 150_000n
-    ) {
-      throw new Error('Rate limited');
-    }
-
-    const correct = typed === tug.current_word;
+    const correct = typed === playerState.current_word;
 
     if (!correct && tug.mode === TUG_MODE_ELIMINATION) {
       eliminatePlayer(ctx, lobby.lobby_id, match_id, player, 'misspelling');
@@ -1163,6 +1154,7 @@ export const tug_submit = spacetimedb.reducer(
 
     if (correct) {
       playerStateNext.correct_count += 1;
+      playerStateNext.current_word = pickRandomWord(ctx);
       if (tug.mode === TUG_MODE_ELIMINATION) {
         playerStateNext.deadline_at_micros =
           now + msToMicros(tug.elimination_word_time_ms);

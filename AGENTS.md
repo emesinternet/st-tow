@@ -93,9 +93,9 @@ Flow:
 
 ### Current Tug Rules (Important)
 
-- A word is chosen at match initialization.
-- The current word **does not rotate on a timer**.
-- Players are forced to type the current word to contribute force.
+- Every active player has their own assigned `current_word` in `tug_player_state`.
+- Words **do not rotate on a timer**.
+- A player gets a new random word only after correctly completing their current one.
 - In sudden death:
   - wrong submit eliminates player immediately
   - deadline timeout eliminates player
@@ -135,7 +135,7 @@ Generated bindings:
 - Landing screen for host/create + join by code.
 - Host controls for start/end/reset.
 - Match HUD with rope/force/word/timer status.
-- Sticky-focus player input panel using Enter-submit.
+- Sticky-focus player input with progressive fill and auto-submit on completion (no Enter required).
 - Event feed from `game_event` telemetry.
 
 ## Environment Model (Windows + WSL Split)

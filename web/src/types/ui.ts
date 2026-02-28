@@ -65,6 +65,7 @@ export interface PlayerInputViewModel {
   playerName: string;
   playerStatus: string;
   eliminatedReason: string;
+  currentWord: string;
   canSubmit: boolean;
   disabledReason: string | null;
   deadlineAtMicros: bigint | null;
