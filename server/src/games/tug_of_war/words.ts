@@ -34,7 +34,7 @@ function weightedTierChoice(
 
   const sorted = Array.from(tiers).sort((a, b) => a - b);
   let totalWeight = 0;
-  const weights = sorted.map(tier => {
+  const weights = sorted.map((tier) => {
     const weight = tier * tier;
     totalWeight += weight;
     return { tier, weight };
@@ -58,10 +58,7 @@ function selectCandidates(
   excluded: ReadonlySet<string>
 ): WordEntry[] {
   return WORD_CATALOG.filter(
-    entry =>
-      entry.mode === mode &&
-      entry.tier <= maxDifficultyTier &&
-      !excluded.has(entry.value)
+    (entry) => entry.mode === mode && entry.tier <= maxDifficultyTier && !excluded.has(entry.value)
   );
 }
 
@@ -75,14 +72,14 @@ export function pickWordForContext(
   // Fallback: if exclusion exhausted this mode/tier window, ignore exclusions.
   if (candidates.length === 0) {
     candidates = WORD_CATALOG.filter(
-      entry => entry.mode === mode && entry.tier <= maxDifficultyTier
+      (entry) => entry.mode === mode && entry.tier <= maxDifficultyTier
     );
   }
 
   // Fallback: if mode window has no entries, degrade to normal mode.
   if (candidates.length === 0) {
     candidates = WORD_CATALOG.filter(
-      entry => entry.mode === WORD_MODE_NORMAL && entry.tier <= maxDifficultyTier
+      (entry) => entry.mode === WORD_MODE_NORMAL && entry.tier <= maxDifficultyTier
     );
   }
 
@@ -92,9 +89,7 @@ export function pickWordForContext(
   }
 
   const preferredPool =
-    lastWordType == null
-      ? candidates
-      : candidates.filter(entry => entry.type !== lastWordType);
+    lastWordType == null ? candidates : candidates.filter((entry) => entry.type !== lastWordType);
   const mixedPool = preferredPool.length > 0 ? preferredPool : candidates;
 
   const pickedTier = weightedTierChoice(ctx, mixedPool);
@@ -102,7 +97,7 @@ export function pickWordForContext(
     return randomEntry(ctx, mixedPool);
   }
 
-  const tierPool = mixedPool.filter(entry => entry.tier === pickedTier);
+  const tierPool = mixedPool.filter((entry) => entry.tier === pickedTier);
   if (tierPool.length > 0) {
     return randomEntry(ctx, tierPool);
   }

@@ -22,10 +22,7 @@ interface UseHostWebcamMeshResult {
 }
 
 const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-  ],
+  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }],
 };
 
 const ACTIVE_PHASES = new Set(['PreGame', 'InGame', 'SuddenDeath', 'TieBreakRps']);
@@ -132,7 +129,7 @@ export function useHostWebcamMesh({
       closePeer(remoteIdentity);
 
       const peer = new RTCPeerConnection(ICE_SERVERS);
-      peer.onicecandidate = event => {
+      peer.onicecandidate = (event) => {
         if (!event.candidate) {
           return;
         }
@@ -151,7 +148,7 @@ export function useHostWebcamMesh({
           }
         }
       } else {
-        peer.ontrack = event => {
+        peer.ontrack = (event) => {
           const [stream] = event.streams;
           if (!stream) {
             return;
@@ -171,7 +168,7 @@ export function useHostWebcamMesh({
     () =>
       snapshot.tugWebrtcSignals
         .filter(
-          signal =>
+          (signal) =>
             hasLiveMatch &&
             signal.matchId === matchId &&
             signal.streamEpoch === streamEpoch &&
@@ -203,7 +200,16 @@ export function useHostWebcamMesh({
         stopLocalStream();
       }
     }
-  }, [cameraEnabledFromServer, clearRemoteStream, closeAllPeers, isActivePhase, isHost, matchId, stopLocalStream, streamEpoch]);
+  }, [
+    cameraEnabledFromServer,
+    clearRemoteStream,
+    closeAllPeers,
+    isActivePhase,
+    isHost,
+    matchId,
+    stopLocalStream,
+    streamEpoch,
+  ]);
 
   useEffect(() => {
     if (!isActivePhase || !cameraEnabledFromServer || streamEpoch <= 0 || !hasLiveMatch || isHost) {
@@ -226,14 +232,24 @@ export function useHostWebcamMesh({
       // If this fails, a later snapshot update/reconnect will retry.
       viewerReadyKeyRef.current = '';
     });
-  }, [cameraEnabledFromServer, hasLiveMatch, hostIdentity, identity, isActivePhase, isHost, matchId, sendSignal, streamEpoch]);
+  }, [
+    cameraEnabledFromServer,
+    hasLiveMatch,
+    hostIdentity,
+    identity,
+    isActivePhase,
+    isHost,
+    matchId,
+    sendSignal,
+    streamEpoch,
+  ]);
 
   useEffect(() => {
     if (!hasLiveMatch || !cameraEnabledFromServer || !isActivePhase || streamEpoch <= 0) {
       return;
     }
 
-    const liveSignalIds = new Set(incomingSignals.map(signal => signal.signalId));
+    const liveSignalIds = new Set(incomingSignals.map((signal) => signal.signalId));
     for (const signalId of Array.from(processedSignalIdsRef.current.values())) {
       if (!liveSignalIds.has(signalId)) {
         processedSignalIdsRef.current.delete(signalId);
@@ -416,9 +432,7 @@ export function useHostWebcamMesh({
         clearRemoteStream();
         setPreArmed(false);
         const message =
-          error instanceof Error
-            ? error.message
-            : 'Camera permission denied or unavailable.';
+          error instanceof Error ? error.message : 'Camera permission denied or unavailable.';
         pushToast('Camera Error', message, 'danger');
       } finally {
         setCameraBusy(false);
@@ -440,7 +454,13 @@ export function useHostWebcamMesh({
   );
 
   useEffect(() => {
-    if (!isHost || !isActivePhase || !cameraEnabledFromServer || cameraBusy || localStreamRef.current) {
+    if (
+      !isHost ||
+      !isActivePhase ||
+      !cameraEnabledFromServer ||
+      cameraBusy ||
+      localStreamRef.current
+    ) {
       return;
     }
     void toggleCamera(true);
@@ -458,7 +478,15 @@ export function useHostWebcamMesh({
       return;
     }
     void toggleCamera(true);
-  }, [cameraBusy, cameraEnabledFromServer, hasLiveMatch, isActivePhase, isHost, preArmed, toggleCamera]);
+  }, [
+    cameraBusy,
+    cameraEnabledFromServer,
+    hasLiveMatch,
+    isActivePhase,
+    isHost,
+    preArmed,
+    toggleCamera,
+  ]);
 
   useEffect(() => {
     if (!isHost || isActivePhase || preArmed) {

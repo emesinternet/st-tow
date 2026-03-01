@@ -42,16 +42,35 @@ export function HostControlsPanel({
   return (
     <Card>
       <CardHeader className="mb-1">
-        <CardTitle className="text-lg">Host Controls</CardTitle>
+        <CardTitle>Host Controls</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)]">
+          <Button
+            type="button"
+            variant={cameraEnabled ? 'teamB' : 'neutral'}
+            className="w-full"
+            disabled={!canToggleCamera || cameraBusy}
+            onClick={() => {
+              void onSetCameraEnabled(!cameraEnabled);
+            }}
+            title={hostPanel?.cameraDisabledReason ?? undefined}
+          >
+            {cameraBusy ? 'Camera...' : cameraEnabled ? 'Disable Camera' : 'Enable Camera'}
+          </Button>
+          <Button
+            type="button"
+            variant="neutral"
+            className="w-full"
+            disabled={!canReset}
+            onClick={() => void onResetLobby()}
+          >
+            Reset Lobby
+          </Button>
           <Button
             type="button"
             variant={isMatchInProgress ? 'danger' : 'neutral'}
-            className={`min-w-[180px] flex-[2] ${
-              isMatchInProgress ? '' : 'bg-neo-success text-neo-paper'
-            }`}
+            className={`w-full ${isMatchInProgress ? '' : 'bg-neo-success text-neo-paper'}`}
             disabled={isMatchInProgress ? !canEndMatch : !canStart}
             onClick={() => {
               if (isMatchInProgress) {
@@ -62,27 +81,6 @@ export function HostControlsPanel({
             }}
           >
             {isMatchInProgress ? 'End Match' : 'Start Match'}
-          </Button>
-          <Button
-            type="button"
-            variant="neutral"
-            className="min-w-[132px] flex-1"
-            disabled={!canReset}
-            onClick={() => void onResetLobby()}
-          >
-            Reset Lobby
-          </Button>
-          <Button
-            type="button"
-            variant={cameraEnabled ? 'teamB' : 'neutral'}
-            className="min-w-[152px] flex-1"
-            disabled={!canToggleCamera || cameraBusy}
-            onClick={() => {
-              void onSetCameraEnabled(!cameraEnabled);
-            }}
-            title={hostPanel?.cameraDisabledReason ?? undefined}
-          >
-            {cameraBusy ? 'Camera...' : cameraEnabled ? 'Disable Camera' : 'Enable Camera'}
           </Button>
         </div>
       </CardContent>

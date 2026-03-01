@@ -1,8 +1,4 @@
-import {
-  TEAM_A,
-  TEAM_B,
-  TUG_MODE_ELIMINATION,
-} from '../../core/constants';
+import { TEAM_A, TEAM_B, TUG_MODE_ELIMINATION } from '../../core/constants';
 
 export interface PlayerWordState {
   playerId: string;
@@ -74,9 +70,7 @@ export function isRopeInTieZone(
   return Math.abs(ropePosition) <= centerWindow;
 }
 
-export function resolveMajorityRpsChoiceFromCounts(
-  counts: RpsChoiceCounts
-): RpsChoice | '' {
+export function resolveMajorityRpsChoiceFromCounts(counts: RpsChoiceCounts): RpsChoice | '' {
   const rows: Array<{ choice: RpsChoice; count: number }> = [
     { choice: 'rock', count: counts.rock },
     { choice: 'paper', count: counts.paper },
@@ -94,10 +88,7 @@ export function resolveMajorityRpsChoiceFromCounts(
   return rows[0].choice;
 }
 
-export function resolveRpsWinner(
-  teamAChoice: RpsChoice | '',
-  teamBChoice: RpsChoice | ''
-): string {
+export function resolveRpsWinner(teamAChoice: RpsChoice | '', teamBChoice: RpsChoice | ''): string {
   if (!teamAChoice || !teamBChoice || teamAChoice === teamBChoice) {
     return '';
   }

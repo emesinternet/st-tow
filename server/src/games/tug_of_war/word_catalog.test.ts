@@ -1,10 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  WORD_MODE_NORMAL,
-  WORD_MODE_SYMBOLS,
-  WORD_MODE_TECH,
-} from '../../core/constants';
+import { WORD_MODE_NORMAL, WORD_MODE_SYMBOLS, WORD_MODE_TECH } from '../../core/constants';
 import { WORD_CATALOG, countCatalogEntriesByMode } from './word_catalog';
 
 test('word catalog has expected size and mode distribution', () => {

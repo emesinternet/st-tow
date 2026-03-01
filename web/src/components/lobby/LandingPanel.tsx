@@ -1,4 +1,4 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/shared/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/shared/ui/card';
 import { Button } from '@/components/shared/ui/button';
 import { Input } from '@/components/shared/ui/input';
 
@@ -37,14 +37,14 @@ export function LandingPanel({
         <CardContent className="flex h-full min-h-[260px] flex-col justify-between gap-3">
           <div className="space-y-2">
             <CardTitle className="text-neo-ink">How to Play</CardTitle>
-            <CardDescription className="text-neo-ink">
+            <p className="ui-subtext">
               Your goal is to hype up the dancing dragon and pull it to your side of the floor.
-            </CardDescription>
-            <p className="font-body text-sm text-neo-ink">
-              Type your assigned words as fast as you can. Every correct word adds momentum for
-              your team and drags the dragon toward your side.
             </p>
-            <p className="font-body text-sm text-neo-ink">
+            <p className="ui-subtext">
+              Type your assigned words as fast as you can. Every correct word adds momentum for your
+              team and drags the dragon toward your side.
+            </p>
+            <p className="ui-subtext">
               When the timer ends, sudden death begins. Mistakes can eliminate players, and if the
               dragon lands in the tie zone, teams settle it with rock-paper-scissors.
             </p>
@@ -52,15 +52,17 @@ export function LandingPanel({
           <div className="space-y-2">
             <div>
               <CardTitle className="text-neo-ink">Join a Match</CardTitle>
-              <p className="font-body text-sm text-neo-ink">Enter a lobby code and jump in.</p>
+              <p className="ui-subtext">Enter a lobby code and jump in.</p>
             </div>
             <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
               <label className="block space-y-1">
-                <span className="font-display text-xs font-bold uppercase tracking-wide">Join Code</span>
+                <span className="font-display text-xs font-bold uppercase tracking-wide">
+                  Join Code
+                </span>
                 <Input
                   value={joinCode}
                   maxLength={6}
-                  onChange={event => onJoinCodeChange(event.target.value.toUpperCase())}
+                  onChange={(event) => onJoinCodeChange(event.target.value.toUpperCase())}
                   placeholder="ABC123"
                 />
               </label>
@@ -80,15 +82,15 @@ export function LandingPanel({
       <Card>
         <CardHeader>
           <CardTitle>Host a Match</CardTitle>
-          <CardDescription>Configure your lobby and start a new game.</CardDescription>
+          <p className="ui-subtext">Configure your lobby and start a new game.</p>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent>
           <label className="block space-y-1">
             <span className="font-display text-xs font-bold uppercase tracking-wide">Name</span>
             <Input
               value={displayName}
               maxLength={24}
-              onChange={event => onDisplayNameChange(event.target.value)}
+              onChange={(event) => onDisplayNameChange(event.target.value)}
               placeholder="Player"
             />
           </label>
@@ -103,7 +105,7 @@ export function LandingPanel({
               max={10}
               step={1}
               value={roundMinutes}
-              onChange={event => {
+              onChange={(event) => {
                 const parsed = Number(event.target.value);
                 if (!Number.isFinite(parsed)) {
                   return;
@@ -122,12 +124,10 @@ export function LandingPanel({
               <input
                 type="checkbox"
                 checked={lockLobby}
-                onChange={event => onLockLobbyChange(event.target.checked)}
+                onChange={(event) => onLockLobbyChange(event.target.checked)}
                 className="neo-focus h-4 w-4 cursor-pointer accent-neo-teamB"
               />
-              <span className="font-body text-sm text-neo-ink">
-                Block new players from joining after match start
-              </span>
+              <span className="ui-subtext">Block new players from joining after match start</span>
             </span>
           </label>
 
@@ -137,10 +137,8 @@ export function LandingPanel({
             </span>
             <select
               value={tieZoneSize}
-              onChange={event =>
-                onTieZoneSizeChange(
-                  event.target.value as 'small' | 'medium' | 'large' | 'xlarge'
-                )
+              onChange={(event) =>
+                onTieZoneSizeChange(event.target.value as 'small' | 'medium' | 'large' | 'xlarge')
               }
               className="neo-focus h-11 w-full rounded-[12px] border-4 border-neo-ink bg-neo-paper px-3 font-display text-sm font-bold uppercase tracking-wide text-neo-ink shadow-neo-sm"
             >

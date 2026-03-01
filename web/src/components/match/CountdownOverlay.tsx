@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 
 interface CountdownOverlayProps {
   visible: boolean;
@@ -6,8 +6,8 @@ interface CountdownOverlayProps {
 }
 
 export function CountdownOverlay({ visible, secondsRemaining }: CountdownOverlayProps) {
-  const countdownValue =
-    secondsRemaining == null ? null : Math.max(0, Math.ceil(secondsRemaining));
+  const prefersReducedMotion = useReducedMotion();
+  const countdownValue = secondsRemaining == null ? null : Math.max(0, Math.ceil(secondsRemaining));
 
   return (
     <AnimatePresence>
@@ -20,16 +20,19 @@ export function CountdownOverlay({ visible, secondsRemaining }: CountdownOverlay
           exit={{ opacity: 0 }}
           transition={{ duration: 0.08 }}
         >
+          <span className="sr-only" aria-live="assertive" aria-atomic="true">
+            Match starts in {countdownValue}
+          </span>
           <motion.span
             className="font-display text-[70vw] font-black leading-none text-white sm:text-[560px]"
             style={{
               WebkitTextStroke: '12px hsl(var(--fg))',
               textShadow: '22px 22px 0 hsl(var(--fg))',
             }}
-            initial={{ scale: 0.72 }}
-            animate={{ scale: [0.72, 1.14] }}
+            initial={{ scale: prefersReducedMotion ? 1 : 0.72 }}
+            animate={{ scale: prefersReducedMotion ? 1 : [0.72, 1.14] }}
             exit={{ opacity: 0.94 }}
-            transition={{ duration: 0.92, ease: 'easeOut' }}
+            transition={{ duration: prefersReducedMotion ? 0.15 : 0.92, ease: 'easeOut' }}
           >
             {countdownValue}
           </motion.span>

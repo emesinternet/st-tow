@@ -1,9 +1,9 @@
-import { motion } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
-import dragonGif from "@/assets/dragon.gif";
-import { Card, CardContent } from "@/components/shared/ui/card";
-import { formatSeconds } from "@/lib/format";
-import type { MatchHudViewModel, TeamPlayerViewModel } from "@/types/ui";
+import { motion, useReducedMotion } from 'framer-motion';
+import { useEffect, useRef, useState } from 'react';
+import dragonGif from '@/assets/dragon.gif';
+import { Card, CardContent } from '@/components/shared/ui/card';
+import { formatSeconds } from '@/lib/format';
+import type { MatchHudViewModel, TeamPlayerViewModel } from '@/types/ui';
 
 interface MatchHudProps {
   hud: MatchHudViewModel;
@@ -13,30 +13,27 @@ interface MatchHudProps {
 }
 
 const CHEER_PHRASES = [
-  "Get it!",
-  "Go go!",
-  "Nice!",
-  "Oh yeah!",
+  'Get it!',
+  'Go go!',
+  'Nice!',
+  'Oh yeah!',
   "Let's go!",
-  "Keep going!",
-  "So good!",
-  "Big energy!",
-  "Slay!",
-  "Stay hype!",
-  "Feel it!",
-  "Fire!",
-  "Pop off!",
-  "Good vibes!",
-  "Keep grooving!",
-  "Dance baby!",
-  "Night on fire!",
+  'Keep going!',
+  'So good!',
+  'Big energy!',
+  'Slay!',
+  'Stay hype!',
+  'Feel it!',
+  'Fire!',
+  'Pop off!',
+  'Good vibes!',
+  'Keep grooving!',
+  'Dance baby!',
+  'Night on fire!',
 ];
 
 function randomCheerPhrase(): string {
-  return (
-    CHEER_PHRASES[Math.floor(Math.random() * CHEER_PHRASES.length)] ??
-    CHEER_PHRASES[0]
-  );
+  return CHEER_PHRASES[Math.floor(Math.random() * CHEER_PHRASES.length)] ?? CHEER_PHRASES[0];
 }
 
 function randomIntInclusive(min: number, max: number): number {
@@ -47,20 +44,19 @@ function TeamMarkers({
   players,
   tone,
   cameraMode = false,
+  reducedMotion = false,
 }: {
   players: TeamPlayerViewModel[];
-  tone: "teamA" | "teamB";
+  tone: 'teamA' | 'teamB';
   cameraMode?: boolean;
+  reducedMotion?: boolean;
 }) {
-  const connected = players.filter((player) => player.status !== "Left");
-  const ballClassName = tone === "teamA" ? "bg-neo-teamA" : "bg-neo-teamB";
+  const connected = players.filter((player) => player.status !== 'Left');
+  const ballClassName = tone === 'teamA' ? 'bg-neo-teamA' : 'bg-neo-teamB';
   const prevCountsRef = useRef(new Map<string, number>());
   const [bounceTokens, setBounceTokens] = useState<Record<string, number>>({});
   const [cheerByPlayer, setCheerByPlayer] = useState<
-    Record<
-      string,
-      { token: number; phrase: string; jumpHeight: number; bubbleLift: number }
-    >
+    Record<string, { token: number; phrase: string; jumpHeight: number; bubbleLift: number }>
   >({});
   const cheerTimeoutsRef = useRef(new Map<string, number>());
 
@@ -155,11 +151,12 @@ function TeamMarkers({
   }, [connected]);
 
   useEffect(() => {
+    const timeouts = cheerTimeoutsRef.current;
     return () => {
-      for (const timeoutId of cheerTimeoutsRef.current.values()) {
+      for (const timeoutId of timeouts.values()) {
         window.clearTimeout(timeoutId);
       }
-      cheerTimeoutsRef.current.clear();
+      timeouts.clear();
     };
   }, []);
 
@@ -183,7 +180,7 @@ function TeamMarkers({
                 ],
                 scale: [0.9, 1, 1, 0.98],
               }}
-              transition={{ duration: 1.05, ease: "easeOut" }}
+              transition={{ duration: reducedMotion ? 0.12 : 1.05, ease: 'easeOut' }}
             >
               {cheer.phrase}
             </motion.span>
@@ -195,13 +192,13 @@ function TeamMarkers({
                 key={`${player.playerId}:${bounceTokens[player.playerId]}`}
                 className="relative flex h-7 flex-col items-center justify-end text-center"
                 initial={{ y: 0 }}
-                animate={{ y: [0, -(cheer?.jumpHeight ?? 10), 0] }}
-                transition={{ duration: 0.28, ease: "easeOut" }}
+                animate={{ y: reducedMotion ? 0 : [0, -(cheer?.jumpHeight ?? 10), 0] }}
+                transition={{ duration: reducedMotion ? 0.12 : 0.28, ease: 'easeOut' }}
               >
                 {bubble}
                 <span
                   className={`max-w-[56px] truncate text-[9px] font-bold uppercase leading-tight ${
-                    cameraMode ? "text-white drop-shadow-[0_1px_0_#000]" : "text-neo-ink/85"
+                    cameraMode ? 'text-white drop-shadow-[0_1px_0_#000]' : 'text-neo-ink/85'
                   }`}
                 >
                   {player.displayName}
@@ -221,7 +218,7 @@ function TeamMarkers({
               {bubble}
               <span
                 className={`max-w-[56px] truncate text-[9px] font-bold uppercase leading-tight ${
-                  cameraMode ? "text-white drop-shadow-[0_1px_0_#000]" : "text-neo-ink/85"
+                  cameraMode ? 'text-white drop-shadow-[0_1px_0_#000]' : 'text-neo-ink/85'
                 }`}
               >
                 {player.displayName}
@@ -237,20 +234,16 @@ function TeamMarkers({
   );
 }
 
-export function MatchHud({
-  hud,
-  teamAPlayers,
-  teamBPlayers,
-  cameraStream = null,
-}: MatchHudProps) {
+export function MatchHud({ hud, teamAPlayers, teamBPlayers, cameraStream = null }: MatchHudProps) {
+  const prefersReducedMotion = useReducedMotion();
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const isLobbyPreview = hud.matchId.endsWith(":pre");
-  const isRpsTieBreak = hud.phase === "TieBreakRps";
+  const isLobbyPreview = hud.matchId.endsWith(':pre');
+  const isRpsTieBreak = hud.phase === 'TieBreakRps';
   const timerText =
-    hud.phase === "PreGame" && !isLobbyPreview
-      ? "READY"
+    hud.phase === 'PreGame' && !isLobbyPreview
+      ? 'READY'
       : isRpsTieBreak
-        ? "RPS"
+        ? 'RPS'
         : formatSeconds(hud.secondsRemaining);
   const hostPowerPercent = Math.max(0, Math.min(100, hud.hostPowerMeter));
   const clampPercent = (value: number): number =>
@@ -261,10 +254,7 @@ export function MatchHud({
     tieZoneEndPercentRaw > tieZoneStartPercent
       ? tieZoneEndPercentRaw
       : Math.min(100, tieZoneStartPercent + 10);
-  const tieZoneWidthPercent = Math.max(
-    0,
-    tieZoneEndPercent - tieZoneStartPercent,
-  );
+  const tieZoneWidthPercent = Math.max(0, tieZoneEndPercent - tieZoneStartPercent);
   const cameraVisualMode = Boolean(cameraStream) || hud.hostCameraEnabled;
 
   useEffect(() => {
@@ -285,11 +275,9 @@ export function MatchHud({
 
   return (
     <Card className="overflow-visible">
-      <CardContent className="space-y-4 px-4 pb-4 pt-0">
+      <CardContent className="space-y-3 p-4">
         <div className="flex justify-center text-center font-display font-black tracking-wide">
-          <p className="text-4xl tabular-nums text-neo-ink sm:text-5xl">
-            {timerText}
-          </p>
+          <p className="text-4xl leading-none tabular-nums text-neo-ink sm:text-5xl">{timerText}</p>
         </div>
         <div className="bg-tug-war-gradient relative h-40 overflow-hidden rounded-[16px] border-4 border-neo-ink sm:h-48">
           {cameraStream ? (
@@ -306,9 +294,9 @@ export function MatchHud({
               style={
                 cameraVisualMode
                   ? {
-                      WebkitTextStroke: "2px #000",
+                      WebkitTextStroke: '2px #000',
                       textShadow:
-                        "1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000",
+                        '1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000',
                     }
                   : undefined
               }
@@ -321,9 +309,9 @@ export function MatchHud({
               style={
                 cameraVisualMode
                   ? {
-                      WebkitTextStroke: "2px #000",
+                      WebkitTextStroke: '2px #000',
                       textShadow:
-                        "1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000",
+                        '1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000',
                     }
                   : undefined
               }
@@ -355,10 +343,20 @@ export function MatchHud({
           />
           <div className="pointer-events-none absolute inset-1.5 z-20 overflow-visible rounded-[12px] sm:inset-2">
             <div className="absolute inset-y-0 left-0 w-1/4 pr-1.5 pl-2 pt-16 pb-0 sm:pr-2 sm:pl-3 sm:pt-20">
-              <TeamMarkers players={teamAPlayers} tone="teamA" cameraMode={cameraVisualMode} />
+              <TeamMarkers
+                players={teamAPlayers}
+                tone="teamA"
+                cameraMode={cameraVisualMode}
+                reducedMotion={Boolean(prefersReducedMotion)}
+              />
             </div>
             <div className="absolute inset-y-0 right-0 w-1/4 pl-1.5 pr-2 pt-16 pb-0 sm:pl-2 sm:pr-3 sm:pt-20">
-              <TeamMarkers players={teamBPlayers} tone="teamB" cameraMode={cameraVisualMode} />
+              <TeamMarkers
+                players={teamBPlayers}
+                tone="teamB"
+                cameraMode={cameraVisualMode}
+                reducedMotion={Boolean(prefersReducedMotion)}
+              />
             </div>
           </div>
           <motion.img
@@ -366,7 +364,7 @@ export function MatchHud({
             alt="Dragon rope marker"
             className="pointer-events-none absolute top-1/2 z-30 block h-[86%] max-h-[96px] w-auto max-w-none -translate-x-1/2 -translate-y-1/2 object-contain"
             animate={{ left: `${hud.normalizedRopePosition}%` }}
-            transition={{ type: "spring", stiffness: 150, damping: 24 }}
+            transition={{ type: 'spring', stiffness: 150, damping: 24 }}
           />
         </div>
         <div>
@@ -379,9 +377,7 @@ export function MatchHud({
               <p className="font-display text-xs font-black uppercase tracking-wide text-neo-ink">
                 Host Power
               </p>
-              <p className="font-mono text-xs font-bold text-neo-ink">
-                {hostPowerPercent}%
-              </p>
+              <p className="font-mono text-xs font-bold text-neo-ink">{hostPowerPercent}%</p>
             </div>
           </div>
         </div>

@@ -1,18 +1,13 @@
+import { useId } from 'react';
 import { Badge } from '@/components/shared/ui/badge';
 import { Button } from '@/components/shared/ui/button';
 import { Card, CardContent } from '@/components/shared/ui/card';
-import type {
-  LobbyViewModel,
-  MatchHudViewModel,
-  TeamPlayerViewModel,
-  UiRole,
-} from '@/types/ui';
+import type { LobbyViewModel, MatchHudViewModel, TeamPlayerViewModel, UiRole } from '@/types/ui';
 
 interface PostGameStatsModalProps {
   open: boolean;
   onClose: () => void;
   onResetMatch: () => Promise<void>;
-  onDebugConfetti: () => void;
   role: UiRole;
   lobby: LobbyViewModel | null;
   hud: MatchHudViewModel | null;
@@ -45,12 +40,13 @@ export function PostGameStatsModal({
   open,
   onClose,
   onResetMatch,
-  onDebugConfetti,
   role,
   lobby,
   hud,
   waitingForHostSeconds,
 }: PostGameStatsModalProps) {
+  const titleId = useId();
+  const descriptionId = useId();
   if (!open || !lobby) {
     return null;
   }
@@ -59,6 +55,7 @@ export function PostGameStatsModal({
   const teamBSuccessful = lobby.teamB.reduce((total, player) => total + player.correctCount, 0);
   const hostSuccessful = Math.max(0, hud?.hostSuccessfulWords ?? 0);
   const rows = playerRows(lobby);
+  const hasRows = rows.length > 0;
   const visibleRowCount = Math.max(1, Math.min(10, rows.length));
   const tableMaxHeightPx = 42 + visibleRowCount * 36;
   const winnerLabel =
@@ -66,25 +63,37 @@ export function PostGameStatsModal({
 
   return (
     <div className="fixed inset-0 z-[85] flex items-center justify-center bg-neo-ink/45 p-3">
-      <Card className="relative z-[87] w-full max-w-5xl">
+      <Card
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        className="relative z-[87] w-full max-w-5xl"
+      >
         <CardContent className="space-y-3">
-          <p className="text-center font-display text-3xl font-black uppercase tracking-wide text-neo-ink sm:text-5xl">
+          <p
+            id={titleId}
+            className="text-center font-display text-3xl font-black uppercase tracking-wide text-neo-ink sm:text-5xl"
+          >
             Winner: {winnerLabel}
           </p>
+          <p id={descriptionId} className="sr-only">
+            Post game statistics and match results.
+          </p>
           <div className="grid gap-2 sm:grid-cols-3">
-            <div className="rounded-[12px] border-2 border-neo-ink bg-neo-paper px-3 py-2 shadow-neo-sm">
+            <div className="rounded-[12px] border-4 border-neo-ink bg-neo-paper px-3 py-2 shadow-neo-sm">
               <p className="font-display text-xs font-bold uppercase tracking-wide text-neo-teamA">
                 Red Team Successful Words
               </p>
               <p className="font-display text-2xl font-black">{teamASuccessful}</p>
             </div>
-            <div className="rounded-[12px] border-2 border-neo-ink bg-neo-paper px-3 py-2 shadow-neo-sm">
+            <div className="rounded-[12px] border-4 border-neo-ink bg-neo-paper px-3 py-2 shadow-neo-sm">
               <p className="font-display text-xs font-bold uppercase tracking-wide text-neo-teamB">
                 Blue Team Successful Words
               </p>
               <p className="font-display text-2xl font-black">{teamBSuccessful}</p>
             </div>
-            <div className="rounded-[12px] border-2 border-neo-ink bg-neo-paper px-3 py-2 shadow-neo-sm">
+            <div className="rounded-[12px] border-4 border-neo-ink bg-neo-paper px-3 py-2 shadow-neo-sm">
               <p className="font-display text-xs font-bold uppercase tracking-wide text-neo-ink">
                 Host Successful Words
               </p>
@@ -93,55 +102,93 @@ export function PostGameStatsModal({
           </div>
 
           <div
-            className="overflow-auto rounded-[12px] border-2 border-neo-ink"
-            style={{ maxHeight: `${tableMaxHeightPx}px` }}
+            className={`rounded-[12px] border-4 border-neo-ink ${hasRows ? 'overflow-auto' : 'overflow-hidden'}`}
+            style={hasRows ? { maxHeight: `${tableMaxHeightPx}px` } : undefined}
           >
             <table className="w-full border-collapse text-left">
               <thead className="bg-neo-yellow/50">
                 <tr>
-                  <th className="border-b-2 border-neo-ink px-3 py-1.5 font-display text-xs font-black uppercase tracking-wide">Player</th>
-                  <th className="border-b-2 border-neo-ink px-3 py-1.5 font-display text-xs font-black uppercase tracking-wide">Team</th>
-                  <th className="border-b-2 border-neo-ink px-3 py-1.5 text-right font-display text-xs font-black uppercase tracking-wide">Accuracy</th>
-                  <th className="border-b-2 border-neo-ink px-3 py-1.5 text-right font-display text-xs font-black uppercase tracking-wide">Successful</th>
+                  <th className="border-b-2 border-neo-ink px-3 py-1.5 font-display text-xs font-black uppercase tracking-wide">
+                    Player
+                  </th>
+                  <th className="border-b-2 border-neo-ink px-3 py-1.5 font-display text-xs font-black uppercase tracking-wide">
+                    Team
+                  </th>
+                  <th className="border-b-2 border-neo-ink px-3 py-1.5 text-right font-display text-xs font-black uppercase tracking-wide">
+                    Accuracy
+                  </th>
+                  <th className="border-b-2 border-neo-ink px-3 py-1.5 text-right font-display text-xs font-black uppercase tracking-wide">
+                    Successful
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map(player => (
-                  <tr key={player.playerId} className="odd:bg-neo-paper even:bg-neo-paper/75">
-                    <td className="px-3 py-1.5 font-body text-sm font-semibold">{player.displayName}</td>
-                    <td className="px-3 py-1.5 font-body text-sm">
-                      <Badge variant={player.team === 'A' ? 'teamA' : player.team === 'B' ? 'teamB' : 'neutral'}>
-                        {teamLabel(player.team)}
-                      </Badge>
+                {hasRows ? (
+                  rows.map((player) => (
+                    <tr key={player.playerId} className="odd:bg-neo-paper even:bg-neo-paper/75">
+                      <td className="px-3 py-1.5 font-body text-sm font-semibold">
+                        {player.displayName}
+                      </td>
+                      <td className="px-3 py-1.5 font-body text-sm">
+                        <Badge
+                          variant={
+                            player.team === 'A'
+                              ? 'teamA'
+                              : player.team === 'B'
+                                ? 'teamB'
+                                : 'neutral'
+                          }
+                        >
+                          {teamLabel(player.team)}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono text-sm">
+                        {player.accuracy}%
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono text-sm">
+                        {player.correctCount}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-6 text-center">
+                      <span className="ui-subtext font-semibold">No player stats yet.</span>
                     </td>
-                    <td className="px-3 py-1.5 text-right font-mono text-sm">{player.accuracy}%</td>
-                    <td className="px-3 py-1.5 text-right font-mono text-sm">{player.correctCount}</td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
           {role === 'host' ? (
-            <div className="flex justify-center gap-2 pt-1">
-              <Button type="button" size="sm" variant="neutral" onClick={onClose}>
-                Close
-              </Button>
-              <Button type="button" size="sm" variant="neutral" onClick={onDebugConfetti}>
-                DBG Confetti
-              </Button>
+            <div className="grid w-full grid-cols-1 gap-2 pt-1 sm:grid-cols-[minmax(0,1fr)_auto]">
               <Button
                 type="button"
-                size="sm"
+                size="default"
                 variant="teamB"
+                className="w-full"
                 onClick={() => {
                   void onResetMatch();
                 }}
               >
                 Reset Match
               </Button>
+              <Button
+                type="button"
+                size="default"
+                variant="neutral"
+                className="w-full sm:min-w-[140px]"
+                onClick={onClose}
+              >
+                Close Lobby
+              </Button>
             </div>
           ) : (
-            <p className="pt-1 text-center font-display text-sm font-black uppercase tracking-wide text-neo-muted">
+            <p
+              className="pt-1 text-center font-display text-sm font-black uppercase tracking-wide text-neo-muted"
+              aria-live="polite"
+              aria-atomic="true"
+            >
               {waitingForHostSeconds == null
                 ? 'Waiting for host'
                 : `Lobby closing in ${waitingForHostSeconds}`}

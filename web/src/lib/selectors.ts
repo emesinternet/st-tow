@@ -76,7 +76,7 @@ function getLobbySettingInt(
   key: string,
   fallback: number
 ): number {
-  const row = settings.find(item => item.lobbyId === lobbyId && item.key === key);
+  const row = settings.find((item) => item.lobbyId === lobbyId && item.key === key);
   if (!row) {
     return fallback;
   }
@@ -112,7 +112,7 @@ function findLobby(
       return true;
     }
     return snapshot.players.some(
-      player =>
+      (player) =>
         player.lobbyId === lobby.lobbyId &&
         player.status !== 'Left' &&
         isSameIdentity(player.identity, identity)
@@ -124,7 +124,7 @@ function findLobby(
 
   if (selectedLobbyId) {
     const selected = snapshot.lobbies.find(
-      lobby => lobby.lobbyId === selectedLobbyId && !isIgnoredLobby(lobby)
+      (lobby) => lobby.lobbyId === selectedLobbyId && !isIgnoredLobby(lobby)
     );
     if (selected && canAccessLobby(selected)) {
       return selected;
@@ -133,9 +133,8 @@ function findLobby(
 
   if (pendingJoinCode) {
     const codeMatch = snapshot.lobbies.find(
-      lobby =>
-        lobby.joinCode.toUpperCase() === pendingJoinCode.toUpperCase() &&
-        !isIgnoredLobby(lobby)
+      (lobby) =>
+        lobby.joinCode.toUpperCase() === pendingJoinCode.toUpperCase() && !isIgnoredLobby(lobby)
     );
     if (codeMatch) {
       return codeMatch;
@@ -144,23 +143,18 @@ function findLobby(
 
   if (identity) {
     const hostLobby = [...snapshot.lobbies]
-      .filter(
-        lobby => isSameIdentity(lobby.hostIdentity, identity) && !isIgnoredLobby(lobby)
-      )
+      .filter((lobby) => isSameIdentity(lobby.hostIdentity, identity) && !isIgnoredLobby(lobby))
       .sort(byCreatedAtDescending)[0];
     if (hostLobby) {
       return hostLobby;
     }
 
     const memberships = snapshot.players
-      .filter(
-        player =>
-          player.status !== 'Left' && isSameIdentity(player.identity, identity)
-      )
+      .filter((player) => player.status !== 'Left' && isSameIdentity(player.identity, identity))
       .sort((a, b) => compareBigIntDescending(a.joinedAtMicros, b.joinedAtMicros));
 
     for (const membership of memberships) {
-      const memberLobby = snapshot.lobbies.find(lobby => lobby.lobbyId === membership.lobbyId);
+      const memberLobby = snapshot.lobbies.find((lobby) => lobby.lobbyId === membership.lobbyId);
       if (memberLobby && !isIgnoredLobby(memberLobby)) {
         return memberLobby;
       }
@@ -176,7 +170,7 @@ function buildTeamPlayerViewModel(
   playerStateByPlayerId: Map<string, NormalizedTugPlayerState>
 ): TeamPlayerViewModel[] {
   return players
-    .map(player => {
+    .map((player) => {
       const playerState = playerStateByPlayerId.get(player.playerId);
       const correctCount = playerState?.correctCount ?? 0;
       const submitCount = playerState?.submitCount ?? 0;
@@ -198,9 +192,9 @@ function buildTeamPlayerViewModel(
 }
 
 function buildTeamCounts(players: NormalizedPlayer[]): TeamCountViewModel {
-  const active = players.filter(player => player.status === 'Active').length;
-  const eliminated = players.filter(player => player.status === 'Eliminated').length;
-  const left = players.filter(player => player.status === 'Left').length;
+  const active = players.filter((player) => player.status === 'Active').length;
+  const eliminated = players.filter((player) => player.status === 'Eliminated').length;
+  const left = players.filter((player) => player.status === 'Left').length;
   return {
     active,
     eliminated,
@@ -312,7 +306,7 @@ function buildHostPanelModel(
     cameraDisabledReason = 'Camera is only available during active match phases.';
   }
 
-  const powers: HostPowerActionViewModel[] = HOST_POWER_SPECS.map(spec => {
+  const powers: HostPowerActionViewModel[] = HOST_POWER_SPECS.map((spec) => {
     if (!isHost) {
       return {
         id: spec.id,
@@ -488,9 +482,7 @@ function buildRpsTieBreakModel(
   }
 
   const myTeam = myPlayer?.team === 'A' || myPlayer?.team === 'B' ? myPlayer.team : '';
-  const myVote = myPlayer
-    ? rpsVotes.find(vote => vote.playerId === myPlayer.playerId)
-    : null;
+  const myVote = myPlayer ? rpsVotes.find((vote) => vote.playerId === myPlayer.playerId) : null;
   const myVoteChoice = myVote && isRpsChoice(myVote.choice) ? myVote.choice : '';
 
   const nowMicros = BigInt(Math.trunc(snapshotGeneratedAt)) * 1000n;
@@ -548,10 +540,10 @@ function buildEventFeed(
   limit = 25
 ): EventFeedItemViewModel[] {
   return snapshot.events
-    .filter(event => event.lobbyId === lobbyId)
+    .filter((event) => event.lobbyId === lobbyId)
     .sort((a, b) => compareBigIntDescending(a.atMicros, b.atMicros))
     .slice(0, limit)
-    .map(event => ({
+    .map((event) => ({
       eventId: event.eventId,
       type: event.type,
       payloadSummary: formatEventPayload(event.payloadJson),
@@ -565,8 +557,8 @@ function buildLobbyModel(
   identity: string,
   playerStateByPlayerId: Map<string, NormalizedTugPlayerState>
 ): LobbyViewModel {
-  const teamAPlayers = players.filter(player => player.team === 'A');
-  const teamBPlayers = players.filter(player => player.team === 'B');
+  const teamAPlayers = players.filter((player) => player.team === 'A');
+  const teamBPlayers = players.filter((player) => player.team === 'B');
 
   return {
     lobbyId: lobby.lobbyId,
@@ -613,13 +605,10 @@ function buildMatchHudModel(
       : 0n;
   const activePowerSecondsRemaining =
     activePowerId && (tug?.powerExpiresAtMicros ?? 0n) > 0n
-      ? Math.max(
-          0,
-          Math.ceil(Number(remainingPowerMicros) / 1_000_000)
-        )
+      ? Math.max(0, Math.ceil(Number(remainingPowerMicros) / 1_000_000))
       : null;
-  const teamAIds = new Set(teamAPlayers.map(player => player.playerId));
-  const teamBIds = new Set(teamBPlayers.map(player => player.playerId));
+  const teamAIds = new Set(teamAPlayers.map((player) => player.playerId));
+  const teamBIds = new Set(teamBPlayers.map((player) => player.playerId));
 
   let teamAPulls = 0;
   let teamBPulls = 0;
@@ -659,8 +648,8 @@ function buildMatchHudModel(
     hostScore: hostState ? hostState.score : null,
     hostSuccessfulWords: hostState ? hostState.correctCount : null,
     hostCurrentWord: hostState?.currentWord ?? '',
-    aliveTeamA: teamAPlayers.filter(player => player.status === 'Active').length,
-    aliveTeamB: teamBPlayers.filter(player => player.status === 'Active').length,
+    aliveTeamA: teamAPlayers.filter((player) => player.status === 'Active').length,
+    aliveTeamB: teamBPlayers.filter((player) => player.status === 'Active').length,
     currentWord: tug?.currentWord ?? '',
     wordVersion: tug?.wordVersion ?? 0,
     mode: tug?.mode ?? 'Normal',
@@ -712,31 +701,25 @@ function buildPreMatchHudModel(
 }
 
 export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
-  const {
-    connectionState,
-    snapshot,
-    identity,
-    selectedLobbyId,
-    pendingJoinCode,
-    ignoredLobbyId,
-  } = input;
+  const { connectionState, snapshot, identity, selectedLobbyId, pendingJoinCode, ignoredLobbyId } =
+    input;
 
   const lobby = findLobby(snapshot, identity, selectedLobbyId, pendingJoinCode, ignoredLobbyId);
-    if (!lobby) {
-      return {
-        connectionState,
-        role: 'observer',
-        phase: 'landing',
-        lobby: null,
-        matchHud: null,
-        preMatchHud: null,
-        preMatchSecondsRemaining: DEFAULT_ROUND_SECONDS,
-        rpsTieBreak: null,
-        hostPanel: null,
-        playerInput: null,
-        events: [],
-      };
-    }
+  if (!lobby) {
+    return {
+      connectionState,
+      role: 'observer',
+      phase: 'landing',
+      lobby: null,
+      matchHud: null,
+      preMatchHud: null,
+      preMatchSecondsRemaining: DEFAULT_ROUND_SECONDS,
+      rpsTieBreak: null,
+      hostPanel: null,
+      playerInput: null,
+      events: [],
+    };
+  }
 
   const preMatchSecondsRemaining = getLobbySettingInt(
     snapshot.lobbySettings,
@@ -757,52 +740,51 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
     DEFAULT_TIE_ZONE_PERCENT
   );
 
-  const lobbyPlayers = snapshot.players.filter(player => player.lobbyId === lobby.lobbyId);
-  const myPlayer =
-    lobbyPlayers.find(player => isSameIdentity(player.identity, identity)) ?? null;
+  const lobbyPlayers = snapshot.players.filter((player) => player.lobbyId === lobby.lobbyId);
+  const myPlayer = lobbyPlayers.find((player) => isSameIdentity(player.identity, identity)) ?? null;
 
   const match = lobby.activeMatchId
-    ? snapshot.matches.find(item => item.matchId === lobby.activeMatchId) ?? null
+    ? (snapshot.matches.find((item) => item.matchId === lobby.activeMatchId) ?? null)
     : null;
 
   const clock = match
-    ? snapshot.clocks.find(item => item.matchId === match.matchId) ?? null
+    ? (snapshot.clocks.find((item) => item.matchId === match.matchId) ?? null)
     : null;
 
   const tug = match
-    ? snapshot.tugStates.find(item => item.matchId === match.matchId) ?? null
+    ? (snapshot.tugStates.find((item) => item.matchId === match.matchId) ?? null)
     : null;
   const rpsState = match
-    ? snapshot.tugRpsStates.find(item => item.matchId === match.matchId) ?? null
+    ? (snapshot.tugRpsStates.find((item) => item.matchId === match.matchId) ?? null)
     : null;
   const rpsVotes = match
-    ? snapshot.tugRpsVotes.filter(item => item.matchId === match.matchId)
+    ? snapshot.tugRpsVotes.filter((item) => item.matchId === match.matchId)
     : [];
   const matchPlayerStates = match
-    ? snapshot.tugPlayerStates.filter(item => item.matchId === match.matchId)
+    ? snapshot.tugPlayerStates.filter((item) => item.matchId === match.matchId)
     : [];
   const playerStateByPlayerId = new Map(
-    matchPlayerStates.map(playerState => [playerState.playerId, playerState] as const)
+    matchPlayerStates.map((playerState) => [playerState.playerId, playerState] as const)
   );
   const hostState = match
-    ? snapshot.tugHostStates.find(item => item.matchId === match.matchId) ?? null
+    ? (snapshot.tugHostStates.find((item) => item.matchId === match.matchId) ?? null)
     : null;
   const cameraState = match
-    ? snapshot.tugCameraStates.find(item => item.matchId === match.matchId) ?? null
+    ? (snapshot.tugCameraStates.find((item) => item.matchId === match.matchId) ?? null)
     : null;
 
   const myTugState =
     match && myPlayer
-      ? matchPlayerStates.find(
-          item => item.matchId === match.matchId && item.playerId === myPlayer.playerId
-        ) ?? null
+      ? (matchPlayerStates.find(
+          (item) => item.matchId === match.matchId && item.playerId === myPlayer.playerId
+        ) ?? null)
       : null;
 
   const role = deriveRole(lobby, identity, myPlayer);
   const phase = derivePhase(lobby, match);
 
-  const teamAPlayers = lobbyPlayers.filter(player => player.team === 'A');
-  const teamBPlayers = lobbyPlayers.filter(player => player.team === 'B');
+  const teamAPlayers = lobbyPlayers.filter((player) => player.team === 'A');
+  const teamBPlayers = lobbyPlayers.filter((player) => player.team === 'B');
 
   return {
     connectionState,
@@ -810,7 +792,7 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
     phase,
     lobby: buildLobbyModel(lobby, lobbyPlayers, identity, playerStateByPlayerId),
     matchHud: match
-        ? buildMatchHudModel(
+      ? buildMatchHudModel(
           match,
           clock,
           tug,

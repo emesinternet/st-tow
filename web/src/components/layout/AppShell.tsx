@@ -17,12 +17,16 @@ export function AppShell({
 }: AppShellProps) {
   return (
     <div className={`min-h-screen ${backgroundClassName}`}>
-      <div className="mx-auto flex min-h-screen w-full max-w-[1200px] flex-col gap-6 px-3 py-4 sm:px-4 sm:py-6">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1200px] flex-col gap-[var(--space-6)] px-3 py-[var(--space-4)] sm:px-[var(--space-4)] sm:py-[var(--space-6)]">
         {banner}
         {header}
 
-        <section className="space-y-6">{primary}</section>
-        {secondary ? <aside className="mt-auto space-y-6 pt-8">{secondary}</aside> : null}
+        <section className="ui-stack-6">{primary}</section>
+        {secondary ? (
+          <aside className="mt-auto ui-stack-6 pt-[calc(var(--space-6)+var(--space-2))]">
+            {secondary}
+          </aside>
+        ) : null}
       </div>
     </div>
   );

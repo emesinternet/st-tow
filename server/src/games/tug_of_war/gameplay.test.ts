@@ -67,18 +67,9 @@ test('isRopeInTieZone applies centered percentage window around zero', () => {
 });
 
 test('resolveMajorityRpsChoiceFromCounts returns majority and blanks ties/empty', () => {
-  assert.equal(
-    resolveMajorityRpsChoiceFromCounts({ rock: 3, paper: 1, scissors: 2 }),
-    'rock'
-  );
-  assert.equal(
-    resolveMajorityRpsChoiceFromCounts({ rock: 2, paper: 2, scissors: 0 }),
-    ''
-  );
-  assert.equal(
-    resolveMajorityRpsChoiceFromCounts({ rock: 0, paper: 0, scissors: 0 }),
-    ''
-  );
+  assert.equal(resolveMajorityRpsChoiceFromCounts({ rock: 3, paper: 1, scissors: 2 }), 'rock');
+  assert.equal(resolveMajorityRpsChoiceFromCounts({ rock: 2, paper: 2, scissors: 0 }), '');
+  assert.equal(resolveMajorityRpsChoiceFromCounts({ rock: 0, paper: 0, scissors: 0 }), '');
 });
 
 test('resolveRpsWinner resolves rock-paper-scissors matrix', () => {

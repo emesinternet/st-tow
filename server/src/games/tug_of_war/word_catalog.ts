@@ -1,13 +1,6 @@
-import {
-  WORD_MODE_NORMAL,
-  WORD_MODE_SYMBOLS,
-  WORD_MODE_TECH,
-} from '../../core/constants';
+import { WORD_MODE_NORMAL, WORD_MODE_SYMBOLS, WORD_MODE_TECH } from '../../core/constants';
 
-export type WordMode =
-  | typeof WORD_MODE_NORMAL
-  | typeof WORD_MODE_TECH
-  | typeof WORD_MODE_SYMBOLS;
+export type WordMode = typeof WORD_MODE_NORMAL | typeof WORD_MODE_TECH | typeof WORD_MODE_SYMBOLS;
 
 export type WordDifficultyTier = 1 | 2 | 3 | 4 | 5;
 
@@ -79,11 +72,7 @@ function alphaTag(index: number): string {
   return tag;
 }
 
-function composeExpandedCandidate(
-  type: WordType,
-  left: string,
-  right: string
-): string {
+function composeExpandedCandidate(type: WordType, left: string, right: string): string {
   if (type === 'brace_pattern') {
     return `{${left}|${right}}`;
   }
@@ -510,25 +499,73 @@ const TECH_TIER_WORDS: Record<WordDifficultyTier, TierTechSource> = {
     command: ['chmod', 'chown', 'grep', 'sed', 'awk', 'curl', 'tar'],
     flag: ['-help', '-force', '-verbose', '-silent', '-color', '-follow', '-dry-run'],
     operator: ['=>', '::', '->', '<=', '>=', '??', '?.'],
-    path_token: ['src/server', 'web/src', '/etc/hosts', './scripts', '../assets', '~/workspace', '/opt/bin'],
+    path_token: [
+      'src/server',
+      'web/src',
+      '/etc/hosts',
+      './scripts',
+      '../assets',
+      '~/workspace',
+      '/opt/bin',
+    ],
   },
   3: {
     command: ['systemctl', 'journalctl', 'kubectl', 'docker', 'npm', 'pnpm', 'yarn'],
     flag: ['-watch', '-filter', '-target', '-output', '-stdin', '-stdout', '-json'],
     operator: ['|>', '===', '!==', '<<', '>>', '::=', '%%'],
-    path_token: ['infra/terraform', 'config/nginx', '/usr/local/bin', './node_modules', '../dist/assets', '~/repos/st-tow', '/srv/runtime'],
+    path_token: [
+      'infra/terraform',
+      'config/nginx',
+      '/usr/local/bin',
+      './node_modules',
+      '../dist/assets',
+      '~/repos/st-tow',
+      '/srv/runtime',
+    ],
   },
   4: {
     command: ['strace', 'lsof', 'iptables', 'dig', 'traceroute', 'openssl', 'rsync'],
-    flag: ['-namespace', '-context', '-recursive', '-checksum', '-timeout', '-profile', '-parallel'],
+    flag: [
+      '-namespace',
+      '-context',
+      '-recursive',
+      '-checksum',
+      '-timeout',
+      '-profile',
+      '-parallel',
+    ],
     operator: ['>>=', '<<=', '&=', '|=', '^=', '<=>', '??='],
-    path_token: ['cluster/prod/eu', 'services/auth/api', '/proc/net/tcp', './.github/workflows', '../terraform/modules', '~/kube/config', '/mnt/data/cache'],
+    path_token: [
+      'cluster/prod/eu',
+      'services/auth/api',
+      '/proc/net/tcp',
+      './.github/workflows',
+      '../terraform/modules',
+      '~/kube/config',
+      '/mnt/data/cache',
+    ],
   },
   5: {
     command: ['tcpdump', 'perf', 'wireshark', 'ansible-playbook', 'promtool', 'vault', 'consul'],
-    flag: ['-max-connections', '-event-buffer', '-tls-sni', '-retry-backoff', '-no-preserve-root', '-only-show-errors', '-skip-verify'],
+    flag: [
+      '-max-connections',
+      '-event-buffer',
+      '-tls-sni',
+      '-retry-backoff',
+      '-no-preserve-root',
+      '-only-show-errors',
+      '-skip-verify',
+    ],
     operator: ['&&=', '||=', '>>>', '<<<', '=>=', '!==~', '/*/'],
-    path_token: ['pipelines/deploy/prod', 'observability/alerts/rules', '/sys/fs/cgroup', './scripts/local/start_web.sh', '../server/dist/bundle.js', '~/repos/st-tow/web/src', '/var/lib/spacetimedb'],
+    path_token: [
+      'pipelines/deploy/prod',
+      'observability/alerts/rules',
+      '/sys/fs/cgroup',
+      './scripts/local/start_web.sh',
+      '../server/dist/bundle.js',
+      '~/repos/st-tow/web/src',
+      '/var/lib/spacetimedb',
+    ],
   },
 };
 
@@ -554,9 +591,24 @@ const SYMBOLS_TIER_WORDS: Record<WordDifficultyTier, TierSymbolsSource> = {
     mixed_token: ['map<string,int>', 'x<<=2&&y', 'fn<t>(x:t)', 'a?.b?.c??d'],
   },
   5: {
-    brace_pattern: ['{meta:{build:{id:42,ok:true}}}', '[{x:[{y:[z]}]}]', '({({[]})})', '{a:{b:{c:{d:e}}}}'],
-    pipe_pattern: ['cat|grep|sort|uniq', 'tcpdump|grep|awk|wc', 'journalctl|grep|tail|sed', 'find|xargs|parallel|tee'],
-    mixed_token: ['((a&&b)||c)&&!d', 'value::<<pipe>>::token', '{id:1}|{id:2}', 'cmd --flag="{x:y}"'],
+    brace_pattern: [
+      '{meta:{build:{id:42,ok:true}}}',
+      '[{x:[{y:[z]}]}]',
+      '({({[]})})',
+      '{a:{b:{c:{d:e}}}}',
+    ],
+    pipe_pattern: [
+      'cat|grep|sort|uniq',
+      'tcpdump|grep|awk|wc',
+      'journalctl|grep|tail|sed',
+      'find|xargs|parallel|tee',
+    ],
+    mixed_token: [
+      '((a&&b)||c)&&!d',
+      'value::<<pipe>>::token',
+      '{id:1}|{id:2}',
+      'cmd --flag="{x:y}"',
+    ],
   },
 };
 
@@ -603,14 +655,7 @@ function buildCatalog(): WordEntry[] {
       entries,
       used
     );
-    addExpandedEntries(
-      WORD_MODE_SYMBOLS,
-      tier,
-      'mixed_token',
-      symbols.mixed_token,
-      entries,
-      used
-    );
+    addExpandedEntries(WORD_MODE_SYMBOLS, tier, 'mixed_token', symbols.mixed_token, entries, used);
   }
 
   return entries;

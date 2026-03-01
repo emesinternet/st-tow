@@ -22,10 +22,7 @@ export interface HostSubmitResult {
   nextState: HostSubmitState;
 }
 
-export function deriveSecondsRemaining(
-  phaseEndsAtMicros: bigint,
-  nowMicros: bigint
-): number {
+export function deriveSecondsRemaining(phaseEndsAtMicros: bigint, nowMicros: bigint): number {
   const remainingMicros = phaseEndsAtMicros - nowMicros;
   if (remainingMicros <= 0n) {
     return 0;
@@ -51,7 +48,8 @@ export function deriveDifficultyTier(
     return 5;
   }
 
-  const progress = Number(elapsedMicros > roundMicros ? roundMicros : elapsedMicros) / Number(roundMicros);
+  const progress =
+    Number(elapsedMicros > roundMicros ? roundMicros : elapsedMicros) / Number(roundMicros);
   if (progress < 0.2) {
     return 1;
   }
@@ -67,10 +65,7 @@ export function deriveDifficultyTier(
   return 5;
 }
 
-export function isPhaseExpired(
-  phaseEndsAtMicros: bigint,
-  nowMicros: bigint
-): boolean {
+export function isPhaseExpired(phaseEndsAtMicros: bigint, nowMicros: bigint): boolean {
   return nowMicros >= phaseEndsAtMicros;
 }
 

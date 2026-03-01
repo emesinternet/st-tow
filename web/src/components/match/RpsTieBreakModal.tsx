@@ -1,5 +1,5 @@
-import { motion } from 'framer-motion';
-import { useEffect, useMemo, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Button } from '@/components/shared/ui/button';
 import { Card, CardContent } from '@/components/shared/ui/card';
 import paperImage from '@/assets/paper.png';
@@ -64,12 +64,10 @@ function beatsLabel(model: RpsTieBreakViewModel): string {
   return `${toHandLabel(model.teamAChoice)} VS ${toHandLabel(model.teamBChoice)}`;
 }
 
-export function RpsTieBreakModal({
-  model,
-  role,
-  onVote,
-  onContinue,
-}: RpsTieBreakModalProps) {
+export function RpsTieBreakModal({ model, role, onVote, onContinue }: RpsTieBreakModalProps) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const prefersReducedMotion = useReducedMotion();
   const isReveal = model?.stage === 'Reveal';
   const isTieReveal = isReveal && model?.winnerTeam !== 'A' && model?.winnerTeam !== 'B';
   const [revealResolved, setRevealResolved] = useState(false);
@@ -87,16 +85,14 @@ export function RpsTieBreakModal({
       return;
     }
     setRevealResolved(false);
-    setRevealAnimationVersion(current => current + 1);
+    setRevealAnimationVersion((current) => current + 1);
   }, [isReveal, revealSignature]);
 
   if (!model) {
     return null;
   }
-  const displayTeamAChoice =
-    isReveal && !revealResolved ? 'rock' : model.teamAChoice || 'rock';
-  const displayTeamBChoice =
-    isReveal && !revealResolved ? 'rock' : model.teamBChoice || 'rock';
+  const displayTeamAChoice = isReveal && !revealResolved ? 'rock' : model.teamAChoice || 'rock';
+  const displayTeamBChoice = isReveal && !revealResolved ? 'rock' : model.teamBChoice || 'rock';
   const voteButtonVariant =
     model.myTeam === 'A' ? 'teamA' : model.myTeam === 'B' ? 'teamB' : 'neutral';
   const mirrorVoteHands = model.myTeam === 'B';
@@ -104,9 +100,11 @@ export function RpsTieBreakModal({
   return (
     <div className="fixed inset-0 z-[88] flex items-center justify-center bg-neo-ink/45 p-3">
       <Card
-        className={`w-full max-w-3xl ${
-          isReveal ? 'bg-rps-reveal-gradient !p-0' : ''
-        }`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        className={`w-full max-w-3xl ${isReveal ? 'bg-rps-reveal-gradient !p-0' : ''}`}
       >
         <CardContent
           className={`${
@@ -120,9 +118,13 @@ export function RpsTieBreakModal({
               {revealResolved ? (
                 isTieReveal ? (
                   <motion.p
+                    id={titleId}
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.18, ease: 'easeOut' }}
+                    transition={{
+                      duration: prefersReducedMotion ? 0.12 : 0.18,
+                      ease: 'easeOut',
+                    }}
                     className="font-display text-4xl font-black uppercase tracking-wide text-neo-ink sm:text-6xl"
                   >
                     TIE!
@@ -130,17 +132,26 @@ export function RpsTieBreakModal({
                 ) : (
                   <>
                     <motion.p
+                      id={descriptionId}
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.2, ease: 'easeOut' }}
+                      transition={{
+                        duration: prefersReducedMotion ? 0.12 : 0.2,
+                        ease: 'easeOut',
+                      }}
                       className="font-display text-2xl font-black uppercase tracking-wide text-neo-ink sm:text-4xl"
                     >
                       {beatsLabel(model)}
                     </motion.p>
                     <motion.p
+                      id={titleId}
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.22, delay: 0.04, ease: 'easeOut' }}
+                      transition={{
+                        duration: prefersReducedMotion ? 0.12 : 0.22,
+                        delay: prefersReducedMotion ? 0 : 0.04,
+                        ease: 'easeOut',
+                      }}
                       className="font-display text-4xl font-black uppercase tracking-wide text-neo-ink sm:text-6xl"
                     >
                       {winnerLabel(model.winnerTeam)}!
@@ -149,6 +160,9 @@ export function RpsTieBreakModal({
                 )
               ) : (
                 <>
+                  <p id={descriptionId} className="sr-only">
+                    Reveal animation in progress
+                  </p>
                   <p className="invisible font-display text-2xl font-black uppercase tracking-wide sm:text-4xl">
                     rock beats scissors
                   </p>
@@ -159,7 +173,10 @@ export function RpsTieBreakModal({
               )}
             </div>
           ) : (
-            <p className="text-center font-display text-3xl font-black uppercase tracking-wide text-neo-ink sm:text-4xl">
+            <p
+              id={titleId}
+              className="text-center font-display text-3xl font-black uppercase tracking-wide text-neo-ink sm:text-4xl"
+            >
               {role === 'host' ? 'PLAYERS ARE VOTING!' : 'VOTE!'}
             </p>
           )}
@@ -170,6 +187,9 @@ export function RpsTieBreakModal({
                 <p className="mt-0 text-center font-display text-5xl font-black tabular-nums text-neo-ink sm:text-6xl">
                   {model.secondsRemaining}
                 </p>
+                <p id={descriptionId} className="sr-only" aria-live="polite" aria-atomic="true">
+                  Players are voting. {model.secondsRemaining} seconds remaining.
+                </p>
               </>
             ) : (
               <>
@@ -177,10 +197,8 @@ export function RpsTieBreakModal({
                   {model.secondsRemaining}
                 </p>
                 <div className="grid gap-4 sm:grid-cols-3">
-                  {CHOICES.map(choice => {
-                    const voteCount = model.myTeamCounts
-                      ? model.myTeamCounts[choice.id]
-                      : null;
+                  {CHOICES.map((choice) => {
+                    const voteCount = model.myTeamCounts ? model.myTeamCounts[choice.id] : null;
                     return (
                       <Button
                         key={choice.id}
@@ -205,6 +223,9 @@ export function RpsTieBreakModal({
                     );
                   })}
                 </div>
+                <p id={descriptionId} className="sr-only" aria-live="polite" aria-atomic="true">
+                  Vote now. {model.secondsRemaining} seconds remaining.
+                </p>
                 {!(role === 'player' && model.myTeamCounts) ? (
                   <p className="text-center font-display text-sm font-black uppercase tracking-wide text-neo-muted">
                     Voting in progress...
@@ -221,10 +242,15 @@ export function RpsTieBreakModal({
                     animate={
                       revealResolved
                         ? { y: 0, rotate: 0 }
-                        : { y: REVEAL_BOUNCE_SEQUENCE, rotate: [0, -9, 0, -9, 0, -9, 0] }
+                        : prefersReducedMotion
+                          ? { y: 0, rotate: 0 }
+                          : {
+                              y: REVEAL_BOUNCE_SEQUENCE,
+                              rotate: [0, -9, 0, -9, 0, -9, 0],
+                            }
                     }
                     transition={{
-                      duration: REVEAL_BOUNCE_DURATION_MS / 1000,
+                      duration: prefersReducedMotion ? 0.15 : REVEAL_BOUNCE_DURATION_MS / 1000,
                       ease: 'easeInOut',
                     }}
                     onAnimationComplete={() => {
@@ -246,10 +272,15 @@ export function RpsTieBreakModal({
                     animate={
                       revealResolved
                         ? { y: 0, rotate: 0 }
-                        : { y: REVEAL_BOUNCE_SEQUENCE, rotate: [0, 9, 0, 9, 0, 9, 0] }
+                        : prefersReducedMotion
+                          ? { y: 0, rotate: 0 }
+                          : {
+                              y: REVEAL_BOUNCE_SEQUENCE,
+                              rotate: [0, 9, 0, 9, 0, 9, 0],
+                            }
                     }
                     transition={{
-                      duration: REVEAL_BOUNCE_DURATION_MS / 1000,
+                      duration: prefersReducedMotion ? 0.15 : REVEAL_BOUNCE_DURATION_MS / 1000,
                       ease: 'easeInOut',
                     }}
                   >

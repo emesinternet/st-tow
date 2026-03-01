@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Card, CardContent } from '@/components/shared/ui/card';
 import { cn } from '@/lib/utils';
 import type { PlayerInputViewModel } from '@/types/ui';
@@ -15,6 +9,19 @@ interface PlayerInputPanelProps {
   onSubmitWord: (typed: string) => Promise<void>;
   onRecordMistake: () => Promise<void>;
   preMatch?: boolean;
+}
+
+function isTypingBlockedTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  if (target.isContentEditable) {
+    return true;
+  }
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+    return true;
+  }
+  return target.closest('button, a, select, [role="button"], [role="textbox"]') != null;
 }
 
 export function PlayerInputPanel({
@@ -56,9 +63,9 @@ export function PlayerInputPanel({
     }
 
     const nextScale = Math.max(0.01, Math.min(1, availableWidth / contentWidth));
-    setRowScale(current => (Math.abs(current - nextScale) < 0.002 ? current : nextScale));
+    setRowScale((current) => (Math.abs(current - nextScale) < 0.002 ? current : nextScale));
     const nextHeight = Math.max(1, Math.ceil(contentHeight * nextScale));
-    setScaledRowHeight(current => (Math.abs(current - nextHeight) < 1 ? current : nextHeight));
+    setScaledRowHeight((current) => (Math.abs(current - nextHeight) < 1 ? current : nextHeight));
   }, []);
 
   useEffect(() => {
@@ -66,35 +73,38 @@ export function PlayerInputPanel({
     setSubmitting(false);
   }, [targetWord]);
 
-  const handleProgressInput = useCallback(async (value: string): Promise<void> => {
-    if (!canType) {
-      return;
-    }
+  const handleProgressInput = useCallback(
+    async (value: string): Promise<void> => {
+      if (!canType) {
+        return;
+      }
 
-    const progress = evaluateTypingProgress(targetWord, value);
-    setTyped(progress.nextTyped);
+      const progress = evaluateTypingProgress(targetWord, value);
+      setTyped(progress.nextTyped);
 
-    if (progress.feedback === 'rejected') {
-      void onRecordMistake().catch(() => {
-        // Mistake telemetry is best-effort and should never block local typing flow.
-      });
-      return;
-    }
+      if (progress.feedback === 'rejected') {
+        void onRecordMistake().catch(() => {
+          // Mistake telemetry is best-effort and should never block local typing flow.
+        });
+        return;
+      }
 
-    if (!progress.shouldSubmit) {
-      return;
-    }
+      if (!progress.shouldSubmit) {
+        return;
+      }
 
-    try {
-      setSubmitting(true);
-      await onSubmitWord(value);
-      setTyped('');
-    } catch {
-      // Keep local typing state stable; submission errors are surfaced by toast in App.
-    } finally {
-      setSubmitting(false);
-    }
-  }, [canType, onRecordMistake, onSubmitWord, targetWord]);
+      try {
+        setSubmitting(true);
+        await onSubmitWord(value);
+        setTyped('');
+      } catch {
+        // Keep local typing state stable; submission errors are surfaced by toast in App.
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [canType, onRecordMistake, onSubmitWord, targetWord]
+  );
 
   useEffect(() => {
     if (!canType) {
@@ -103,6 +113,9 @@ export function PlayerInputPanel({
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.altKey || event.ctrlKey || event.metaKey) {
+        return;
+      }
+      if (isTypingBlockedTarget(event.target)) {
         return;
       }
 
@@ -177,9 +190,19 @@ export function PlayerInputPanel({
   return (
     <Card>
       <CardContent className="space-y-3">
-        <div className="py-3">
+        <p className="sr-only" aria-live="polite" aria-atomic="true">
+          {showReadyMessage
+            ? `Get ready to type ${readyName}`
+            : isEliminated
+              ? 'Eliminated'
+              : `Current word ${displayWord}. Progress ${typed.length} of ${displayWord.length}`}
+        </p>
+        <div className="pb-3">
           {showReadyMessage ? (
-            <p className="text-center font-display text-2xl font-extrabold uppercase tracking-wide text-neo-muted sm:text-3xl">
+            <p
+              role="status"
+              className="text-center font-display text-2xl font-extrabold uppercase tracking-wide text-neo-muted sm:text-3xl"
+            >
               Get ready to type {readyName}!
             </p>
           ) : (
@@ -193,15 +216,21 @@ export function PlayerInputPanel({
                     height: `${scaledRowHeight}px`,
                   }}
                 >
-                  <div ref={scaleRowRef} className="flex w-max flex-nowrap justify-center gap-2 overflow-visible">
+                  <div
+                    ref={scaleRowRef}
+                    className="flex w-max flex-nowrap justify-center gap-2 overflow-visible"
+                    role="list"
+                    aria-label="Word letters"
+                  >
                     {displayWord.split('').map((char, index) => {
                       const isFilled = index < typed.length;
                       const isActive = index === typed.length;
                       return (
                         <span
                           key={`${char}-${index}`}
+                          role="listitem"
                           className={cn(
-                            'inline-flex h-14 w-11 shrink-0 items-center justify-center rounded-[10px] border-2 border-neo-ink px-2 font-display text-3xl font-extrabold uppercase leading-none shadow-neo-sm sm:h-16 sm:w-12 sm:text-4xl',
+                            'inline-flex h-14 w-11 shrink-0 items-center justify-center rounded-[10px] border-4 border-neo-ink px-2 font-display text-3xl font-extrabold uppercase leading-none shadow-neo-sm sm:h-16 sm:w-12 sm:text-4xl',
                             isEliminated
                               ? 'bg-neo-danger text-neo-paper'
                               : isFilled

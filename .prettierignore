@@ -1,0 +1,4 @@
+**/node_modules
+**/dist
+web/src/module_bindings
+src/module_bindings

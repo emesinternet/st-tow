@@ -330,7 +330,9 @@ function normalizeTugState(row: GenericRow): NormalizedTugState {
     activePowerId: field<string>(row, 'activePowerId', 'active_power_id') ?? '',
     powerExpiresAtMicros: toBigInt(field(row, 'powerExpiresAtMicros', 'power_expires_at_micros')),
     wordRotateMs: toNumber(field(row, 'wordRotateMs', 'word_rotate_ms')),
-    eliminationWordTimeMs: toNumber(field(row, 'eliminationWordTimeMs', 'elimination_word_time_ms')),
+    eliminationWordTimeMs: toNumber(
+      field(row, 'eliminationWordTimeMs', 'elimination_word_time_ms')
+    ),
     nextWordAtMicros: toBigInt(field(row, 'nextWordAtMicros', 'next_word_at_micros')),
     lastTickAtMicros: toBigInt(field(row, 'lastTickAtMicros', 'last_tick_at_micros')),
   };
@@ -425,7 +427,9 @@ function normalizeGameEvent(row: GenericRow): NormalizedGameEvent {
 export function extractSnapshot(connection: DbConnection): SessionSnapshot {
   return {
     lobbies: tableRows(connection, ['lobby']).map(normalizeLobby),
-    lobbySettings: tableRows(connection, ['lobby_settings', 'lobbySettings']).map(normalizeLobbySetting),
+    lobbySettings: tableRows(connection, ['lobby_settings', 'lobbySettings']).map(
+      normalizeLobbySetting
+    ),
     players: tableRows(connection, ['player']).map(normalizePlayer),
     matches: tableRows(connection, ['match']).map(normalizeMatch),
     clocks: tableRows(connection, ['match_clock', 'matchClock']).map(normalizeMatchClock),
@@ -438,8 +442,12 @@ export function extractSnapshot(connection: DbConnection): SessionSnapshot {
     ),
     tugRpsStates: tableRows(connection, ['tug_rps_state', 'tugRpsState']).map(normalizeTugRpsState),
     tugRpsVotes: tableRows(connection, ['tug_rps_vote', 'tugRpsVote']).map(normalizeTugRpsVote),
-    tugPlayerStates: tableRows(connection, ['tug_player_state', 'tugPlayerState']).map(normalizeTugPlayerState),
-    tugHostStates: tableRows(connection, ['tug_host_state', 'tugHostState']).map(normalizeTugHostState),
+    tugPlayerStates: tableRows(connection, ['tug_player_state', 'tugPlayerState']).map(
+      normalizeTugPlayerState
+    ),
+    tugHostStates: tableRows(connection, ['tug_host_state', 'tugHostState']).map(
+      normalizeTugHostState
+    ),
     events: tableRows(connection, ['game_event', 'gameEvent']).map(normalizeGameEvent),
     generatedAt: Date.now(),
   };

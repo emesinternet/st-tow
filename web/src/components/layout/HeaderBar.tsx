@@ -29,42 +29,43 @@ export function HeaderBar({
 }: HeaderBarProps) {
   return (
     <Card className="neo-grid relative overflow-visible">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-[var(--space-3)]">
         <div>
-          <p className="font-display text-[3rem] leading-[3rem] font-black uppercase tracking-wide">
+          <p className="font-display text-4xl leading-[0.95] font-black uppercase tracking-wide sm:text-5xl lg:text-6xl">
             Typing Fever!
           </p>
-          <p className="font-body text-sm text-neo-muted">Realtime Typing Tug of War</p>
+          <p className="font-body text-base leading-tight text-neo-muted sm:text-lg">
+            Realtime Multi-player Typing Tug of War
+          </p>
         </div>
 
-        <div className="flex min-w-[260px] flex-col items-end gap-4">
+        <div className="flex w-full min-w-0 flex-col items-start gap-[var(--space-4)] sm:w-auto sm:min-w-[260px] sm:items-end">
           {musicControls ? (
-            <div className="flex flex-wrap items-center justify-end gap-2">{musicControls}</div>
+            <div className="flex w-full flex-wrap items-center justify-start gap-[var(--space-2)] sm:justify-end">
+              {musicControls}
+            </div>
           ) : null}
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Badge variant={connectionVariant(connectionState)}>{connectionLabel(connectionState)}</Badge>
+          <div className="flex w-full flex-wrap items-center justify-start gap-[var(--space-2)] sm:justify-end">
+            <Badge variant={connectionVariant(connectionState)}>
+              {connectionLabel(connectionState)}
+            </Badge>
           </div>
         </div>
       </div>
       {lobbyCode ? (
-        <Badge
-          variant="accent"
-          className="absolute bottom-0 left-1/2 z-40 -translate-x-1/2 translate-y-1/2 cursor-pointer select-text rounded-[12px] border-4 px-5 py-1 text-xl font-black tracking-[0.18em] sm:text-2xl"
-          role="button"
-          tabIndex={0}
-          title="Copy lobby code"
-          onClick={() => {
-            onCopyLobbyCode?.();
-          }}
-          onKeyDown={event => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
+        <div className="absolute bottom-0 left-1/2 z-40 -translate-x-1/2 translate-y-1/2">
+          <button
+            type="button"
+            className="neo-focus cursor-pointer select-text rounded-[var(--ui-radius-md)] border-4 border-neo-ink bg-neo-yellow px-5 py-1 font-display text-[var(--ui-text-lg)] font-black tracking-[0.18em] text-neo-ink shadow-neo transition active:translate-x-[2px] active:translate-y-[2px] active:shadow-neo-pressed sm:text-2xl"
+            title="Copy lobby code"
+            aria-label={`Copy lobby code ${lobbyCode}`}
+            onClick={() => {
               onCopyLobbyCode?.();
-            }
-          }}
-        >
-          {lobbyCode}
-        </Badge>
+            }}
+          >
+            {lobbyCode}
+          </button>
+        </div>
       ) : null}
     </Card>
   );

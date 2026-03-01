@@ -24,6 +24,7 @@ import chillhouseTrack from '@/assets/music/chillhouse.mp3';
 import discoTrack from '@/assets/music/disco.mp3';
 import funkyTrack from '@/assets/music/funky.mp3';
 import { useSpacetimeSession } from '@/data/useSpacetimeSession';
+import { parsePostGameCloseStartedPayload } from '@/lib/events';
 import { selectUiViewModel } from '@/lib/selectors';
 import { useHostWebcamMesh } from '@/lib/useHostWebcamMesh';
 import type { ToastMessage } from '@/types/ui';
@@ -45,36 +46,6 @@ const MUSIC_TRACKS = [
 ] as const;
 type MusicTrackId = (typeof MUSIC_TRACKS)[number]['id'];
 
-function toBigIntOrNull(value: unknown): bigint | null {
-  if (typeof value === 'bigint') {
-    return value;
-  }
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return BigInt(Math.trunc(value));
-  }
-  if (typeof value === 'string' && value.length > 0) {
-    try {
-      return BigInt(value);
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
-function parsePostGameDismissAtMicros(payloadJson: string): bigint | null {
-  try {
-    const payload = JSON.parse(payloadJson) as Record<string, unknown>;
-    return (
-      toBigIntOrNull(payload.dismiss_at_micros) ??
-      toBigIntOrNull(payload.dismissAtMicros) ??
-      null
-    );
-  } catch {
-    return null;
-  }
-}
-
 function makeToastId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -85,7 +56,7 @@ const MUSIC_MUTED_STORAGE_KEY = 'sttow_music_muted';
 function loadStoredTrackId(): MusicTrackId {
   try {
     const stored = localStorage.getItem(MUSIC_TRACK_STORAGE_KEY);
-    if (stored && MUSIC_TRACKS.some(track => track.id === stored)) {
+    if (stored && MUSIC_TRACKS.some((track) => track.id === stored)) {
       return stored as MusicTrackId;
     }
   } catch {
@@ -105,10 +76,10 @@ function loadStoredMuted(): boolean {
 function resolveTeamTone(
   lobby: NonNullable<ReturnType<typeof selectUiViewModel>['lobby']>
 ): 'teamA' | 'teamB' | 'neutral' {
-  if (lobby.teamA.some(player => player.isYou)) {
+  if (lobby.teamA.some((player) => player.isYou)) {
     return 'teamA';
   }
-  if (lobby.teamB.some(player => player.isYou)) {
+  if (lobby.teamB.some((player) => player.isYou)) {
     return 'teamB';
   }
   return 'neutral';
@@ -157,8 +128,7 @@ export default function App() {
   );
 
   const selectedMusicTrack = useMemo(
-    () =>
-      MUSIC_TRACKS.find(track => track.id === selectedMusicTrackId) ?? MUSIC_TRACKS[0],
+    () => MUSIC_TRACKS.find((track) => track.id === selectedMusicTrackId) ?? MUSIC_TRACKS[0],
     [selectedMusicTrackId]
   );
 
@@ -342,12 +312,8 @@ export default function App() {
   }, [confettiVisible, ui.phase]);
 
   const pushToast = useCallback(
-    (
-      title: string,
-      description: string,
-      tone: ToastMessage['tone'] = 'neutral'
-    ) => {
-      setToasts(current => [
+    (title: string, description: string, tone: ToastMessage['tone'] = 'neutral') => {
+      setToasts((current) => [
         ...current,
         {
           id: makeToastId(),
@@ -361,7 +327,7 @@ export default function App() {
   );
 
   const dismissToast = useCallback((id: string) => {
-    setToasts(current => current.filter(toast => toast.id !== id));
+    setToasts((current) => current.filter((toast) => toast.id !== id));
   }, []);
 
   const withActionErrorToast = useCallback(
@@ -383,12 +349,7 @@ export default function App() {
     const roundSeconds = Math.max(1, Math.min(10, Math.trunc(roundMinutes))) * 60;
     const tieZonePercent = TIE_ZONE_PERCENT_BY_SIZE[tieZoneSize];
     await withActionErrorToast('Could not create lobby', () =>
-      actions.createLobby(
-        GAME_TYPE_TUG_OF_WAR,
-        roundSeconds,
-        lockLobby,
-        tieZonePercent
-      )
+      actions.createLobby(GAME_TYPE_TUG_OF_WAR, roundSeconds, lockLobby, tieZonePercent)
     );
     setPendingRoundSeconds(roundSeconds);
   }, [actions, lockLobby, roundMinutes, tieZoneSize, withActionErrorToast]);
@@ -408,11 +369,7 @@ export default function App() {
 
     let cancelled = false;
     void withActionErrorToast('Could not set match length', () =>
-      actions.setLobbySetting(
-        lobby.lobbyId,
-        'round_seconds',
-        JSON.stringify(pendingRoundSeconds)
-      )
+      actions.setLobbySetting(lobby.lobbyId, 'round_seconds', JSON.stringify(pendingRoundSeconds))
     )
       .then(() => {
         if (!cancelled) {
@@ -446,9 +403,7 @@ export default function App() {
     setPendingJoinCode(code);
     setDismissedLobbyId('');
 
-    await withActionErrorToast('Could not join lobby', () =>
-      actions.joinLobby(code, nextName)
-    );
+    await withActionErrorToast('Could not join lobby', () => actions.joinLobby(code, nextName));
   }, [actions, displayName, joinCode, pushToast, withActionErrorToast]);
 
   const handleStartMatch = useCallback(async () => {
@@ -476,9 +431,7 @@ export default function App() {
       return;
     }
 
-    await withActionErrorToast('Could not end match', () =>
-      actions.endMatch(ui.lobby!.lobbyId)
-    );
+    await withActionErrorToast('Could not end match', () => actions.endMatch(ui.lobby!.lobbyId));
   }, [actions, ui.lobby, withActionErrorToast]);
   const handleClosePostGame = useCallback(async () => {
     const lobbyId = ui.lobby?.lobbyId;
@@ -491,9 +444,7 @@ export default function App() {
       return;
     }
 
-    await withActionErrorToast('Could not close post-game', () =>
-      actions.closePostGame(lobbyId)
-    );
+    await withActionErrorToast('Could not close post-game', () => actions.closePostGame(lobbyId));
 
     setDismissedLobbyId(lobbyId);
     setSelectedLobbyId('');
@@ -556,7 +507,7 @@ export default function App() {
     );
   }, [actions, ui.rpsTieBreak, withActionErrorToast]);
   const fireConfettiBurst = useCallback(() => {
-    setConfettiBurstKey(current => current + 1);
+    setConfettiBurstKey((current) => current + 1);
     setConfettiVisible(true);
 
     if (confettiTimeoutRef.current != null) {
@@ -607,10 +558,10 @@ export default function App() {
     if (!ui.lobby) {
       return '';
     }
-    if (ui.lobby.teamA.some(player => player.isYou)) {
+    if (ui.lobby.teamA.some((player) => player.isYou)) {
       return 'A';
     }
-    if (ui.lobby.teamB.some(player => player.isYou)) {
+    if (ui.lobby.teamB.some((player) => player.isYou)) {
       return 'B';
     }
     return '';
@@ -633,12 +584,12 @@ export default function App() {
       if (event.atMicros < latestAtMicros) {
         continue;
       }
-      const parsedDismissAt = parsePostGameDismissAtMicros(event.payloadJson);
-      if (parsedDismissAt == null) {
+      const payload = parsePostGameCloseStartedPayload(event.payloadJson);
+      if (!payload) {
         continue;
       }
       latestAtMicros = event.atMicros;
-      dismissAtMicros = parsedDismissAt;
+      dismissAtMicros = payload.dismissAtMicros;
     }
 
     if (dismissAtMicros == null) {
@@ -668,23 +619,17 @@ export default function App() {
 
   const teamTone = ui.lobby ? resolveTeamTone(ui.lobby) : 'neutral';
   const backgroundClassName =
-    teamTone === 'teamA'
-      ? 'team-bg-a'
-      : teamTone === 'teamB'
-        ? 'team-bg-b'
-        : '';
+    teamTone === 'teamA' ? 'team-bg-a' : teamTone === 'teamB' ? 'team-bg-b' : '';
 
   const headerMusicControls = (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
       <select
         value={selectedMusicTrackId}
-        onChange={event =>
-          setSelectedMusicTrackId(event.target.value as MusicTrackId)
-        }
-        className="neo-focus h-9 rounded-[10px] border-4 border-neo-ink bg-neo-paper px-2 font-display text-xs font-bold uppercase tracking-wide text-neo-ink shadow-neo-sm"
+        onChange={(event) => setSelectedMusicTrackId(event.target.value as MusicTrackId)}
+        className="neo-focus h-9 rounded-[var(--ui-radius-md)] border-4 border-neo-ink bg-neo-paper px-2 font-display text-xs font-bold uppercase tracking-wide text-neo-ink shadow-neo"
         aria-label="Music track"
       >
-        {MUSIC_TRACKS.map(track => (
+        {MUSIC_TRACKS.map((track) => (
           <option key={track.id} value={track.id}>
             {track.label}
           </option>
@@ -696,7 +641,7 @@ export default function App() {
         variant="neutral"
         className="h-9 w-9"
         onClick={() => {
-          setMusicMuted(current => !current);
+          setMusicMuted((current) => !current);
         }}
         aria-label={musicMuted ? 'Unmute music' : 'Mute music'}
         title={musicMuted ? 'Unmute music' : 'Mute music'}
@@ -751,6 +696,9 @@ export default function App() {
             preMatch={!ui.matchHud || ui.matchHud.phase === 'PreGame'}
           />
         ) : null}
+        {ui.role === 'host' && ui.hostPanel ? (
+          <HostPowerPanel powers={ui.hostPanel.powers} onActivatePower={handleActivatePower} />
+        ) : null}
         {ui.role === 'host' && ui.lobby ? (
           <HostControlsPanel
             lobby={ui.lobby}
@@ -763,15 +711,6 @@ export default function App() {
             onResetLobby={handleResetLobby}
             onEndMatch={handleEndMatch}
             onSetCameraEnabled={webcamMesh.toggleCamera}
-          />
-        ) : null}
-        {ui.role === 'host' &&
-        ui.hostPanel &&
-        ui.matchHud &&
-        (ui.matchHud.phase === 'InGame' || ui.matchHud.phase === 'SuddenDeath') ? (
-          <HostPowerPanel
-            powers={ui.hostPanel.powers}
-            onActivatePower={handleActivatePower}
           />
         ) : null}
       </>
@@ -817,18 +756,17 @@ export default function App() {
           void handleClosePostGame();
         }}
         onResetMatch={handleResetLobby}
-        onDebugConfetti={fireConfettiBurst}
         role={ui.role}
         lobby={ui.lobby}
         hud={ui.matchHud}
         waitingForHostSeconds={ui.role === 'player' ? postGameCloseSecondsRemaining : null}
       />
 
-      {toasts.map(toast => (
+      {toasts.map((toast) => (
         <Toast
           key={toast.id}
           open
-          onOpenChange={open => {
+          onOpenChange={(open) => {
             if (!open) {
               dismissToast(toast.id);
             }

@@ -406,11 +406,7 @@ const HOST_POWER_CONFIG: Record<HostPowerId, HostPowerConfig> = {
 };
 
 function isWordMode(value: string): value is WordMode {
-  return (
-    value === WORD_MODE_NORMAL ||
-    value === WORD_MODE_TECH ||
-    value === WORD_MODE_SYMBOLS
-  );
+  return value === WORD_MODE_NORMAL || value === WORD_MODE_TECH || value === WORD_MODE_SYMBOLS;
 }
 
 function isValidTieZonePercent(value: number): boolean {
@@ -441,10 +437,7 @@ function replaceRow(table: any, current: any, next: any): void {
   table.insert(next);
 }
 
-function findFirst<T>(
-  rows: Iterable<T>,
-  predicate: (row: T) => boolean
-): T | null {
+function findFirst<T>(rows: Iterable<T>, predicate: (row: T) => boolean): T | null {
   for (const row of rows) {
     if (predicate(row)) {
       return row;
@@ -489,64 +482,49 @@ function getMatchOrThrow(ctx: ReducerCtx<any>, matchId: string): MatchRow {
 function getLobbyById(ctx: ReducerCtx<any>, lobbyId: string): LobbyRow | null {
   return findFirst<LobbyRow>(
     ctx.db.lobby.iter() as Iterable<LobbyRow>,
-    row => row.lobby_id === lobbyId
+    (row) => row.lobby_id === lobbyId
   );
 }
 
 function getMatchById(ctx: ReducerCtx<any>, matchId: string): MatchRow | null {
   return findFirst<MatchRow>(
     ctx.db.match.iter() as Iterable<MatchRow>,
-    row => row.match_id === matchId
+    (row) => row.match_id === matchId
   );
 }
 
-function getLobbyByJoinCode(
-  ctx: ReducerCtx<any>,
-  joinCode: string
-): LobbyRow | null {
+function getLobbyByJoinCode(ctx: ReducerCtx<any>, joinCode: string): LobbyRow | null {
   return findFirst<LobbyRow>(
     ctx.db.lobby.iter() as Iterable<LobbyRow>,
-    row => row.join_code === joinCode
+    (row) => row.join_code === joinCode
   );
 }
 
-function getMatchClockByMatchId(
-  ctx: ReducerCtx<any>,
-  matchId: string
-): MatchClockRow | null {
+function getMatchClockByMatchId(ctx: ReducerCtx<any>, matchId: string): MatchClockRow | null {
   return findFirst<MatchClockRow>(
     ctx.db.match_clock.iter() as Iterable<MatchClockRow>,
-    row => row.match_id === matchId
+    (row) => row.match_id === matchId
   );
 }
 
-function getTugStateByMatchId(
-  ctx: ReducerCtx<any>,
-  matchId: string
-): TugStateRow | null {
+function getTugStateByMatchId(ctx: ReducerCtx<any>, matchId: string): TugStateRow | null {
   return findFirst<TugStateRow>(
     ctx.db.tug_state.iter() as Iterable<TugStateRow>,
-    row => row.match_id === matchId
+    (row) => row.match_id === matchId
   );
 }
 
-function getTugPlayerStateById(
-  ctx: ReducerCtx<any>,
-  rowId: string
-): TugPlayerStateRow | null {
+function getTugPlayerStateById(ctx: ReducerCtx<any>, rowId: string): TugPlayerStateRow | null {
   return findFirst<TugPlayerStateRow>(
     ctx.db.tug_player_state.iter() as Iterable<TugPlayerStateRow>,
-    row => row.tug_player_state_id === rowId
+    (row) => row.tug_player_state_id === rowId
   );
 }
 
-function getTugHostStateByMatchId(
-  ctx: ReducerCtx<any>,
-  matchId: string
-): TugHostStateRow | null {
+function getTugHostStateByMatchId(ctx: ReducerCtx<any>, matchId: string): TugHostStateRow | null {
   return findFirst<TugHostStateRow>(
     ctx.db.tug_host_state.iter() as Iterable<TugHostStateRow>,
-    row => row.match_id === matchId
+    (row) => row.match_id === matchId
   );
 }
 
@@ -556,24 +534,18 @@ function getTugCameraStateByMatchId(
 ): TugCameraStateRow | null {
   return findFirst<TugCameraStateRow>(
     ctx.db.tug_camera_state.iter() as Iterable<TugCameraStateRow>,
-    row => row.match_id === matchId
+    (row) => row.match_id === matchId
   );
 }
 
-function getTugRpsStateByMatchId(
-  ctx: ReducerCtx<any>,
-  matchId: string
-): TugRpsStateRow | null {
+function getTugRpsStateByMatchId(ctx: ReducerCtx<any>, matchId: string): TugRpsStateRow | null {
   return findFirst<TugRpsStateRow>(
     ctx.db.tug_rps_state.iter() as Iterable<TugRpsStateRow>,
-    row => row.match_id === matchId
+    (row) => row.match_id === matchId
   );
 }
 
-function listTugRpsVotesByMatch(
-  ctx: ReducerCtx<any>,
-  matchId: string
-): TugRpsVoteRow[] {
+function listTugRpsVotesByMatch(ctx: ReducerCtx<any>, matchId: string): TugRpsVoteRow[] {
   const rows: TugRpsVoteRow[] = [];
   for (const row of ctx.db.tug_rps_vote.iter() as Iterable<TugRpsVoteRow>) {
     if (row.match_id === matchId) {
@@ -583,10 +555,7 @@ function listTugRpsVotesByMatch(
   return rows;
 }
 
-function listTugWebrtcSignalsByMatch(
-  ctx: ReducerCtx<any>,
-  matchId: string
-): TugWebrtcSignalRow[] {
+function listTugWebrtcSignalsByMatch(ctx: ReducerCtx<any>, matchId: string): TugWebrtcSignalRow[] {
   const rows: TugWebrtcSignalRow[] = [];
   for (const row of ctx.db.tug_webrtc_signal.iter() as Iterable<TugWebrtcSignalRow>) {
     if (row.match_id === matchId) {
@@ -596,19 +565,13 @@ function listTugWebrtcSignalsByMatch(
   return rows;
 }
 
-function clearTugWebrtcSignalsByMatch(
-  ctx: ReducerCtx<any>,
-  matchId: string
-): void {
+function clearTugWebrtcSignalsByMatch(ctx: ReducerCtx<any>, matchId: string): void {
   for (const row of listTugWebrtcSignalsByMatch(ctx, matchId)) {
     ctx.db.tug_webrtc_signal.delete(row);
   }
 }
 
-function clearTugCameraStateForMatch(
-  ctx: ReducerCtx<any>,
-  matchId: string
-): void {
+function clearTugCameraStateForMatch(ctx: ReducerCtx<any>, matchId: string): void {
   const row = getTugCameraStateByMatchId(ctx, matchId);
   if (row) {
     ctx.db.tug_camera_state.delete(row);
@@ -674,14 +637,11 @@ function clearMatchRuntimeRows(ctx: ReducerCtx<any>, matchId: string): void {
 function getPlayerById(ctx: ReducerCtx<any>, playerId: string): PlayerRow | null {
   return findFirst<PlayerRow>(
     ctx.db.player.iter() as Iterable<PlayerRow>,
-    row => row.player_id === playerId
+    (row) => row.player_id === playerId
   );
 }
 
-function listTugPlayerStatesByMatch(
-  ctx: ReducerCtx<any>,
-  matchId: string
-): TugPlayerStateRow[] {
+function listTugPlayerStatesByMatch(ctx: ReducerCtx<any>, matchId: string): TugPlayerStateRow[] {
   const rows: TugPlayerStateRow[] = [];
   for (const row of ctx.db.tug_player_state.iter() as Iterable<TugPlayerStateRow>) {
     if (row.match_id === matchId) {
@@ -712,11 +672,7 @@ function deriveBaseDifficultyTier(
     LOBBY_SETTING_KEYS.round_seconds,
     DEFAULT_LOBBY_SETTINGS.round_seconds
   );
-  return deriveDifficultyTier(
-    nowMicros(ctx),
-    match.started_at.microsSinceUnixEpoch,
-    roundSeconds
-  );
+  return deriveDifficultyTier(nowMicros(ctx), match.started_at.microsSinceUnixEpoch, roundSeconds);
 }
 
 function deriveEffectiveDifficultyTier(
@@ -735,20 +691,13 @@ function pickWordForPlayer(
   lastWordType: string,
   includeSelfCurrentWord = false
 ): WordEntry {
-  const playerStates = listTugPlayerStatesByMatch(ctx, match.match_id).map(row => ({
+  const playerStates = listTugPlayerStatesByMatch(ctx, match.match_id).map((row) => ({
     playerId: row.player_id,
     currentWord: row.current_word,
   }));
-  const excluded = buildExcludedWordsForPlayer(
-    playerStates,
-    playerId,
-    { includeSelfCurrentWord }
-  );
+  const excluded = buildExcludedWordsForPlayer(playerStates, playerId, { includeSelfCurrentWord });
   const baseTier = deriveBaseDifficultyTier(ctx, lobby, match);
-  const maxDifficultyTier = deriveEffectiveDifficultyTier(
-    baseTier,
-    tug.difficulty_bonus_tier
-  );
+  const maxDifficultyTier = deriveEffectiveDifficultyTier(baseTier, tug.difficulty_bonus_tier);
   return pickWordForContext(ctx, {
     mode: resolveWordMode(tug.word_mode),
     maxDifficultyTier,
@@ -781,10 +730,7 @@ function pickWordForHost(
   }
 
   const baseTier = deriveBaseDifficultyTier(ctx, lobby, match);
-  const maxDifficultyTier = deriveEffectiveDifficultyTier(
-    baseTier,
-    tug.difficulty_bonus_tier
-  );
+  const maxDifficultyTier = deriveEffectiveDifficultyTier(baseTier, tug.difficulty_bonus_tier);
   return pickWordForContext(ctx, {
     mode: resolveWordMode(tug.word_mode),
     maxDifficultyTier,
@@ -823,21 +769,12 @@ function ensureTugPlayerStateForActiveMatch(
   }
   const now = nowMicros(ctx);
   const deadline =
-    match.phase === MATCH_PHASE_SUDDEN_DEATH
-      ? now + msToMicros(tug.elimination_word_time_ms)
-      : 0n;
+    match.phase === MATCH_PHASE_SUDDEN_DEATH ? now + msToMicros(tug.elimination_word_time_ms) : 0n;
 
   if (existing) {
     const nextWord = existing.current_word
       ? null
-      : pickWordForPlayer(
-          ctx,
-          lobby,
-          match,
-          tug,
-          player.player_id,
-          existing.last_word_type
-        );
+      : pickWordForPlayer(ctx, lobby, match, tug, player.player_id, existing.last_word_type);
     replaceRow(ctx.db.tug_player_state, existing, {
       ...existing,
       current_word: nextWord?.value ?? existing.current_word,
@@ -847,14 +784,7 @@ function ensureTugPlayerStateForActiveMatch(
     return;
   }
 
-  const firstWord = pickWordForPlayer(
-    ctx,
-    lobby,
-    match,
-    tug,
-    player.player_id,
-    ''
-  );
+  const firstWord = pickWordForPlayer(ctx, lobby, match, tug, player.player_id, '');
   ctx.db.tug_player_state.insert({
     tug_player_state_id: id,
     match_id: match.match_id,
@@ -882,7 +812,7 @@ function getLobbySettingInt(
 ): number {
   const row = findFirst<InferTypeOfRow<typeof lobbySettingsRow>>(
     ctx.db.lobby_settings.iter() as Iterable<InferTypeOfRow<typeof lobbySettingsRow>>,
-    item => item.setting_id === settingId(lobbyId, key)
+    (item) => item.setting_id === settingId(lobbyId, key)
   );
   if (!row) {
     return fallback;
@@ -929,7 +859,7 @@ function getLobbySettingBigInt(
 ): bigint {
   const row = findFirst<InferTypeOfRow<typeof lobbySettingsRow>>(
     ctx.db.lobby_settings.iter() as Iterable<InferTypeOfRow<typeof lobbySettingsRow>>,
-    item => item.setting_id === settingId(lobbyId, key)
+    (item) => item.setting_id === settingId(lobbyId, key)
   );
   if (!row) {
     return fallback;
@@ -946,7 +876,7 @@ function upsertLobbySetting(
   const id = settingId(lobbyId, key);
   const existing = findFirst<InferTypeOfRow<typeof lobbySettingsRow>>(
     ctx.db.lobby_settings.iter() as Iterable<InferTypeOfRow<typeof lobbySettingsRow>>,
-    row => row.setting_id === id
+    (row) => row.setting_id === id
   );
   if (existing) {
     ctx.db.lobby_settings.delete(existing);
@@ -966,15 +896,11 @@ function seedDefaultLobbySettings(ctx: ReducerCtx<any>, lobbyId: string): void {
   }
 }
 
-function removeLobbySetting(
-  ctx: ReducerCtx<any>,
-  lobbyId: string,
-  key: string
-): void {
+function removeLobbySetting(ctx: ReducerCtx<any>, lobbyId: string, key: string): void {
   const id = settingId(lobbyId, key);
   const existing = findFirst<InferTypeOfRow<typeof lobbySettingsRow>>(
     ctx.db.lobby_settings.iter() as Iterable<InferTypeOfRow<typeof lobbySettingsRow>>,
-    row => row.setting_id === id
+    (row) => row.setting_id === id
   );
   if (existing) {
     ctx.db.lobby_settings.delete(existing);
@@ -996,15 +922,11 @@ function listLobbySettings(
   return rows;
 }
 
-function removeMatchSchedule(
-  ctx: ReducerCtx<any>,
-  matchId: string,
-  kind: string
-): void {
+function removeMatchSchedule(ctx: ReducerCtx<any>, matchId: string, kind: string): void {
   const key = scheduleId(matchId, kind);
   const existing = findFirst<MatchScheduleRow>(
     ctx.db.match_schedule.iter() as Iterable<MatchScheduleRow>,
-    row => row.schedule_key === key
+    (row) => row.schedule_key === key
   );
   if (existing) {
     ctx.db.match_schedule.delete(existing);
@@ -1015,10 +937,7 @@ function removeTickSchedule(ctx: ReducerCtx<any>, matchId: string): void {
   removeMatchSchedule(ctx, matchId, SCHEDULE_KIND_TICK);
 }
 
-function ensurePostGameCloseSchedule(
-  ctx: ReducerCtx<any>,
-  matchId: string
-): void {
+function ensurePostGameCloseSchedule(ctx: ReducerCtx<any>, matchId: string): void {
   removeMatchSchedule(ctx, matchId, SCHEDULE_KIND_POST_GAME_CLOSE);
   ctx.db.match_schedule.insert({
     scheduled_id: 0n,
@@ -1040,11 +959,7 @@ function listPlayersInLobby(ctx: ReducerCtx<any>, lobbyId: string): PlayerRow[] 
   return players;
 }
 
-function closeLobbyAfterPostGame(
-  ctx: ReducerCtx<any>,
-  lobby: LobbyRow,
-  matchId: string
-): void {
+function closeLobbyAfterPostGame(ctx: ReducerCtx<any>, lobby: LobbyRow, matchId: string): void {
   const closedAt = nowMicros(ctx);
 
   for (const player of listPlayersInLobby(ctx, lobby.lobby_id)) {
@@ -1101,14 +1016,11 @@ function chooseBalancedTeam(players: PlayerRow[]): string {
   return counts.a <= counts.b ? TEAM_A : TEAM_B;
 }
 
-function findMembershipInLobby(
-  ctx: ReducerCtx<any>,
-  lobbyId: string
-): PlayerRow | null {
+function findMembershipInLobby(ctx: ReducerCtx<any>, lobbyId: string): PlayerRow | null {
   const key = lobbyIdentityKey(lobbyId, ctx.sender);
   return findFirst<PlayerRow>(
     ctx.db.player.iter() as Iterable<PlayerRow>,
-    row => row.lobby_identity_key === key
+    (row) => row.lobby_identity_key === key
   );
 }
 
@@ -1119,16 +1031,14 @@ function findLobbyMemberByIdentity(
 ): PlayerRow | null {
   return findFirst<PlayerRow>(
     ctx.db.player.iter() as Iterable<PlayerRow>,
-    row =>
-      row.lobby_id === lobbyId &&
-      row.identity.equals(identity) &&
-      row.status !== PLAYER_STATUS_LEFT
+    (row) =>
+      row.lobby_id === lobbyId && row.identity.equals(identity) && row.status !== PLAYER_STATUS_LEFT
   );
 }
 
 function ensureTeamsAssigned(ctx: ReducerCtx<any>, lobbyId: string): void {
   const players = listPlayersInLobby(ctx, lobbyId).filter(
-    player => player.status !== PLAYER_STATUS_LEFT
+    (player) => player.status !== PLAYER_STATUS_LEFT
   );
 
   let countA = 0;
@@ -1178,11 +1088,7 @@ function resetPlayersForNewMatch(ctx: ReducerCtx<any>, lobbyId: string): void {
   ensureTeamsAssigned(ctx, lobbyId);
 }
 
-function initializeTugState(
-  ctx: ReducerCtx<any>,
-  lobby: LobbyRow,
-  match: MatchRow
-): void {
+function initializeTugState(ctx: ReducerCtx<any>, lobby: LobbyRow, match: MatchRow): void {
   const winThreshold = getLobbySettingInt(
     ctx,
     lobby.lobby_id,
@@ -1253,14 +1159,7 @@ function initializeTugState(
       ctx.db.tug_player_state.delete(existing);
     }
 
-    const firstWord = pickWordForPlayer(
-      ctx,
-      lobby,
-      match,
-      tugNext,
-      player.player_id,
-      ''
-    );
+    const firstWord = pickWordForPlayer(ctx, lobby, match, tugNext, player.player_id, '');
     ctx.db.tug_player_state.insert({
       tug_player_state_id: id,
       match_id: match.match_id,
@@ -1275,14 +1174,7 @@ function initializeTugState(
   }
 
   const hostStateCurrent = getTugHostStateByMatchId(ctx, match.match_id);
-  const firstHostWord = pickWordForHost(
-    ctx,
-    lobby,
-    match,
-    tugNext,
-    '',
-    false
-  );
+  const firstHostWord = pickWordForHost(ctx, lobby, match, tugNext, '', false);
   const hostStateNext: TugHostStateRow = {
     match_id: match.match_id,
     host_identity: lobby.host_identity,
@@ -1339,8 +1231,7 @@ function finishMatch(
     return;
   }
 
-  const resolvedWinnerTeam =
-    winnerTeam === TEAM_A || winnerTeam === TEAM_B ? winnerTeam : '';
+  const resolvedWinnerTeam = winnerTeam === TEAM_A || winnerTeam === TEAM_B ? winnerTeam : '';
 
   const matchNext: MatchRow = {
     ...match,
@@ -1358,8 +1249,7 @@ function finishMatch(
   disableHostCameraForMatch(ctx, lobby, match.match_id, 'match_finished');
 
   removeTickSchedule(ctx, match.match_id);
-  const idleCloseAtMicros =
-    nowMicros(ctx) + msToMicros(POST_GAME_IDLE_CLOSE_DELAY_SECONDS * 1000);
+  const idleCloseAtMicros = nowMicros(ctx) + msToMicros(POST_GAME_IDLE_CLOSE_DELAY_SECONDS * 1000);
   upsertLobbySetting(
     ctx,
     lobby.lobby_id,
@@ -1377,10 +1267,7 @@ function finishMatch(
   });
 }
 
-function runPostGameCloseTick(
-  ctx: ReducerCtx<any>,
-  matchId: string
-): void {
+function runPostGameCloseTick(ctx: ReducerCtx<any>, matchId: string): void {
   const match = getMatchById(ctx, matchId);
   if (!match) {
     removeMatchSchedule(ctx, matchId, SCHEDULE_KIND_POST_GAME_CLOSE);
@@ -1394,10 +1281,7 @@ function runPostGameCloseTick(
     return;
   }
 
-  if (
-    match.phase !== MATCH_PHASE_POST_GAME ||
-    lobby.active_match_id !== matchId
-  ) {
+  if (match.phase !== MATCH_PHASE_POST_GAME || lobby.active_match_id !== matchId) {
     removeMatchSchedule(ctx, matchId, SCHEDULE_KIND_POST_GAME_CLOSE);
     removeLobbySetting(ctx, lobby.lobby_id, POST_GAME_CLOSE_AT_SETTING_KEY);
     removeLobbySetting(ctx, lobby.lobby_id, POST_GAME_IDLE_CLOSE_AT_SETTING_KEY);
@@ -1560,13 +1444,7 @@ function maybeFinishOrStartTieBreak(
   tug: TugStateRow,
   winnerTeam: string
 ): boolean {
-  if (
-    isRopeInTieZone(
-      tug.rope_position,
-      tug.win_threshold,
-      tug.tie_zone_percent
-    )
-  ) {
+  if (isRopeInTieZone(tug.rope_position, tug.win_threshold, tug.tie_zone_percent)) {
     beginRpsTieBreak(ctx, lobby, match, tug);
     return true;
   }
@@ -1711,10 +1589,7 @@ function computeCurrentTiers(
   tug: TugStateRow
 ): { rampTier: WordDifficultyTier; effectiveTier: WordDifficultyTier } {
   const rampTier = deriveBaseDifficultyTier(ctx, lobby, match);
-  const effectiveTier = deriveEffectiveDifficultyTier(
-    rampTier,
-    tug.difficulty_bonus_tier
-  );
+  const effectiveTier = deriveEffectiveDifficultyTier(rampTier, tug.difficulty_bonus_tier);
   return { rampTier, effectiveTier };
 }
 
@@ -1774,14 +1649,7 @@ function rerollAllActiveWords(
 
   const hostState = getTugHostStateByMatchId(ctx, match.match_id);
   if (hostState) {
-    const hostWord = pickWordForHost(
-      ctx,
-      lobby,
-      match,
-      tug,
-      hostState.last_word_type,
-      true
-    );
+    const hostWord = pickWordForHost(ctx, lobby, match, tug, hostState.last_word_type, true);
     replaceRow(ctx.db.tug_host_state, hostState, {
       ...hostState,
       current_word: hostWord.value,
@@ -1872,10 +1740,7 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
 
   const now = nowMicros(ctx);
   cleanupStaleWebrtcSignals(ctx, matchId, now);
-  const secondsRemaining = deriveSecondsRemaining(
-    clock.phase_ends_at.microsSinceUnixEpoch,
-    now
-  );
+  const secondsRemaining = deriveSecondsRemaining(clock.phase_ends_at.microsSinceUnixEpoch, now);
 
   if (clock.seconds_remaining !== secondsRemaining) {
     const clockNext: MatchClockRow = {
@@ -2058,23 +1923,14 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
         continue;
       }
 
-      if (
-        playerState.deadline_at_micros > 0n &&
-        playerState.deadline_at_micros < now
-      ) {
+      if (playerState.deadline_at_micros > 0n && playerState.deadline_at_micros < now) {
         eliminatePlayer(ctx, lobby.lobby_id, match.match_id, player, 'timeout');
       }
     }
 
     const teamCounts = countActiveByTeam(listPlayersInLobby(ctx, lobby.lobby_id));
     if (teamCounts.a === 0 && teamCounts.b === 0) {
-      maybeFinishOrStartTieBreak(
-        ctx,
-        lobby,
-        match,
-        tug,
-        resolveWinnerFromTugState(tug)
-      );
+      maybeFinishOrStartTieBreak(ctx, lobby, match, tug, resolveWinnerFromTugState(tug));
       return;
     }
     if (teamCounts.a === 0 && teamCounts.b > 0) {
@@ -2087,11 +1943,7 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
   }
 }
 
-function initGameForMatch(
-  ctx: ReducerCtx<any>,
-  lobby: LobbyRow,
-  match: MatchRow
-): void {
+function initGameForMatch(ctx: ReducerCtx<any>, lobby: LobbyRow, match: MatchRow): void {
   if (lobby.game_type === GAME_TYPE_TUG_OF_WAR) {
     initializeTugState(ctx, lobby, match);
     return;
@@ -2100,7 +1952,7 @@ function initGameForMatch(
   throw new Error(`Unsupported game type: ${lobby.game_type}`);
 }
 
-export const init = spacetimedb.init(_ctx => {});
+export const init = spacetimedb.init((_ctx) => {});
 
 export const create_lobby = spacetimedb.reducer(
   {
@@ -2189,7 +2041,7 @@ export const join_lobby = spacetimedb.reducer(
     const membershipKey = lobbyIdentityKey(lobby.lobby_id, ctx.sender);
     const existing = findFirst<PlayerRow>(
       ctx.db.player.iter() as Iterable<PlayerRow>,
-      row => row.lobby_identity_key === membershipKey
+      (row) => row.lobby_identity_key === membershipKey
     );
     const lockInProgressJoin =
       getLobbySettingInt(
@@ -2253,30 +2105,27 @@ export const join_lobby = spacetimedb.reducer(
   }
 );
 
-export const leave_lobby = spacetimedb.reducer(
-  { lobby_id: t.string() },
-  (ctx, { lobby_id }) => {
-    getLobbyOrThrow(ctx, lobby_id);
-    const player = findMembershipInLobby(ctx, lobby_id);
-    if (!player) {
-      return;
-    }
-
-    if (player.status === PLAYER_STATUS_LEFT) {
-      return;
-    }
-
-    replaceRow(ctx.db.player, player, {
-      ...player,
-      status: PLAYER_STATUS_LEFT,
-      left_at_micros: nowMicros(ctx),
-    });
-
-    emitGameEvent(ctx, lobby_id, '', 'player_left', {
-      player_id: player.player_id,
-    });
+export const leave_lobby = spacetimedb.reducer({ lobby_id: t.string() }, (ctx, { lobby_id }) => {
+  getLobbyOrThrow(ctx, lobby_id);
+  const player = findMembershipInLobby(ctx, lobby_id);
+  if (!player) {
+    return;
   }
-);
+
+  if (player.status === PLAYER_STATUS_LEFT) {
+    return;
+  }
+
+  replaceRow(ctx.db.player, player, {
+    ...player,
+    status: PLAYER_STATUS_LEFT,
+    left_at_micros: nowMicros(ctx),
+  });
+
+  emitGameEvent(ctx, lobby_id, '', 'player_left', {
+    player_id: player.player_id,
+  });
+});
 
 export const set_lobby_setting = spacetimedb.reducer(
   {
@@ -2296,120 +2145,109 @@ export const set_lobby_setting = spacetimedb.reducer(
   }
 );
 
-export const start_match = spacetimedb.reducer(
-  { lobby_id: t.string() },
-  (ctx, { lobby_id }) => {
-    const lobby = getLobbyOrThrow(ctx, lobby_id);
-    assertHost(ctx, lobby);
+export const start_match = spacetimedb.reducer({ lobby_id: t.string() }, (ctx, { lobby_id }) => {
+  const lobby = getLobbyOrThrow(ctx, lobby_id);
+  assertHost(ctx, lobby);
 
-    if (
-      lobby.active_match_id &&
-      (lobby.status === LOBBY_STATUS_RUNNING ||
-        lobby.status === LOBBY_STATUS_SUDDEN_DEATH)
-    ) {
-      throw new Error('Match is already active');
-    }
-
-    if (lobby.active_match_id) {
-      removeMatchSchedule(
-        ctx,
-        lobby.active_match_id,
-        SCHEDULE_KIND_POST_GAME_CLOSE
-      );
-    }
-    removeLobbySetting(ctx, lobby_id, POST_GAME_CLOSE_AT_SETTING_KEY);
-    removeLobbySetting(ctx, lobby_id, POST_GAME_IDLE_CLOSE_AT_SETTING_KEY);
-
-    resetPlayersForNewMatch(ctx, lobby_id);
-
-    const matchId = newId(ctx, 'match');
-    const roundSeconds = getLobbySettingInt(
-      ctx,
-      lobby_id,
-      LOBBY_SETTING_KEYS.round_seconds,
-      DEFAULT_LOBBY_SETTINGS.round_seconds
-    );
-    const tickRateMs = getLobbySettingInt(
-      ctx,
-      lobby_id,
-      LOBBY_SETTING_KEYS.tick_rate_ms,
-      DEFAULT_LOBBY_SETTINGS.tick_rate_ms
-    );
-
-    const match: MatchRow = {
-      match_id: matchId,
-      lobby_id,
-      game_type: lobby.game_type,
-      phase: MATCH_PHASE_PRE_GAME,
-      started_at: ctx.timestamp,
-      ends_at_micros: 0n,
-      winner_team: '',
-      winner_player_id: '',
-      seed: ctx.random.uint32(),
-    };
-    ctx.db.match.insert(match);
-    clearTugRpsStateForMatch(ctx, matchId);
-    clearTugRpsVotesByMatch(ctx, matchId);
-    clearTugCameraStateForMatch(ctx, matchId);
-    clearTugWebrtcSignalsByMatch(ctx, matchId);
-
-    ctx.db.match_clock.insert({
-      match_id: matchId,
-      phase_ends_at: new Timestamp(
-        ctx.timestamp.microsSinceUnixEpoch + msToMicros(PRE_GAME_COUNTDOWN_SECONDS * 1000)
-      ),
-      seconds_remaining: PRE_GAME_COUNTDOWN_SECONDS,
-      tick_rate_ms: tickRateMs,
-    });
-
-    const lobbyNext: LobbyRow = {
-      ...lobby,
-      active_match_id: matchId,
-      status: LOBBY_STATUS_RUNNING,
-    };
-    replaceRow(ctx.db.lobby, lobby, lobbyNext);
-
-    initGameForMatch(ctx, lobbyNext, match);
-
-    removeTickSchedule(ctx, matchId);
-    ctx.db.match_schedule.insert({
-      scheduled_id: 0n,
-      schedule_key: scheduleId(matchId, SCHEDULE_KIND_TICK),
-      match_id: matchId,
-      kind: SCHEDULE_KIND_TICK,
-      active: true,
-      scheduled_at: ScheduleAt.interval(msToMicros(tickRateMs)),
-    });
-
-    emitGameEvent(ctx, lobby_id, matchId, 'match_started', {
-      round_seconds: roundSeconds,
-      tick_rate_ms: tickRateMs,
-      game_type: lobby.game_type,
-    });
-    emitGameEvent(ctx, lobby_id, matchId, 'countdown_started', {
-      seconds: PRE_GAME_COUNTDOWN_SECONDS,
-    });
+  if (
+    lobby.active_match_id &&
+    (lobby.status === LOBBY_STATUS_RUNNING || lobby.status === LOBBY_STATUS_SUDDEN_DEATH)
+  ) {
+    throw new Error('Match is already active');
   }
-);
 
-export const end_match = spacetimedb.reducer(
-  { lobby_id: t.string() },
-  (ctx, { lobby_id }) => {
-    const lobby = getLobbyOrThrow(ctx, lobby_id);
-    assertHost(ctx, lobby);
-
-    if (!lobby.active_match_id) {
-      return;
-    }
-
-    const match = getMatchById(ctx, lobby.active_match_id);
-    if (!match) {
-      return;
-    }
-
-    finishMatch(ctx, lobby, match, match.winner_team);
+  if (lobby.active_match_id) {
+    removeMatchSchedule(ctx, lobby.active_match_id, SCHEDULE_KIND_POST_GAME_CLOSE);
   }
-);
+  removeLobbySetting(ctx, lobby_id, POST_GAME_CLOSE_AT_SETTING_KEY);
+  removeLobbySetting(ctx, lobby_id, POST_GAME_IDLE_CLOSE_AT_SETTING_KEY);
+
+  resetPlayersForNewMatch(ctx, lobby_id);
+
+  const matchId = newId(ctx, 'match');
+  const roundSeconds = getLobbySettingInt(
+    ctx,
+    lobby_id,
+    LOBBY_SETTING_KEYS.round_seconds,
+    DEFAULT_LOBBY_SETTINGS.round_seconds
+  );
+  const tickRateMs = getLobbySettingInt(
+    ctx,
+    lobby_id,
+    LOBBY_SETTING_KEYS.tick_rate_ms,
+    DEFAULT_LOBBY_SETTINGS.tick_rate_ms
+  );
+
+  const match: MatchRow = {
+    match_id: matchId,
+    lobby_id,
+    game_type: lobby.game_type,
+    phase: MATCH_PHASE_PRE_GAME,
+    started_at: ctx.timestamp,
+    ends_at_micros: 0n,
+    winner_team: '',
+    winner_player_id: '',
+    seed: ctx.random.uint32(),
+  };
+  ctx.db.match.insert(match);
+  clearTugRpsStateForMatch(ctx, matchId);
+  clearTugRpsVotesByMatch(ctx, matchId);
+  clearTugCameraStateForMatch(ctx, matchId);
+  clearTugWebrtcSignalsByMatch(ctx, matchId);
+
+  ctx.db.match_clock.insert({
+    match_id: matchId,
+    phase_ends_at: new Timestamp(
+      ctx.timestamp.microsSinceUnixEpoch + msToMicros(PRE_GAME_COUNTDOWN_SECONDS * 1000)
+    ),
+    seconds_remaining: PRE_GAME_COUNTDOWN_SECONDS,
+    tick_rate_ms: tickRateMs,
+  });
+
+  const lobbyNext: LobbyRow = {
+    ...lobby,
+    active_match_id: matchId,
+    status: LOBBY_STATUS_RUNNING,
+  };
+  replaceRow(ctx.db.lobby, lobby, lobbyNext);
+
+  initGameForMatch(ctx, lobbyNext, match);
+
+  removeTickSchedule(ctx, matchId);
+  ctx.db.match_schedule.insert({
+    scheduled_id: 0n,
+    schedule_key: scheduleId(matchId, SCHEDULE_KIND_TICK),
+    match_id: matchId,
+    kind: SCHEDULE_KIND_TICK,
+    active: true,
+    scheduled_at: ScheduleAt.interval(msToMicros(tickRateMs)),
+  });
+
+  emitGameEvent(ctx, lobby_id, matchId, 'match_started', {
+    round_seconds: roundSeconds,
+    tick_rate_ms: tickRateMs,
+    game_type: lobby.game_type,
+  });
+  emitGameEvent(ctx, lobby_id, matchId, 'countdown_started', {
+    seconds: PRE_GAME_COUNTDOWN_SECONDS,
+  });
+});
+
+export const end_match = spacetimedb.reducer({ lobby_id: t.string() }, (ctx, { lobby_id }) => {
+  const lobby = getLobbyOrThrow(ctx, lobby_id);
+  assertHost(ctx, lobby);
+
+  if (!lobby.active_match_id) {
+    return;
+  }
+
+  const match = getMatchById(ctx, lobby.active_match_id);
+  if (!match) {
+    return;
+  }
+
+  finishMatch(ctx, lobby, match, match.winner_team);
+});
 
 export const close_post_game = spacetimedb.reducer(
   { lobby_id: t.string() },
@@ -2441,110 +2279,97 @@ export const close_post_game = spacetimedb.reducer(
   }
 );
 
-export const reset_lobby = spacetimedb.reducer(
-  { lobby_id: t.string() },
-  (ctx, { lobby_id }) => {
-    const lobby = getLobbyOrThrow(ctx, lobby_id);
-    assertHost(ctx, lobby);
+export const reset_lobby = spacetimedb.reducer({ lobby_id: t.string() }, (ctx, { lobby_id }) => {
+  const lobby = getLobbyOrThrow(ctx, lobby_id);
+  assertHost(ctx, lobby);
 
-    if (lobby.active_match_id) {
-      removeTickSchedule(ctx, lobby.active_match_id);
-      removeMatchSchedule(
+  if (lobby.active_match_id) {
+    removeTickSchedule(ctx, lobby.active_match_id);
+    removeMatchSchedule(ctx, lobby.active_match_id, SCHEDULE_KIND_POST_GAME_CLOSE);
+
+    const tug = getTugStateByMatchId(ctx, lobby.active_match_id);
+    if (tug) {
+      const tieZonePercent = getLobbySettingInt(
         ctx,
-        lobby.active_match_id,
-        SCHEDULE_KIND_POST_GAME_CLOSE
+        lobby_id,
+        LOBBY_SETTING_KEYS.tie_zone_percent,
+        DEFAULT_LOBBY_SETTINGS.tie_zone_percent
       );
-
-      const tug = getTugStateByMatchId(ctx, lobby.active_match_id);
-      if (tug) {
-        const tieZonePercent = getLobbySettingInt(
-          ctx,
-          lobby_id,
-          LOBBY_SETTING_KEYS.tie_zone_percent,
-          DEFAULT_LOBBY_SETTINGS.tie_zone_percent
-        );
-        replaceRow(ctx.db.tug_state, tug, {
-          ...tug,
-          mode: TUG_MODE_NORMAL,
-          word_mode: WORD_MODE_NORMAL,
-          tie_zone_percent: tieZonePercent,
-          ramp_tier: 1,
-          difficulty_bonus_tier: 0,
-          active_power_id: '',
-          power_expires_at_micros: 0n,
-        });
-      }
-
-      clearTugRpsStateForMatch(ctx, lobby.active_match_id);
-      clearTugRpsVotesByMatch(ctx, lobby.active_match_id);
-      clearTugWebrtcSignalsByMatch(ctx, lobby.active_match_id);
-      clearTugCameraStateForMatch(ctx, lobby.active_match_id);
-
-      const hostState = getTugHostStateByMatchId(ctx, lobby.active_match_id);
-      if (hostState) {
-        replaceRow(ctx.db.tug_host_state, hostState, {
-          ...hostState,
-          score: 0,
-          correct_count: 0,
-          power_meter: 0,
-          last_word_type: '',
-        });
-      }
-
-      for (const playerState of listTugPlayerStatesByMatch(ctx, lobby.active_match_id)) {
-        replaceRow(ctx.db.tug_player_state, playerState, {
-          ...playerState,
-          last_word_type: '',
-          deadline_at_micros: 0n,
-        });
-      }
-    }
-
-    removeLobbySetting(ctx, lobby_id, POST_GAME_CLOSE_AT_SETTING_KEY);
-    removeLobbySetting(ctx, lobby_id, POST_GAME_IDLE_CLOSE_AT_SETTING_KEY);
-
-    replaceRow(ctx.db.lobby, lobby, {
-      ...lobby,
-      status: LOBBY_STATUS_WAITING,
-      active_match_id: '',
-    });
-
-    for (const player of listPlayersInLobby(ctx, lobby_id)) {
-      if (player.status === PLAYER_STATUS_LEFT) {
-        continue;
-      }
-
-      replaceRow(ctx.db.player, player, {
-        ...player,
-        status: PLAYER_STATUS_ACTIVE,
-        eliminated_reason: '',
-        left_at_micros: 0n,
+      replaceRow(ctx.db.tug_state, tug, {
+        ...tug,
+        mode: TUG_MODE_NORMAL,
+        word_mode: WORD_MODE_NORMAL,
+        tie_zone_percent: tieZonePercent,
+        ramp_tier: 1,
+        difficulty_bonus_tier: 0,
+        active_power_id: '',
+        power_expires_at_micros: 0n,
       });
     }
 
-    emitGameEvent(ctx, lobby_id, '', 'lobby_reset', {});
-  }
-);
+    clearTugRpsStateForMatch(ctx, lobby.active_match_id);
+    clearTugRpsVotesByMatch(ctx, lobby.active_match_id);
+    clearTugWebrtcSignalsByMatch(ctx, lobby.active_match_id);
+    clearTugCameraStateForMatch(ctx, lobby.active_match_id);
 
-export const tug_init = spacetimedb.reducer(
-  { match_id: t.string() },
-  (ctx, { match_id }) => {
-    const match = getMatchOrThrow(ctx, match_id);
-    const lobby = getLobbyOrThrow(ctx, match.lobby_id);
-    assertHost(ctx, lobby);
+    const hostState = getTugHostStateByMatchId(ctx, lobby.active_match_id);
+    if (hostState) {
+      replaceRow(ctx.db.tug_host_state, hostState, {
+        ...hostState,
+        score: 0,
+        correct_count: 0,
+        power_meter: 0,
+        last_word_type: '',
+      });
+    }
 
-    initializeTugState(ctx, lobby, match);
+    for (const playerState of listTugPlayerStatesByMatch(ctx, lobby.active_match_id)) {
+      replaceRow(ctx.db.tug_player_state, playerState, {
+        ...playerState,
+        last_word_type: '',
+        deadline_at_micros: 0n,
+      });
+    }
   }
-);
+
+  removeLobbySetting(ctx, lobby_id, POST_GAME_CLOSE_AT_SETTING_KEY);
+  removeLobbySetting(ctx, lobby_id, POST_GAME_IDLE_CLOSE_AT_SETTING_KEY);
+
+  replaceRow(ctx.db.lobby, lobby, {
+    ...lobby,
+    status: LOBBY_STATUS_WAITING,
+    active_match_id: '',
+  });
+
+  for (const player of listPlayersInLobby(ctx, lobby_id)) {
+    if (player.status === PLAYER_STATUS_LEFT) {
+      continue;
+    }
+
+    replaceRow(ctx.db.player, player, {
+      ...player,
+      status: PLAYER_STATUS_ACTIVE,
+      eliminated_reason: '',
+      left_at_micros: 0n,
+    });
+  }
+
+  emitGameEvent(ctx, lobby_id, '', 'lobby_reset', {});
+});
+
+export const tug_init = spacetimedb.reducer({ match_id: t.string() }, (ctx, { match_id }) => {
+  const match = getMatchOrThrow(ctx, match_id);
+  const lobby = getLobbyOrThrow(ctx, match.lobby_id);
+  assertHost(ctx, lobby);
+
+  initializeTugState(ctx, lobby, match);
+});
 
 export const tug_record_miss = spacetimedb.reducer(
   { match_id: t.string() },
   (ctx, { match_id }) => {
     const match = getMatchOrThrow(ctx, match_id);
-    if (
-      match.phase !== MATCH_PHASE_IN_GAME &&
-      match.phase !== MATCH_PHASE_SUDDEN_DEATH
-    ) {
+    if (match.phase !== MATCH_PHASE_IN_GAME && match.phase !== MATCH_PHASE_SUDDEN_DEATH) {
       return;
     }
 
@@ -2578,10 +2403,7 @@ export const tug_activate_power = spacetimedb.reducer(
   },
   (ctx, { match_id, power_id }) => {
     const match = getMatchOrThrow(ctx, match_id);
-    if (
-      match.phase !== MATCH_PHASE_IN_GAME &&
-      match.phase !== MATCH_PHASE_SUDDEN_DEATH
-    ) {
+    if (match.phase !== MATCH_PHASE_IN_GAME && match.phase !== MATCH_PHASE_SUDDEN_DEATH) {
       throw new Error('Match is not accepting power usage');
     }
 
@@ -2818,7 +2640,7 @@ export const tug_rps_cast_vote = spacetimedb.reducer(
     const voteId = `${match_id}:${player.player_id}`;
     const existing = findFirst<TugRpsVoteRow>(
       ctx.db.tug_rps_vote.iter() as Iterable<TugRpsVoteRow>,
-      row => row.tug_rps_vote_id === voteId
+      (row) => row.tug_rps_vote_id === voteId
     );
     const nextVote: TugRpsVoteRow = {
       tug_rps_vote_id: voteId,
@@ -2879,10 +2701,7 @@ export const tug_submit = spacetimedb.reducer(
   },
   (ctx, { match_id, typed }) => {
     const match = getMatchOrThrow(ctx, match_id);
-    if (
-      match.phase !== MATCH_PHASE_IN_GAME &&
-      match.phase !== MATCH_PHASE_SUDDEN_DEATH
-    ) {
+    if (match.phase !== MATCH_PHASE_IN_GAME && match.phase !== MATCH_PHASE_SUDDEN_DEATH) {
       throw new Error('Match is not accepting submissions');
     }
 
@@ -2899,14 +2718,7 @@ export const tug_submit = spacetimedb.reducer(
       }
 
       const now = nowMicros(ctx);
-      const nextHostWord = pickWordForHost(
-        ctx,
-        lobby,
-        match,
-        tug,
-        hostState.last_word_type,
-        true
-      );
+      const nextHostWord = pickWordForHost(ctx, lobby, match, tug, hostState.last_word_type, true);
       const hostResult = applyHostSubmission(
         {
           score: hostState.score,
@@ -2928,10 +2740,7 @@ export const tug_submit = spacetimedb.reducer(
 
       if (hostResult.correct) {
         hostStateNext.correct_count += 1;
-        hostStateNext.power_meter = Math.min(
-          HOST_POWER_METER_MAX,
-          hostStateNext.power_meter + 1
-        );
+        hostStateNext.power_meter = Math.min(HOST_POWER_METER_MAX, hostStateNext.power_meter + 1);
         hostStateNext.last_word_type = nextHostWord.type;
         emitGameEvent(ctx, lobby.lobby_id, match_id, 'host_submit_ok', {
           score: hostStateNext.score,
@@ -2988,8 +2797,7 @@ export const tug_submit = spacetimedb.reducer(
       playerStateNext.current_word = nextWord.value;
       playerStateNext.last_word_type = nextWord.type;
       if (tug.mode === TUG_MODE_ELIMINATION) {
-        playerStateNext.deadline_at_micros =
-          now + msToMicros(tug.elimination_word_time_ms);
+        playerStateNext.deadline_at_micros = now + msToMicros(tug.elimination_word_time_ms);
       }
 
       const teamSubmit = applyPlayerCorrectSubmission(
@@ -3040,9 +2848,6 @@ export const tug_tick_scheduled = spacetimedb.reducer(
   }
 );
 
-export const tug_tick = spacetimedb.reducer(
-  { match_id: t.string() },
-  (ctx, { match_id }) => {
-    runTugTick(ctx, match_id);
-  }
-);
+export const tug_tick = spacetimedb.reducer({ match_id: t.string() }, (ctx, { match_id }) => {
+  runTugTick(ctx, match_id);
+});

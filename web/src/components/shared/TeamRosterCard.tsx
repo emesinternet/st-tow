@@ -9,12 +9,7 @@ interface TeamRosterCardProps {
   counts: TeamCountViewModel;
 }
 
-export function TeamRosterCard({
-  title,
-  badgeVariant,
-  players,
-  counts,
-}: TeamRosterCardProps) {
+export function TeamRosterCard({ title, badgeVariant, players, counts }: TeamRosterCardProps) {
   return (
     <Card className="h-full">
       <CardHeader className="mb-2 flex flex-row items-start justify-between gap-2">
@@ -31,10 +26,10 @@ export function TeamRosterCard({
           {players.length === 0 ? (
             <li className="font-body text-sm text-neo-muted">No players yet.</li>
           ) : (
-            players.map(player => (
+            players.map((player) => (
               <li
                 key={player.playerId}
-                className="rounded-[10px] border-2 border-neo-ink bg-white px-3 py-2 shadow-neo-sm"
+                className="rounded-[10px] border-4 border-neo-ink bg-white px-3 py-2 shadow-neo-sm"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="font-body text-sm font-semibold">

@@ -1,4 +1,5 @@
 import { useMemo, type CSSProperties } from 'react';
+import { useReducedMotion } from 'framer-motion';
 
 interface ConfettiBurstProps {
   burstKey: number;
@@ -17,14 +18,7 @@ interface ConfettiPiece {
   color: string;
 }
 
-const CONFETTI_COLORS = [
-  '#ef5a24',
-  '#1f78c9',
-  '#f4d941',
-  '#0c9f61',
-  '#7f5af0',
-  '#ff7a59',
-];
+const CONFETTI_COLORS = ['#ef5a24', '#1f78c9', '#f4d941', '#0c9f61', '#7f5af0', '#ff7a59'];
 
 function randomBetween(min: number, max: number): number {
   return min + Math.random() * (max - min);
@@ -39,9 +33,7 @@ function buildConfettiPieces(count: number): ConfettiPiece[] {
       sizePx: randomBetween(8, 16),
       durationMs: Math.round(randomBetween(2400, 4200)),
       delayMs: Math.round(randomBetween(0, 420)),
-      burstXPx: Math.round(
-        fromLeft ? randomBetween(320, 980) : randomBetween(-980, -320)
-      ),
+      burstXPx: Math.round(fromLeft ? randomBetween(320, 980) : randomBetween(-980, -320)),
       burstYPx: Math.round(randomBetween(-860, -320)),
       rotationDeg: Math.round(randomBetween(420, 980)),
       color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
@@ -50,15 +42,18 @@ function buildConfettiPieces(count: number): ConfettiPiece[] {
 }
 
 export function ConfettiBurst({ burstKey, visible }: ConfettiBurstProps) {
+  const prefersReducedMotion = useReducedMotion();
+  // A new burst key intentionally reseeds piece trajectories.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const pieces = useMemo(() => buildConfettiPieces(250), [burstKey]);
 
-  if (!visible) {
+  if (!visible || prefersReducedMotion) {
     return null;
   }
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[86] overflow-hidden">
-      {pieces.map(piece => (
+      {pieces.map((piece) => (
         <span
           key={`${burstKey}-${piece.id}`}
           className="confetti-piece absolute"

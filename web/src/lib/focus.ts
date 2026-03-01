@@ -1,9 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-export function useStickyInputFocus(
-  enabled: boolean,
-  deps: ReadonlyArray<unknown> = []
-): React.RefObject<HTMLInputElement | null> {
+export function useStickyInputFocus(enabled: boolean): React.RefObject<HTMLInputElement | null> {
   const ref = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -22,7 +19,7 @@ export function useStickyInputFocus(
       input.focus();
       input.select();
     }
-  }, [enabled, ...deps]);
+  }, [enabled]);
 
   return ref;
 }

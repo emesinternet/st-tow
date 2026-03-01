@@ -6,6 +6,9 @@
   "scripts": {
     "build": "spacetime build",
     "publish": "spacetime publish",
+    "lint": "eslint --max-warnings=0 \"src/**/*.ts\"",
+    "format": "node ./node_modules/prettier/bin/prettier.cjs --write \"src/**/*.ts\" \"*.{ts,js,json,md}\"",
+    "format:check": "node ./node_modules/prettier/bin/prettier.cjs --check \"src/**/*.ts\" \"*.{ts,js,json,md}\"",
     "typecheck": "node ./node_modules/typescript/bin/tsc -p tsconfig.json",
     "test": "tsx --test \"src/**/*.test.ts\""
   },
@@ -13,7 +16,13 @@
     "spacetimedb": "^2.0.2"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.14.0",
+    "@typescript-eslint/eslint-plugin": "^8.56.1",
+    "@typescript-eslint/parser": "^8.56.1",
+    "eslint": "^10.0.2",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.1",
     "tsx": "^4.20.5",
     "typescript": "~5.6.2"
   }

@@ -194,7 +194,10 @@ test('selector exposes host score from tug_host_state when present', () => {
   assert.equal(vm.matchHud?.hostCameraStreamEpoch, 2);
   assert.equal(vm.matchHud?.hostCameraHostIdentity, 'c200host');
   assert.equal(vm.playerInput?.currentWord, 'captain');
-  assert.equal(vm.hostPanel?.powers.some(power => power.enabled), true);
+  assert.equal(
+    vm.hostPanel?.powers.some((power) => power.enabled),
+    true
+  );
   assert.equal(vm.hostPanel?.cameraEnabled, true);
   assert.equal(vm.hostPanel?.canToggleCamera, true);
 });

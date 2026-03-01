@@ -251,12 +251,31 @@ After server changes:
 ## Build / Check Commands (WSL)
 
 ```bash
+cd ~/repos/st-tow/server && npm run format:check
+cd ~/repos/st-tow/server && npm run lint
 cd ~/repos/st-tow/server && npm run typecheck
 cd ~/repos/st-tow/server && npm run test
+cd ~/repos/st-tow/web && npm run format:check
+cd ~/repos/st-tow/web && npm run lint
+cd ~/repos/st-tow/web && npm run check:module-bindings
 cd ~/repos/st-tow/web && npm run typecheck
 cd ~/repos/st-tow/web && npm run test
 cd ~/repos/st-tow/web && npm run build
 ```
+
+## Quality Guardrails
+
+- `web/src/module_bindings/*` is generated; do not edit manually.
+- Run `cd ~/repos/st-tow/web && npm run check:module-bindings` before opening PRs that touch data bindings.
+- Prefer tokenized sizing and spacing variables from `web/src/styles/globals.css` over one-off numeric values.
+- Keep accessibility semantics intact on overlays/modals (`role=\"dialog\"`, `aria-modal`, labels/descriptions).
+
+## Scoped Subscription Mode
+
+- Default runtime keeps compatibility with full subscriptions.
+- Optional scoped mode is available via env flag:
+  - `VITE_SCOPED_SUBSCRIPTIONS=1`
+- Scoped mode keeps base subscriptions (`lobby`, `player`, `match`) and dynamically scopes detail tables by active lobby/match.
 
 ## Known Failure Modes
 

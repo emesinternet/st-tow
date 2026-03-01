@@ -1,21 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DbConnection, tables } from '@/module_bindings';
 import { buildActions, type GameActions } from '@/data/actions';
-import {
-  EMPTY_SNAPSHOT,
-  extractSnapshot,
-  type SessionSnapshot,
-} from '@/data/selectors';
+import { EMPTY_SNAPSHOT, extractSnapshot, type SessionSnapshot } from '@/data/selectors';
+import { buildScopedQueries, deriveScope } from '@/data/subscriptionScope';
 import type { ConnectionState } from '@/types/ui';
 
 const HOST = import.meta.env.VITE_SPACETIMEDB_HOST ?? 'ws://127.0.0.1:3000';
 const DB_NAME = import.meta.env.VITE_SPACETIMEDB_DB_NAME ?? 'st-tow';
 const TOKEN_KEY = 'auth_token';
+const ENABLE_SCOPED_SUBSCRIPTIONS = import.meta.env.VITE_SCOPED_SUBSCRIPTIONS === '1';
 
 type TableWithListeners = {
   onInsert?: (callback: () => void) => void;
   onDelete?: (callback: () => void) => void;
   onUpdate?: (callback: () => void) => void;
+};
+
+type SubscriptionHandle = {
+  unsubscribe: () => void;
 };
 
 export interface SpacetimeSession {
@@ -42,12 +44,51 @@ export function useSpacetimeSession(): SpacetimeSession {
   useEffect(() => {
     let isMounted = true;
     let liveConnection: DbConnection | null = null;
+    let sessionIdentity = '';
+    let baseSubscription: SubscriptionHandle | null = null;
+    let scopedSubscription: SubscriptionHandle | null = null;
+    let scopedKey = '';
 
     const pullSnapshot = () => {
       if (!isMounted || !liveConnection) {
         return;
       }
       refreshFromConnection(liveConnection);
+    };
+
+    const unsubscribeScoped = () => {
+      if (!scopedSubscription) {
+        return;
+      }
+      scopedSubscription.unsubscribe();
+      scopedSubscription = null;
+      scopedKey = '';
+    };
+
+    const refreshScopedSubscription = () => {
+      if (!isMounted || !liveConnection || !ENABLE_SCOPED_SUBSCRIPTIONS) {
+        return;
+      }
+
+      const nextSnapshot = extractSnapshot(liveConnection);
+      const nextScope = deriveScope(nextSnapshot, sessionIdentity);
+      const nextKey = `${nextScope.lobbyId}:${nextScope.matchId}`;
+      if (nextKey === scopedKey) {
+        return;
+      }
+
+      unsubscribeScoped();
+
+      const queries = buildScopedQueries(nextScope);
+      if (!queries.length) {
+        return;
+      }
+
+      scopedSubscription = liveConnection
+        .subscriptionBuilder()
+        .onApplied(() => pullSnapshot())
+        .subscribe(queries);
+      scopedKey = nextKey;
     };
 
     const conn = DbConnection.builder()
@@ -73,26 +114,37 @@ export function useSpacetimeSession(): SpacetimeSession {
           connectedIdentity && typeof connectedIdentity.toHexString === 'function'
             ? connectedIdentity.toHexString()
             : '';
+        sessionIdentity = identityHex;
         setIdentity(identityHex);
 
-        ctx
-          .subscriptionBuilder()
-          .onApplied(() => pullSnapshot())
-          .subscribe([
-            tables.lobby,
-            tables.lobby_settings,
-            tables.player,
-            tables.match,
-            tables.match_clock,
-            tables.tug_state,
-            tables.tug_camera_state,
-            tables.tug_webrtc_signal,
-            tables.tug_rps_state,
-            tables.tug_rps_vote,
-            tables.tug_player_state,
-            tables.tug_host_state,
-            tables.game_event,
-          ]);
+        if (ENABLE_SCOPED_SUBSCRIPTIONS) {
+          baseSubscription = ctx
+            .subscriptionBuilder()
+            .onApplied(() => {
+              pullSnapshot();
+              refreshScopedSubscription();
+            })
+            .subscribe(['SELECT * FROM lobby', 'SELECT * FROM player', 'SELECT * FROM match']);
+        } else {
+          baseSubscription = ctx
+            .subscriptionBuilder()
+            .onApplied(() => pullSnapshot())
+            .subscribe([
+              tables.lobby,
+              tables.lobby_settings,
+              tables.player,
+              tables.match,
+              tables.match_clock,
+              tables.tug_state,
+              tables.tug_camera_state,
+              tables.tug_webrtc_signal,
+              tables.tug_rps_state,
+              tables.tug_rps_vote,
+              tables.tug_player_state,
+              tables.tug_host_state,
+              tables.game_event,
+            ]);
+        }
 
         for (const table of Object.values(ctx.db as Record<string, unknown>)) {
           const listeners = table as TableWithListeners;
@@ -102,10 +154,16 @@ export function useSpacetimeSession(): SpacetimeSession {
         }
 
         pullSnapshot();
+        refreshScopedSubscription();
       })
       .onDisconnect(() => {
         if (!isMounted) {
           return;
+        }
+        unsubscribeScoped();
+        if (baseSubscription) {
+          baseSubscription.unsubscribe();
+          baseSubscription = null;
         }
         setState('disconnected');
         setConnection(null);
@@ -121,6 +179,10 @@ export function useSpacetimeSession(): SpacetimeSession {
 
     return () => {
       isMounted = false;
+      unsubscribeScoped();
+      if (baseSubscription) {
+        baseSubscription.unsubscribe();
+      }
       conn.disconnect();
     };
   }, [refreshFromConnection]);

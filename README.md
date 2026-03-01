@@ -126,12 +126,31 @@ cd C:\Users\emesi\Desktop\scripts
 ## Checks
 
 ```bash
+cd ~/repos/st-tow/server && npm run format:check
+cd ~/repos/st-tow/server && npm run lint
 cd ~/repos/st-tow/server && npm run typecheck
 cd ~/repos/st-tow/server && npm run test
+cd ~/repos/st-tow/web && npm run format:check
+cd ~/repos/st-tow/web && npm run lint
+cd ~/repos/st-tow/web && npm run check:module-bindings
 cd ~/repos/st-tow/web && npm run typecheck
 cd ~/repos/st-tow/web && npm run test
 cd ~/repos/st-tow/web && npm run build
 ```
+
+## Engineering Docs
+
+- `docs/engineering/ui-conventions.md`
+- `docs/engineering/accessibility-checklist.md`
+- `docs/engineering/realtime-state-model.md`
+
+## Optional Scoped Subscription Mode
+
+Set `VITE_SCOPED_SUBSCRIPTIONS=1` in the web environment to enable scoped client subscriptions.
+
+- Base subscription: `lobby`, `player`, `match`
+- Detail subscriptions are scoped to the currently resolved lobby/match
+- Reconnect safety remains via full snapshot extraction on applied updates
 
 ## Common Issues
 

@@ -1,10 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  WORD_MODE_NORMAL,
-  WORD_MODE_SYMBOLS,
-  WORD_MODE_TECH,
-} from '../../core/constants';
+import { WORD_MODE_NORMAL, WORD_MODE_SYMBOLS, WORD_MODE_TECH } from '../../core/constants';
 import { WORD_CATALOG } from './word_catalog';
 import { pickWordForContext } from './words';
 
@@ -29,11 +25,9 @@ test('pickWordForContext respects mode and max difficulty tier', () => {
 });
 
 test('pickWordForContext honors exclusion set when candidates remain', () => {
-  const candidates = WORD_CATALOG.filter(
-    row => row.mode === WORD_MODE_NORMAL && row.tier === 1
-  );
+  const candidates = WORD_CATALOG.filter((row) => row.mode === WORD_MODE_NORMAL && row.tier === 1);
   const keep = candidates[0];
-  const excluded = new Set(candidates.slice(1).map(row => row.value));
+  const excluded = new Set(candidates.slice(1).map((row) => row.value));
 
   const picked = pickWordForContext(makeCtx(false), {
     mode: WORD_MODE_NORMAL,
