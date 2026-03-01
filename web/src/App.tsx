@@ -121,7 +121,7 @@ export default function App() {
 
   const [displayName, setDisplayName] = useState('Player');
   const [joinCode, setJoinCode] = useState('');
-  const [roundMinutes, setRoundMinutes] = useState(1);
+  const [roundMinutes, setRoundMinutes] = useState(3);
   const [lockLobby, setLockLobby] = useState(false);
   const [tieZoneSize, setTieZoneSize] = useState<TieZoneSize>('small');
   const [pendingRoundSeconds, setPendingRoundSeconds] = useState<number | null>(null);
@@ -391,7 +391,7 @@ export default function App() {
   const handleCreateLobby = useCallback(async () => {
     setPendingJoinCode('');
     setDismissedLobbyId('');
-    const roundSeconds = Math.max(1, Math.min(60, Math.trunc(roundMinutes))) * 60;
+    const roundSeconds = Math.max(1, Math.min(10, Math.trunc(roundMinutes))) * 60;
     const tieZonePercent = TIE_ZONE_PERCENT_BY_SIZE[tieZoneSize];
     await withActionErrorToast('Could not create lobby', () =>
       actions.createLobby(

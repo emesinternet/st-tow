@@ -2045,6 +2045,20 @@ export const join_lobby = spacetimedb.reducer(
       ctx.db.player.iter() as Iterable<PlayerRow>,
       row => row.lobby_identity_key === membershipKey
     );
+    const lockInProgressJoin =
+      getLobbySettingInt(
+        ctx,
+        lobby.lobby_id,
+        LOBBY_SETTING_KEYS.lock_in_progress_join,
+        DEFAULT_LOBBY_SETTINGS.lock_in_progress_join
+      ) > 0;
+    const hasStartedMatch =
+      lobby.active_match_id.length > 0 || lobby.status !== LOBBY_STATUS_WAITING;
+    const isNewOrLeftMembership = !existing || existing.status === PLAYER_STATUS_LEFT;
+    if (lockInProgressJoin && hasStartedMatch && isNewOrLeftMembership) {
+      throw new Error('Lobby is locked after match start');
+    }
+
     if (existing) {
       let team = existing.team;
       if (team !== TEAM_A && team !== TEAM_B) {
@@ -2066,17 +2080,6 @@ export const join_lobby = spacetimedb.reducer(
         player_id: existing.player_id,
       });
       return;
-    }
-
-    const lockInProgressJoin =
-      getLobbySettingInt(
-        ctx,
-        lobby.lobby_id,
-        LOBBY_SETTING_KEYS.lock_in_progress_join,
-        DEFAULT_LOBBY_SETTINGS.lock_in_progress_join
-      ) > 0;
-    if (lockInProgressJoin && lobby.status !== LOBBY_STATUS_WAITING) {
-      throw new Error('Lobby is locked after match start');
     }
 
     const team = chooseBalancedTeam(listPlayersInLobby(ctx, lobby.lobby_id));
