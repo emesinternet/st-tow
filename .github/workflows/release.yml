@@ -1,6 +1,8 @@
-name: Publish Server To Spacetime Maincloud
+name: Release (Publish Spacetime + Deploy Pages)
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       db_name:
@@ -19,9 +21,16 @@ on:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: true
 
 jobs:
-  publish:
+  publish_server:
+    name: Publish Server To Spacetime Maincloud
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -50,18 +59,19 @@ jobs:
             find "$SPACETIME_ROOT" -maxdepth 3 -type f | sed -n '1,120p'
             exit 1
           fi
-          # Ensure a concrete CLI version is installed and selected.
           "$SPACETIME_BIN" version upgrade || "$SPACETIME_BIN" version install 2.0.2 --use -y
           echo "SPACETIME_BIN=$SPACETIME_BIN" >> "$GITHUB_ENV"
           "$SPACETIME_BIN" version list
           "$SPACETIME_BIN" --version
 
-      - name: Resolve database name
-        id: resolve-db
+      - name: Resolve database name and publish options
+        id: resolve
         env:
           INPUT_DB_NAME: ${{ github.event.inputs.db_name }}
           DEFAULT_DB_NAME: ${{ vars.SPACETIMEDB_DB_NAME }}
+          INPUT_DELETE_DATA: ${{ github.event.inputs.delete_data }}
         run: |
+          set -euo pipefail
           DB_NAME="$INPUT_DB_NAME"
           if [ -z "$DB_NAME" ]; then
             DB_NAME="$DEFAULT_DB_NAME"
@@ -70,13 +80,21 @@ jobs:
             echo "No database name set. Provide workflow input db_name or repo variable SPACETIMEDB_DB_NAME."
             exit 1
           fi
+
+          DELETE_DATA="$INPUT_DELETE_DATA"
+          if [ -z "$DELETE_DATA" ]; then
+            DELETE_DATA="on-conflict"
+          fi
+
           echo "db_name=$DB_NAME" >> "$GITHUB_OUTPUT"
+          echo "delete_data=$DELETE_DATA" >> "$GITHUB_OUTPUT"
 
       - name: Authenticate Spacetime CLI
         working-directory: server
         env:
           SPACETIMEDB_TOKEN: ${{ secrets.SPACETIMEDB_TOKEN }}
         run: |
+          set -euo pipefail
           if [ -z "$SPACETIMEDB_TOKEN" ]; then
             echo "Missing required secret: SPACETIMEDB_TOKEN"
             exit 1
@@ -86,8 +104,70 @@ jobs:
       - name: Publish module
         working-directory: server
         env:
-          DB_NAME: ${{ steps.resolve-db.outputs.db_name }}
-          DELETE_DATA: ${{ github.event.inputs.delete_data }}
+          DB_NAME: ${{ steps.resolve.outputs.db_name }}
+          DELETE_DATA: ${{ steps.resolve.outputs.delete_data }}
         run: |
-          # Accept one-time major upgrade confirmation (1.0 -> 2.0) non-interactively.
+          set -euo pipefail
           printf 'upgrade\n' | "$SPACETIME_BIN" publish "$DB_NAME" --server maincloud --delete-data="$DELETE_DATA" -y
+
+  build_web:
+    name: Build Web For GitHub Pages
+    runs-on: ubuntu-latest
+    needs: publish_server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Validate deployment variables
+        env:
+          VITE_SPACETIMEDB_HOST: ${{ vars.VITE_SPACETIMEDB_HOST }}
+          VITE_SPACETIMEDB_DB_NAME: ${{ vars.VITE_SPACETIMEDB_DB_NAME }}
+        run: |
+          set -euo pipefail
+          if [ -z "$VITE_SPACETIMEDB_HOST" ]; then
+            echo "Missing repo variable: VITE_SPACETIMEDB_HOST"
+            exit 1
+          fi
+          if [ -z "$VITE_SPACETIMEDB_DB_NAME" ]; then
+            echo "Missing repo variable: VITE_SPACETIMEDB_DB_NAME"
+            exit 1
+          fi
+
+      - name: Build web
+        working-directory: web
+        env:
+          VITE_SPACETIMEDB_HOST: ${{ vars.VITE_SPACETIMEDB_HOST }}
+          VITE_SPACETIMEDB_DB_NAME: ${{ vars.VITE_SPACETIMEDB_DB_NAME }}
+          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH }}
+        run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy_pages:
+    name: Deploy To GitHub Pages
+    runs-on: ubuntu-latest
+    needs: build_web
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
