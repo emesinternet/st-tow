@@ -52,8 +52,13 @@ jobs:
             find "$SPACETIME_ROOT" -maxdepth 3 -type f | sed -n '1,120p'
             exit 1
           fi
+          # Ensure a concrete CLI version is installed and selected in this root dir.
+          "$SPACETIME_BIN" --root-dir "$SPACETIME_ROOT" version install 2.0.2 --use -y || \
+            "$SPACETIME_BIN" --root-dir "$SPACETIME_ROOT" version upgrade
           echo "SPACETIME_BIN=$SPACETIME_BIN" >> "$GITHUB_ENV"
-          "$SPACETIME_BIN" --version
+          echo "SPACETIME_ROOT=$SPACETIME_ROOT" >> "$GITHUB_ENV"
+          "$SPACETIME_BIN" --root-dir "$SPACETIME_ROOT" version list
+          "$SPACETIME_BIN" --root-dir "$SPACETIME_ROOT" --version
 
       - name: Resolve database name
         id: resolve-db
@@ -80,7 +85,7 @@ jobs:
             echo "Missing required secret: SPACETIMEDB_TOKEN"
             exit 1
           fi
-          "$SPACETIME_BIN" login --token "$SPACETIMEDB_TOKEN" --no-browser
+          "$SPACETIME_BIN" --root-dir "$SPACETIME_ROOT" login --token "$SPACETIMEDB_TOKEN" --no-browser
 
       - name: Publish module
         working-directory: server
@@ -88,4 +93,4 @@ jobs:
           DB_NAME: ${{ steps.resolve-db.outputs.db_name }}
           DELETE_DATA: ${{ github.event.inputs.delete_data }}
         run: |
-          "$SPACETIME_BIN" publish "$DB_NAME" --server maincloud --delete-data "$DELETE_DATA" -y
+          "$SPACETIME_BIN" --root-dir "$SPACETIME_ROOT" publish "$DB_NAME" --server maincloud --delete-data "$DELETE_DATA" -y
