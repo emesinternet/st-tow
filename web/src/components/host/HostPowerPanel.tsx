@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/shared/ui/card';
 import { Button } from '@/components/shared/ui/button';
 import { Tooltip } from '@/components/shared/ui/tooltip';
 import type { HostPowerActionViewModel, HostPowerCooldownState } from '@/types/ui';
 
 interface HostPowerPanelProps {
+  hostPowerMeter: number;
   powers: HostPowerActionViewModel[];
   cooldownsByPowerId: Record<string, HostPowerCooldownState>;
   onActivatePower: (powerId: string) => Promise<void>;
@@ -51,10 +52,22 @@ function getHotkeyForIndex(index: number): string {
 }
 
 export function HostPowerPanel({
+  hostPowerMeter,
   powers,
   cooldownsByPowerId,
   onActivatePower,
 }: HostPowerPanelProps) {
+  const orderedPowers = useMemo(
+    () =>
+      [...powers].sort((left, right) => {
+        if (left.cost !== right.cost) {
+          return left.cost - right.cost;
+        }
+        return left.label.localeCompare(right.label);
+      }),
+    [powers]
+  );
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.altKey || event.ctrlKey || event.metaKey) {
@@ -71,11 +84,11 @@ export function HostPowerPanel({
 
       const key = event.key;
       const index = key === '0' ? 9 : Number.parseInt(key, 10) - 1;
-      if (!Number.isInteger(index) || index < 0 || index >= powers.length) {
+      if (!Number.isInteger(index) || index < 0 || index >= orderedPowers.length) {
         return;
       }
 
-      const power = powers[index];
+      const power = orderedPowers[index];
       if (!power || !power.enabled || (cooldownsByPowerId[power.id]?.active ?? false)) {
         return;
       }
@@ -88,11 +101,13 @@ export function HostPowerPanel({
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [cooldownsByPowerId, onActivatePower, powers]);
+  }, [cooldownsByPowerId, onActivatePower, orderedPowers]);
 
   if (!powers.length) {
     return null;
   }
+  const hostPowerValue = Math.max(0, Math.trunc(hostPowerMeter));
+  const hostPowerPercent = Math.max(0, Math.min(100, hostPowerValue));
 
   const getPowerTooltip = (power: HostPowerActionViewModel): string => {
     const cooldown = cooldownsByPowerId[power.id] ?? {
@@ -117,11 +132,20 @@ export function HostPowerPanel({
   return (
     <Card>
       <CardHeader className="mb-1">
-        <CardTitle>Host Power-Ups</CardTitle>
+        <CardTitle>Use Power to Cause Choas</CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
+        <div className="relative mb-2 h-7 overflow-hidden rounded-[12px] border-4 border-neo-ink bg-neo-paper">
+          <div className="h-full bg-neo-yellow transition-[width]" style={{ width: `${hostPowerPercent}%` }} />
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-between px-2">
+            <p className="font-display text-xs font-black uppercase tracking-wide text-neo-ink">
+              Host Power
+            </p>
+            <p className="font-mono text-xs font-bold text-neo-ink">{hostPowerValue}</p>
+          </div>
+        </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {powers.map((power, index) => {
+          {orderedPowers.map((power, index) => {
             const hotkey = getHotkeyForIndex(index);
             const cooldown = cooldownsByPowerId[power.id] ?? {
               active: false,

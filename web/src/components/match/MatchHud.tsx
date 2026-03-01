@@ -245,7 +245,6 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers, cameraStream = null 
       : isRpsTieBreak
         ? 'RPS'
         : formatSeconds(hud.secondsRemaining);
-  const hostPowerPercent = Math.max(0, Math.min(100, hud.hostPowerMeter));
   const clampPercent = (value: number): number =>
     Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 50;
   const tieZoneStartPercent = clampPercent(hud.tieZoneStartPercent);
@@ -279,7 +278,7 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers, cameraStream = null 
         <div className="flex justify-center text-center font-display font-black tracking-wide">
           <p className="text-4xl leading-none tabular-nums text-neo-ink sm:text-5xl">{timerText}</p>
         </div>
-        <div className="bg-tug-war-gradient relative h-40 overflow-hidden rounded-[16px] border-4 border-neo-ink sm:h-48">
+        <div className="bg-tug-war-gradient relative h-[12.5rem] overflow-hidden rounded-[16px] border-4 border-neo-ink sm:h-[15rem]">
           {cameraStream ? (
             <video
               ref={videoRef}
@@ -366,20 +365,6 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers, cameraStream = null 
             animate={{ left: `${hud.normalizedRopePosition}%` }}
             transition={{ type: 'spring', stiffness: 150, damping: 24 }}
           />
-        </div>
-        <div>
-          <div className="relative h-7 overflow-hidden rounded-[12px] border-4 border-neo-ink bg-neo-paper">
-            <div
-              className="h-full bg-neo-yellow transition-[width]"
-              style={{ width: `${hostPowerPercent}%` }}
-            />
-            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-between px-2">
-              <p className="font-display text-xs font-black uppercase tracking-wide text-neo-ink">
-                Host Power
-              </p>
-              <p className="font-mono text-xs font-bold text-neo-ink">{hostPowerPercent}%</p>
-            </div>
-          </div>
         </div>
       </CardContent>
     </Card>

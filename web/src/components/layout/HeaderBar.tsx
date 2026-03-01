@@ -5,10 +5,16 @@ import { Button } from '@/components/shared/ui/button';
 interface HeaderBarProps {
   lobbyCode?: string;
   onCopyLobbyCode?: () => void;
+  onLeaveLobby?: () => void;
   musicControls?: ReactNode;
 }
 
-export function HeaderBar({ lobbyCode, onCopyLobbyCode, musicControls }: HeaderBarProps) {
+export function HeaderBar({
+  lobbyCode,
+  onCopyLobbyCode,
+  onLeaveLobby,
+  musicControls,
+}: HeaderBarProps) {
   return (
     <Card className="neo-grid">
       <div className="flex flex-wrap items-start justify-between gap-[var(--space-3)]">
@@ -21,14 +27,14 @@ export function HeaderBar({ lobbyCode, onCopyLobbyCode, musicControls }: HeaderB
           </p>
         </div>
 
-        <div className="flex w-full min-w-0 flex-col items-start gap-[var(--space-4)] sm:w-auto sm:min-w-[260px] sm:items-end">
+        <div className="flex w-full min-w-0 flex-col items-start gap-2 sm:w-auto sm:min-w-[260px] sm:items-end">
           {musicControls ? (
-            <div className="flex w-full flex-wrap items-center justify-start gap-[var(--space-2)] sm:justify-end">
+            <div className="flex flex-wrap items-center justify-end gap-[var(--space-2)]">
               {musicControls}
             </div>
           ) : null}
           {lobbyCode ? (
-            <div className="flex w-full justify-start sm:justify-end">
+            <div className="flex items-center justify-end gap-2">
               <Button
                 type="button"
                 size="sm"
@@ -41,6 +47,17 @@ export function HeaderBar({ lobbyCode, onCopyLobbyCode, musicControls }: HeaderB
                 }}
               >
                 {lobbyCode}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="danger"
+                className="text-neo-paper"
+                onClick={() => {
+                  onLeaveLobby?.();
+                }}
+              >
+                Leave Lobby
               </Button>
             </div>
           ) : null}

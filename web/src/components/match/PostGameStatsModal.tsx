@@ -14,6 +14,15 @@ interface PostGameStatsModalProps {
   waitingForHostSeconds: number | null;
 }
 
+interface LeaderboardRow {
+  rowId: string;
+  displayName: string;
+  team: string;
+  accuracy: number | null;
+  correctCount: number;
+  isHost: boolean;
+}
+
 function teamLabel(team: string): string {
   if (team === 'A') {
     return 'Red Team';
@@ -36,6 +45,30 @@ function playerRows(lobby: LobbyViewModel): TeamPlayerViewModel[] {
   });
 }
 
+function leaderboardRows(
+  lobby: LobbyViewModel,
+  hostSuccessful: number,
+  hostAccuracy: number | null
+): LeaderboardRow[] {
+  const hostRow: LeaderboardRow = {
+    rowId: '__host__',
+    displayName: 'Host',
+    team: 'HOST',
+    accuracy: hostAccuracy,
+    correctCount: hostSuccessful,
+    isHost: true,
+  };
+  const players = playerRows(lobby).map<LeaderboardRow>((player) => ({
+    rowId: player.playerId,
+    displayName: player.displayName,
+    team: player.team,
+    accuracy: player.accuracy,
+    correctCount: player.correctCount,
+    isHost: false,
+  }));
+  return [hostRow, ...players];
+}
+
 export function PostGameStatsModal({
   open,
   onClose,
@@ -54,7 +87,8 @@ export function PostGameStatsModal({
   const teamASuccessful = lobby.teamA.reduce((total, player) => total + player.correctCount, 0);
   const teamBSuccessful = lobby.teamB.reduce((total, player) => total + player.correctCount, 0);
   const hostSuccessful = Math.max(0, hud?.hostSuccessfulWords ?? 0);
-  const rows = playerRows(lobby);
+  const hostAccuracy = null;
+  const rows = leaderboardRows(lobby, hostSuccessful, hostAccuracy);
   const hasRows = rows.length > 0;
   const visibleRowCount = Math.max(1, Math.min(10, rows.length));
   const tableMaxHeightPx = 42 + visibleRowCount * 36;
@@ -83,26 +117,26 @@ export function PostGameStatsModal({
           <div className="grid gap-2 sm:grid-cols-3">
             <div className="rounded-[12px] border-4 border-neo-ink bg-neo-paper px-3 py-2 shadow-neo-sm">
               <p className="font-display text-xs font-bold uppercase tracking-wide text-neo-teamA">
-                Red Team Successful Words
+                Red Team Words
               </p>
               <p className="font-display text-2xl font-black">{teamASuccessful}</p>
             </div>
             <div className="rounded-[12px] border-4 border-neo-ink bg-neo-paper px-3 py-2 shadow-neo-sm">
               <p className="font-display text-xs font-bold uppercase tracking-wide text-neo-teamB">
-                Blue Team Successful Words
+                Blue Team Words
               </p>
               <p className="font-display text-2xl font-black">{teamBSuccessful}</p>
             </div>
             <div className="rounded-[12px] border-4 border-neo-ink bg-neo-paper px-3 py-2 shadow-neo-sm">
               <p className="font-display text-xs font-bold uppercase tracking-wide text-neo-ink">
-                Host Successful Words
+                Host Words
               </p>
               <p className="font-display text-2xl font-black">{hostSuccessful}</p>
             </div>
           </div>
 
           <div
-            className={`rounded-[12px] border-4 border-neo-ink ${hasRows ? 'overflow-auto' : 'overflow-hidden'}`}
+            className={`rounded-[12px] border-4 border-neo-ink shadow-neo-sm ${hasRows ? 'overflow-auto' : 'overflow-hidden'}`}
             style={hasRows ? { maxHeight: `${tableMaxHeightPx}px` } : undefined}
           >
             <table className="w-full border-collapse text-left">
@@ -118,21 +152,27 @@ export function PostGameStatsModal({
                     Accuracy
                   </th>
                   <th className="border-b-2 border-neo-ink px-3 py-1.5 text-right font-display text-xs font-black uppercase tracking-wide">
-                    Successful
+                    Words
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {hasRows ? (
                   rows.map((player) => (
-                    <tr key={player.playerId} className="odd:bg-neo-paper even:bg-neo-paper/75">
+                    <tr
+                      key={player.rowId}
+                      className={`odd:bg-neo-paper even:bg-neo-paper/75 ${player.isHost ? 'bg-neo-yellow/20' : ''}`}
+                    >
                       <td className="px-3 py-1.5 font-body text-sm font-semibold">
                         {player.displayName}
                       </td>
                       <td className="px-3 py-1.5 font-body text-sm">
                         <Badge
+                          className="border-2"
                           variant={
-                            player.team === 'A'
+                            player.isHost
+                              ? 'accent'
+                              : player.team === 'A'
                               ? 'teamA'
                               : player.team === 'B'
                                 ? 'teamB'
@@ -143,7 +183,7 @@ export function PostGameStatsModal({
                         </Badge>
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono text-sm">
-                        {player.accuracy}%
+                        {player.accuracy == null ? '—' : `${player.accuracy}%`}
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono text-sm">
                         {player.correctCount}

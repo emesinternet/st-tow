@@ -76,6 +76,7 @@ export function PlayerInputPanel({
   const [scaledRowHeight, setScaledRowHeight] = useState(64);
   const scaleTrackRef = useRef<HTMLDivElement | null>(null);
   const scaleRowRef = useRef<HTMLDivElement | null>(null);
+  const mobileInputRef = useRef<HTMLInputElement | null>(null);
 
   const targetWord = model?.currentWord ?? '';
   const isEliminated = model?.playerStatus === 'Eliminated';
@@ -122,6 +123,27 @@ export function PlayerInputPanel({
     setTyped('');
     setSubmitting(false);
   }, [targetWord]);
+
+  useEffect(() => {
+    if (!canType) {
+      return;
+    }
+    if (showReadyMessage || isEliminated) {
+      return;
+    }
+    const active = document.activeElement;
+    const canRestoreFocus =
+      active == null || active === document.body || active === mobileInputRef.current;
+    if (!canRestoreFocus) {
+      return;
+    }
+    const input = mobileInputRef.current;
+    if (!input) {
+      return;
+    }
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }, [canType, isEliminated, showReadyMessage, targetWord]);
 
   const handleProgressInput = useCallback(
     async (value: string): Promise<void> => {
@@ -237,9 +259,21 @@ export function PlayerInputPanel({
     };
   }, [displayWord, recomputeScale]);
 
+  const focusTypingInput = useCallback(() => {
+    if (!canType || showReadyMessage || isEliminated) {
+      return;
+    }
+    const input = mobileInputRef.current;
+    if (!input) {
+      return;
+    }
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }, [canType, isEliminated, showReadyMessage]);
+
   return (
     <Card>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3" onPointerDown={focusTypingInput}>
         <p className="sr-only" aria-live="polite" aria-atomic="true">
           {showReadyMessage
             ? `Get ready to type ${readyName}`
@@ -248,6 +282,21 @@ export function PlayerInputPanel({
               : `Current word ${displayWord}. Progress ${typed.length} of ${displayWord.length}`}
         </p>
         <div className="pb-3">
+          <input
+            ref={mobileInputRef}
+            type="text"
+            inputMode="text"
+            autoCapitalize="off"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+            className="absolute h-px w-px opacity-0"
+            aria-label="Type the current word"
+            value={typed}
+            onChange={(event) => {
+              void handleProgressInput(event.currentTarget.value.toLowerCase());
+            }}
+          />
           {showReadyMessage ? (
             <p
               role="status"

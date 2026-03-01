@@ -388,7 +388,7 @@ interface HostPowerConfig {
 const HOST_POWER_CONFIG: Record<HostPowerId, HostPowerConfig> = {
   [HOST_POWER_TECH_MODE_BURST]: {
     id: HOST_POWER_TECH_MODE_BURST,
-    cost: 20,
+    cost: 30,
     durationMs: 20_000,
     wordMode: WORD_MODE_TECH,
     difficultyBonusTier: 0,
@@ -396,7 +396,7 @@ const HOST_POWER_CONFIG: Record<HostPowerId, HostPowerConfig> = {
   },
   [HOST_POWER_SYMBOLS_MODE_BURST]: {
     id: HOST_POWER_SYMBOLS_MODE_BURST,
-    cost: 20,
+    cost: 40,
     durationMs: 20_000,
     wordMode: WORD_MODE_SYMBOLS,
     difficultyBonusTier: 0,
@@ -412,7 +412,7 @@ const HOST_POWER_CONFIG: Record<HostPowerId, HostPowerConfig> = {
   },
   [HOST_POWER_FLIPPER_BURST]: {
     id: HOST_POWER_FLIPPER_BURST,
-    cost: 15,
+    cost: 20,
     durationMs: 20_000,
     wordMode: null,
     difficultyBonusTier: 0,
@@ -2122,7 +2122,48 @@ export const join_lobby = spacetimedb.reducer(
 );
 
 export const leave_lobby = spacetimedb.reducer({ lobby_id: t.string() }, (ctx, { lobby_id }) => {
-  getLobbyOrThrow(ctx, lobby_id);
+  const lobby = getLobbyOrThrow(ctx, lobby_id);
+
+  if (lobby.host_identity.equals(ctx.sender)) {
+    const closedAt = nowMicros(ctx);
+    const matchId = lobby.active_match_id;
+
+    emitGameEvent(ctx, lobby_id, matchId, 'host_left_lobby', {
+      closed_at_micros: closedAt.toString(),
+    });
+
+    for (const member of listPlayersInLobby(ctx, lobby_id)) {
+      if (member.status === PLAYER_STATUS_LEFT) {
+        continue;
+      }
+      replaceRow(ctx.db.player, member, {
+        ...member,
+        status: PLAYER_STATUS_LEFT,
+        left_at_micros: closedAt,
+        eliminated_reason: '',
+      });
+    }
+
+    if (matchId) {
+      clearMatchRuntimeRows(ctx, matchId);
+      const match = getMatchById(ctx, matchId);
+      if (match) {
+        ctx.db.match.delete(match);
+      }
+    }
+
+    removeLobbySetting(ctx, lobby_id, POST_GAME_CLOSE_AT_SETTING_KEY);
+    removeLobbySetting(ctx, lobby_id, POST_GAME_IDLE_CLOSE_AT_SETTING_KEY);
+    for (const row of listLobbySettings(ctx, lobby_id)) {
+      ctx.db.lobby_settings.delete(row);
+    }
+    for (const member of listPlayersInLobby(ctx, lobby_id)) {
+      ctx.db.player.delete(member);
+    }
+    ctx.db.lobby.delete(lobby);
+    return;
+  }
+
   const player = findMembershipInLobby(ctx, lobby_id);
   if (!player) {
     return;

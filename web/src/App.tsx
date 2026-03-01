@@ -12,6 +12,7 @@ import { RpsTieBreakModal } from '@/components/match/RpsTieBreakModal';
 import { PlayerInputPanel } from '@/components/player/PlayerInputPanel';
 import { ConfettiBurst } from '@/components/shared/ConfettiBurst';
 import { Button } from '@/components/shared/ui/button';
+import { Card, CardContent } from '@/components/shared/ui/card';
 import { Volume2, VolumeX } from 'lucide-react';
 import {
   Toast,
@@ -105,6 +106,7 @@ export default function App() {
   const [lastConfettiMatchId, setLastConfettiMatchId] = useState('');
   const [confettiBurstKey, setConfettiBurstKey] = useState(0);
   const [confettiVisible, setConfettiVisible] = useState(false);
+  const [leaveLobbyConfirmOpen, setLeaveLobbyConfirmOpen] = useState(false);
   const [nowMillis, setNowMillis] = useState(() => Date.now());
   const [selectedMusicTrackId, setSelectedMusicTrackId] = useState<MusicTrackId>(() =>
     loadStoredTrackId()
@@ -574,6 +576,57 @@ export default function App() {
     }
   }, [pushToast, ui.lobby]);
 
+  const leaveLobbyLocally = useCallback((lobbyId: string) => {
+    setDismissedLobbyId(lobbyId);
+    setSelectedLobbyId('');
+    setPendingJoinCode('');
+    setPostGameModalOpen(false);
+    setLeaveLobbyConfirmOpen(false);
+  }, []);
+
+  const requestLeaveLobby = useCallback(
+    async (lobbyId: string) => {
+      try {
+        await actions.leaveLobby(lobbyId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        pushToast('Could not leave lobby', message, 'danger');
+      }
+    },
+    [actions, pushToast]
+  );
+
+  const handleLeaveLobbyClick = useCallback(() => {
+    const lobbyId = ui.lobby?.lobbyId;
+    if (!lobbyId) {
+      return;
+    }
+
+    if (ui.role === 'host') {
+      setLeaveLobbyConfirmOpen(true);
+      return;
+    }
+
+    leaveLobbyLocally(lobbyId);
+    void requestLeaveLobby(lobbyId);
+  }, [leaveLobbyLocally, requestLeaveLobby, ui.lobby, ui.role]);
+
+  const handleConfirmLeaveLobby = useCallback(() => {
+    const lobbyId = ui.lobby?.lobbyId;
+    if (!lobbyId) {
+      setLeaveLobbyConfirmOpen(false);
+      return;
+    }
+    leaveLobbyLocally(lobbyId);
+    void requestLeaveLobby(lobbyId);
+  }, [leaveLobbyLocally, requestLeaveLobby, ui.lobby]);
+
+  useEffect(() => {
+    if (!ui.lobby && leaveLobbyConfirmOpen) {
+      setLeaveLobbyConfirmOpen(false);
+    }
+  }, [leaveLobbyConfirmOpen, ui.lobby]);
+
   const webcamMesh = useHostWebcamMesh({
     role: ui.role,
     identity,
@@ -678,17 +731,6 @@ export default function App() {
       >
         {musicMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
       </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="neutral"
-        onClick={() => {
-          localStorage.removeItem('auth_token');
-          window.location.reload();
-        }}
-      >
-        Reset Session
-      </Button>
     </div>
   );
 
@@ -729,6 +771,7 @@ export default function App() {
         ) : null}
         {ui.role === 'host' && ui.hostPanel ? (
           <HostPowerPanel
+            hostPowerMeter={ui.matchHud?.hostPowerMeter ?? 0}
             powers={ui.hostPanel.powers}
             cooldownsByPowerId={Object.fromEntries(
               ui.hostPanel.powers.map((power) => [power.id, getCooldownState(power.id)])
@@ -769,6 +812,9 @@ export default function App() {
             onCopyLobbyCode={() => {
               void handleCopyLobbyCode();
             }}
+            onLeaveLobby={() => {
+              handleLeaveLobbyClick();
+            }}
             musicControls={headerMusicControls}
           />
         }
@@ -797,6 +843,34 @@ export default function App() {
         hud={ui.matchHud}
         waitingForHostSeconds={ui.role === 'player' ? postGameCloseSecondsRemaining : null}
       />
+      {leaveLobbyConfirmOpen ? (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-neo-ink/45 p-3">
+          <Card role="dialog" aria-modal="true" className="relative z-[87] w-full max-w-md">
+            <CardContent className="space-y-3">
+              <p className="text-center font-display text-2xl font-black uppercase tracking-wide text-neo-ink">
+                Leave Lobby?
+              </p>
+              <p className="ui-subtext text-center">
+                You are the host. Leaving will close this lobby for everyone.
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <Button
+                  type="button"
+                  variant="neutral"
+                  onClick={() => {
+                    setLeaveLobbyConfirmOpen(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="button" variant="danger" onClick={handleConfirmLeaveLobby}>
+                  Leave Lobby
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
 
       {toasts.map((toast) => (
         <Toast
