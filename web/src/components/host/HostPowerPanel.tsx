@@ -120,7 +120,7 @@ export function HostPowerPanel({
         <CardTitle>Host Power-Ups</CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {powers.map((power, index) => {
             const hotkey = getHotkeyForIndex(index);
             const cooldown = cooldownsByPowerId[power.id] ?? {
