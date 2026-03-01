@@ -1,40 +1,69 @@
 # st-tow
 
-Realtime SpacetimeDB tug-of-war game with a React web client.
+`st-tow` is **Typing Fever!**, a realtime SpacetimeDB typing tug-of-war game.
 
 ## Repository Layout
 
-- `server/`: SpacetimeDB TypeScript module (schema + reducers)
+- `server/`: SpacetimeDB TypeScript module (schema, reducers, tick loop)
 - `web/`: Vite + React + Tailwind + neo-brutalist UI client
-- `plan.md`: product/implementation planning notes
 - `AGENTS.md`: contributor runbook and architecture notes
+- `plan.md`: planning notes
 
-## Current Gameplay Behavior
+## Current Gameplay
 
-- Host creates a lobby and shares a join code.
-- Players join, are balanced into team A/B, and complete words to add team force.
-- Match flow: `Waiting -> PreGame(3s countdown) -> InGame -> SuddenDeath -> PostGame`.
-- Words are per-player. Each player gets their own random target stream.
-- Words do not rotate on a timer; a new word is assigned only when that player completes the current word.
-- In sudden death, active players must complete their word before their deadline.
-- If both teams are eliminated on the same tick, the match ends deterministically.
-- Host has a separate `tug_host_state` stream:
-  - correct host submits increment host score only
-  - host does not change rope force
+- Host creates a lobby and shares the join code.
+- Players join and are team-balanced (A/B internally, shown as red/blue in UI).
+- Match flow:
+  - `Waiting -> PreGame(3s) -> InGame -> SuddenDeath -> TieBreakRps(optional) -> PostGame`
+- Words are per-player and advance only on correct completion.
+- Sudden death elimination is immediate on wrong submit or deadline timeout.
+- Tie-zone at match end triggers RPS tie-break modal flow.
+- Host has independent typing/power state:
+  - host score/power meter increases on host correct words
+  - host does not directly add rope force
   - host cannot be eliminated
 
-## Current UI Semantics
+## Current UX
 
-- Header contains connection/phase/role badges and host start/end/reset controls.
-- Match HUD row displays `A pulls | timer | B pulls | host score`.
-- Rope position is rendered from normalized tug position.
-- `teamAForce` / `teamBForce` are physics force values.
-- `teamAPulls` / `teamBPulls` are cumulative correct submissions.
-- Event feed is compact and anchored at the bottom of the app shell.
+- Header: title, music selector, mute toggle, `Reset Session`, online status badge.
+- Landing: side-by-side `Join a Match` and `Host a Match` cards.
+- Host options before lobby creation:
+  - match minutes (`1..10`, default `3`)
+  - lock lobby after match start
+  - tie-zone width (`10/20/30/40%`)
+- Match HUD:
+  - large centered timer
+  - red/blue pull counters in tug area corners
+  - center tie-zone dancefloor + dragon overlay
+  - player markers and cheer bubbles inside tug area
+  - host power bar under tug area
+- Host controls in dedicated panel below typing area.
+- RPS voting/reveal modal for tie-breaks.
+- Post-game modal with team totals, host successful words, and player accuracy table.
 
-## Reducers
+## Server Contracts
 
-Core runtime:
+### Public tables
+
+- `lobby`
+- `lobby_settings`
+- `player`
+- `match`
+- `match_clock`
+- `game_event`
+- `tug_state`
+- `tug_player_state`
+- `tug_host_state`
+- `tug_camera_state`
+- `tug_webrtc_signal`
+- `tug_rps_state`
+- `tug_rps_vote`
+
+(`schedule` is the private scheduled table backing server ticks and timed closes.)
+
+### Reducers
+
+Core:
 
 - `create_lobby`
 - `join_lobby`
@@ -42,33 +71,25 @@ Core runtime:
 - `set_lobby_setting`
 - `start_match`
 - `end_match`
+- `close_post_game`
 - `reset_lobby`
 
-Tug-of-war:
+Tug:
 
 - `tug_init`
 - `tug_submit`
+- `tug_record_miss`
+- `tug_activate_power`
+- `tug_set_camera_enabled`
+- `tug_send_webrtc_signal`
+- `tug_rps_cast_vote`
+- `tug_rps_continue`
 - `tug_tick`
 - `tug_tick_scheduled`
 
 ## Local Development (Windows launcher + WSL runtime)
 
-This project now uses a WSL-native runtime model:
-
-- Windows PowerShell only orchestrates terminal windows.
-- `spacetime`, `publish`, `generate`, and `vite` run inside WSL.
-- No UNC working directory execution is used for publish/generate.
-
-### One-time checks
-
-From Windows PowerShell:
-
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-wsl -d Ubuntu -e bash -lc "command -v spacetime && command -v npm && command -v nvm || true"
-```
-
-### Daily start command
+### Daily start
 
 From Windows PowerShell:
 
@@ -77,18 +98,13 @@ cd C:\Users\emesi\Desktop\scripts
 .\launch-local-windows.ps1
 ```
 
-What it launches:
+Launcher starts:
 
-- terminal 1: WSL `spacetime start`
-- terminal 2: WSL publish + bindings generate
-- terminal 3: WSL web dev server (waits for publish/generate success)
+1. SpacetimeDB server
+2. publish + bindings generation
+3. web dev server
 
-Implementation detail:
-
-- local server uses `C:/temp/stdb-local/data` for lock compatibility with the Windows Spacetime binary invoked from WSL.
-- publish uses `--js-path server/dist/bundle.js` to avoid UNC build-context issues.
-
-### Optional launcher commands
+### Optional launcher modes
 
 ```powershell
 cd C:\Users\emesi\Desktop\scripts
@@ -97,9 +113,7 @@ cd C:\Users\emesi\Desktop\scripts
 .\launch-local-windows.ps1 -DatabaseName st-tow-dev-20260228010101
 ```
 
-### Run artifacts and logs
-
-All run-state files live in WSL:
+### Run logs
 
 - `/tmp/sttow/<db>/ready.flag`
 - `/tmp/sttow/<db>/fail.flag`
@@ -109,9 +123,7 @@ All run-state files live in WSL:
 - `/tmp/sttow/<db>/generate.log`
 - `/tmp/sttow/<db>/web.log`
 
-## Build and Typecheck
-
-WSL:
+## Checks
 
 ```bash
 cd ~/repos/st-tow/server && npm run typecheck
@@ -121,24 +133,15 @@ cd ~/repos/st-tow/web && npm run test
 cd ~/repos/st-tow/web && npm run build
 ```
 
-## Near-Term Roadmap
-
-- Large centered match-start countdown overlay polish on top of current server-authoritative `PreGame` phase.
-- Host score effects on gameplay are intentionally deferred; current host score is display-only.
-
 ## Common Issues
 
-- `publish failed` in launcher:
-  - open `/tmp/sttow/<db>/publish.log`
-  - validate `spacetime` exists in WSL (`command -v spacetime`)
-- `publish failed` with `missing bundle`:
-  - ensure `/home/tsuda/repos/st-tow/server/dist/bundle.js` exists
-- web terminal exits with publish/generate failure:
-  - inspect `/tmp/sttow/<db>/publish.log` and `/tmp/sttow/<db>/generate.log`
-- web says disconnected:
-  - confirm server terminal is still running on `127.0.0.1:3000`
-  - confirm web DB env matches published DB name
-- auth token confusion (unexpected auto-lobby behavior):
+- `publish failed`:
+  - inspect `/tmp/sttow/<db>/publish.log`
+  - verify server is running on `127.0.0.1:3000`
+  - verify `server/dist/bundle.js` exists
+- `generate failed`:
+  - inspect `/tmp/sttow/<db>/generate.log`
+- unexpected auto-join behavior from stale auth:
 
 ```js
 localStorage.removeItem('auth_token');

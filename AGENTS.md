@@ -4,24 +4,27 @@ Operational guide for contributors working in `st-tow`.
 
 ## Purpose
 
-This repository contains a SpacetimeDB 2.0 tug-of-war game:
+This repository contains a SpacetimeDB 2.0 realtime typing tug-of-war game:
 
-- `server/`: authoritative game runtime (schema + reducers)
+- `server/`: authoritative game runtime (schema + reducers + tick loop)
 - `web/`: realtime React client (Vite + Tailwind + neo-brutalist component system)
+
+Product-facing name in UI: `Typing Fever!`.
 
 ## Architecture
 
 ### System Boundaries
 
-- `server/` is the source of truth for all game state.
+- `server/` is the source of truth for lobby/match/gameplay state.
 - `web/` is a projection + input layer subscribed to database tables.
-- There is no REST API layer between browser and SpacetimeDB.
+- SpacetimeDB is used directly from the browser (no REST middle layer).
+- WebRTC media is peer-to-peer; SpacetimeDB rows are signaling-only.
 
 ### Server Layering
 
-- `server/src/index.ts`: schema, reducers, and core game loop/tick logic.
+- `server/src/index.ts`: schema, reducers, scheduling, game loop, tie-break flow.
 - `server/src/core/*`: constants and helpers (IDs, join codes, time math, setting parsing).
-- `server/src/games/tug_of_war/*`: tug-specific assets (word list).
+- `server/src/games/tug_of_war/*`: tug-specific content (word catalog + selection logic).
 
 ### Data Model
 
@@ -40,10 +43,14 @@ Tug-specific tables:
 - `tug_state`
 - `tug_player_state`
 - `tug_host_state`
+- `tug_camera_state`
+- `tug_webrtc_signal`
+- `tug_rps_state`
+- `tug_rps_vote`
 
 Design rule:
 
-- Match state is keyed by `match_id`, not `lobby_id`, so rematches are clean.
+- Match state is keyed by `match_id`, not `lobby_id`, so rematches stay isolated.
 
 ### Reducer Topology
 
@@ -55,18 +62,25 @@ Core reducers:
 - `set_lobby_setting`
 - `start_match`
 - `end_match`
+- `close_post_game`
 - `reset_lobby`
 
 Tug reducers:
 
 - `tug_init`
 - `tug_submit`
+- `tug_record_miss`
+- `tug_activate_power`
+- `tug_set_camera_enabled`
+- `tug_send_webrtc_signal`
+- `tug_rps_cast_vote`
+- `tug_rps_continue`
 - `tug_tick`
 - `tug_tick_scheduled`
 
 Integration seam:
 
-- `start_match` creates match + clock rows (3s `PreGame` countdown), initializes game state, and schedules ticks.
+- `start_match` creates match + clock rows, enters `PreGame` (3s), initializes tug state, and schedules ticks.
 
 ### Tick and State Machine
 
@@ -82,30 +96,40 @@ Match phases:
 - `PreGame`
 - `InGame`
 - `SuddenDeath`
+- `TieBreakRps`
 - `PostGame`
 
 Flow:
 
 - `create_lobby` -> `Waiting`
-- `start_match` -> `PreGame` (3s)
+- `start_match` -> `PreGame` (3s countdown)
 - countdown expiry -> `InGame`
 - timer expiry -> `SuddenDeath`
-- win condition -> `PostGame` + lobby `Finished`
+- terminal check:
+  - rope outside tie zone -> finish to `PostGame`
+  - rope inside tie zone -> `TieBreakRps` voting/reveal rounds until resolved
+- host `tug_rps_continue` -> `PostGame`
+- host `close_post_game` -> 10s close countdown and players return to landing
+- idle safeguard: post-game auto close after 5 minutes with no host action
 - `reset_lobby` -> `Waiting`
 
 ### Current Tug Rules (Important)
 
 - Every active player has their own assigned `current_word` in `tug_player_state`.
-- Words do not rotate on a timer.
-- A player gets a new random word only after correctly completing their current one.
+- Player words advance only on correct completion.
 - In sudden death:
   - wrong submit eliminates player immediately
   - deadline timeout eliminates player
-- If both teams reach zero active players in sudden death on the same tick, match ends (no hang).
-- Host has independent tug state in `tug_host_state`:
-  - host submit increases `score` only
-  - host does not affect rope force
-  - host is never eliminated
+- Lock lobby option (`lock_in_progress_join`) blocks new/rejoining-left players once match start is clicked (includes `PreGame`).
+- Tie zone width is configurable before lobby creation: `10%`, `20%`, `30%`, `40%`.
+- If tie-break voting resolves to no valid team choice, random RPS choices are assigned for both teams to force resolution.
+
+Host-specific:
+
+- Host has independent state in `tug_host_state`.
+- Host correct submits increase host score/power meter only.
+- Host cannot be eliminated and does not directly add rope force.
+- Host powers (server-authoritative) can change mode/difficulty windows.
 
 ### Web Client Structure
 
@@ -117,11 +141,12 @@ Main entry and shell:
 Data/connection layer:
 
 - `web/src/data/useSpacetimeSession.ts`: connection bootstrap + subscriptions + snapshot updates
-- `web/src/data/actions.ts`: typed reducer-call wrappers
+- `web/src/data/actions.ts`: typed reducer wrappers
 - `web/src/data/selectors.ts`: normalization boundary (camel/snake + identity/timestamp normalization)
 - `web/src/lib/selectors.ts`: derived role/phase/view models
+- `web/src/lib/useHostWebcamMesh.ts`: host webcam capture + viewer peer mesh signaling runtime
 
-UI component domains:
+UI domains:
 
 - `web/src/components/layout/*`
 - `web/src/components/lobby/*`
@@ -135,28 +160,33 @@ Generated bindings:
 
 - `web/src/module_bindings/*` are generated artifacts.
 
-### Frontend UX Model
+### Frontend UX Model (Current)
 
-- Shared responsive shell with header-centric controls.
-- Landing screen for host/create + join by code.
-- Host controls are compact header buttons and only visible to host.
-- Match HUD shows:
-  - team pull counters (`teamAPulls` / `teamBPulls`)
-  - large centered timer
-  - host score (display-only)
-  - rope bar driven by normalized rope position
-- Distinguish semantics:
-  - `teamAForce`/`teamBForce` = instantaneous physics force (server decay/tick input)
-  - `teamAPulls`/`teamBPulls` = cumulative correct submissions (stable counters)
-- Sticky-focus player input with progressive fill and auto-submit on completion (no Enter required).
-- Event feed is compact and anchored to the bottom region of the page.
+- Header shows product title, music track selector + mute, `Reset Session`, and `Online/Offline` badge.
+- Clicking the lobby code badge copies it to clipboard and shows a toast.
+- Landing screen has two cards:
+  - `How to Play` + `Join a Match`
+  - `Host a Match` (`Name`, match minutes, lock lobby toggle, tie zone size)
+- Match area:
+  - large timer
+  - left/right pull counters in tug area corners
+  - tie-zone dancefloor visuals in the center
+  - dragon overlay marker
+  - player balls/names in outer 25% lanes with bounce/cheer effects on correct words
+  - host power bar below tug area
+- Center typing panel is hidden for host during active match phases.
+- Host controls are in a dedicated panel below typing (start/end toggle, reset lobby, camera toggle).
+- Host power ability buttons show only for host in `InGame`/`SuddenDeath`.
+- RPS tie-break uses modal flow (voting + reveal) with role-based visibility.
+- Post-game modal includes team totals, host successful words, per-player table, and host/player-specific close behavior.
+- Event feed/debug panel is not rendered in the main app shell.
 
 ## Environment Model (Windows launcher, WSL runtime)
 
 Use this split consistently:
 
 - Windows PowerShell: launch orchestration only
-- WSL: all runtime commands (`spacetime`, `publish`, `generate`, `vite`, `npm`)
+- WSL: runtime commands (`spacetime`, `publish`, `generate`, `vite`, `npm`)
 
 Never run publish/generate through Windows UNC working directories.
 
@@ -194,7 +224,7 @@ cd C:\Users\emesi\Desktop\scripts
 Notes:
 
 - `start_server.sh` uses `C:/temp/stdb-local/data` by default to avoid lock errors when WSL invokes the Windows Spacetime binary.
-- `publish_and_generate.sh` publishes via `--js-path server/dist/bundle.js` to avoid UNC build-context failures.
+- `publish_and_generate.sh` publishes via `--js-path server/dist/bundle.js`.
 
 ### 4) Flags and logs for each run
 
@@ -213,9 +243,9 @@ Given DB name `<db>`, launcher writes under:
 - `web/` edits: Vite hot reload.
 - `server/` edits: not hot-reloaded.
 
-After server logic changes:
+After server changes:
 
-1. restart launcher or rerun publish flow
+1. rerun publish flow
 2. refresh browser
 
 ## Build / Check Commands (WSL)
@@ -242,7 +272,7 @@ Fix:
 
 - inspect `/tmp/sttow/<db>/publish.log`
 - confirm server window is running on `127.0.0.1:3000`
-- republish with fresh DB name (default timestamp naming already does this)
+- republish with a fresh DB name
 - if log shows `missing bundle`, ensure `server/dist/bundle.js` exists
 
 ### B) `generate failed`
@@ -264,7 +294,7 @@ Cause:
 
 Fix:
 
-- inspect publish/generate logs for same DB run
+- inspect publish/generate logs for the same DB run
 
 ### D) Web disconnected from SpacetimeDB
 
