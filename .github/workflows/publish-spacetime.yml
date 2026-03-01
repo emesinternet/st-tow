@@ -43,22 +43,18 @@ jobs:
           set -euo pipefail
           SPACETIME_ROOT="$RUNNER_TEMP/spacetime-cli"
           curl -sSf https://install.spacetimedb.com | sh -s -- -y --root-dir "$SPACETIME_ROOT"
-          if [ -x "$SPACETIME_ROOT/bin/spacetime" ]; then
-            SPACETIME_BIN="$SPACETIME_ROOT/bin/spacetime"
-          elif [ -x "$SPACETIME_ROOT/spacetime" ]; then
-            SPACETIME_BIN="$SPACETIME_ROOT/spacetime"
-          else
+          echo "$SPACETIME_ROOT" >> "$GITHUB_PATH"
+          SPACETIME_BIN="$SPACETIME_ROOT/spacetime"
+          if [ ! -x "$SPACETIME_BIN" ]; then
             echo "Unable to locate installed spacetime CLI under $SPACETIME_ROOT"
             find "$SPACETIME_ROOT" -maxdepth 3 -type f | sed -n '1,120p'
             exit 1
           fi
-          # Ensure a concrete CLI version is installed and selected in this root dir.
-          "$SPACETIME_BIN" --root-dir "$SPACETIME_ROOT" version install 2.0.2 --use -y || \
-            "$SPACETIME_BIN" --root-dir "$SPACETIME_ROOT" version upgrade
+          # Ensure a concrete CLI version is installed and selected.
+          "$SPACETIME_BIN" version upgrade || "$SPACETIME_BIN" version install 2.0.2 --use -y
           echo "SPACETIME_BIN=$SPACETIME_BIN" >> "$GITHUB_ENV"
-          echo "SPACETIME_ROOT=$SPACETIME_ROOT" >> "$GITHUB_ENV"
-          "$SPACETIME_BIN" --root-dir "$SPACETIME_ROOT" version list
-          "$SPACETIME_BIN" --root-dir "$SPACETIME_ROOT" --version
+          "$SPACETIME_BIN" version list
+          "$SPACETIME_BIN" --version
 
       - name: Resolve database name
         id: resolve-db
@@ -85,7 +81,7 @@ jobs:
             echo "Missing required secret: SPACETIMEDB_TOKEN"
             exit 1
           fi
-          "$SPACETIME_BIN" --root-dir "$SPACETIME_ROOT" login --token "$SPACETIMEDB_TOKEN" --no-browser
+          "$SPACETIME_BIN" login --token "$SPACETIMEDB_TOKEN" --no-browser
 
       - name: Publish module
         working-directory: server
@@ -93,4 +89,4 @@ jobs:
           DB_NAME: ${{ steps.resolve-db.outputs.db_name }}
           DELETE_DATA: ${{ github.event.inputs.delete_data }}
         run: |
-          "$SPACETIME_BIN" --root-dir "$SPACETIME_ROOT" publish "$DB_NAME" --server maincloud --delete-data "$DELETE_DATA" -y
+          "$SPACETIME_BIN" publish "$DB_NAME" --server maincloud --delete-data "$DELETE_DATA" -y
