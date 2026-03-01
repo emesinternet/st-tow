@@ -138,6 +138,68 @@ cd ~/repos/st-tow/web && npm run test
 cd ~/repos/st-tow/web && npm run build
 ```
 
+## Production Deploy (GitHub Pages + Spacetime Maincloud)
+
+This repo includes CI/CD workflows for:
+
+- web deploy: `.github/workflows/deploy-pages.yml`
+- server publish: `.github/workflows/publish-spacetime.yml`
+
+### 1) One-time setup (GitHub)
+
+In your GitHub repo:
+
+1. `Settings -> Pages`
+2. Source: `GitHub Actions`
+
+Then set repository variables:
+
+1. `Settings -> Secrets and variables -> Actions -> Variables`
+2. Add:
+   - `VITE_SPACETIMEDB_HOST`
+   - `VITE_SPACETIMEDB_DB_NAME`
+   - `SPACETIMEDB_DB_NAME`
+   - `VITE_BASE_PATH`
+
+Recommended values:
+
+- `VITE_SPACETIMEDB_HOST=https://maincloud.spacetimedb.com`
+- `VITE_SPACETIMEDB_DB_NAME=<your-db-name>`
+- `SPACETIMEDB_DB_NAME=<your-db-name>`
+- `VITE_BASE_PATH=/` for user/org pages or custom domain, `/<repo-name>/` for project pages
+
+Add repository secret:
+
+1. `Settings -> Secrets and variables -> Actions -> Secrets`
+2. Add:
+   - `SPACETIMEDB_TOKEN=<token from spacetime login>`
+
+### 2) One-time setup (Spacetime token)
+
+Generate a token locally and copy it:
+
+```bash
+spacetime login
+spacetime login show
+```
+
+Use the shown token for the GitHub secret `SPACETIMEDB_TOKEN`.
+
+### 3) Publish server module
+
+Use the GitHub Actions workflow:
+
+1. `Actions -> Publish Server To Spacetime Maincloud`
+2. `Run workflow`
+3. Optional `db_name` override
+4. `delete_data=on-conflict` (recommended default)
+
+### 4) Deploy web
+
+Push to `main` (or run `Deploy Web To GitHub Pages` manually).
+
+The workflow builds `web/` with your repo variables and deploys `web/dist` to Pages.
+
 ## Engineering Docs
 
 - `docs/engineering/ui-conventions.md`

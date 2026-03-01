@@ -1,0 +1,74 @@
+name: Publish Server To Spacetime Maincloud
+
+on:
+  workflow_dispatch:
+    inputs:
+      db_name:
+        description: 'Database name override (optional; defaults to repo variable SPACETIMEDB_DB_NAME)'
+        required: false
+        type: string
+      delete_data:
+        description: 'Delete strategy for schema conflicts'
+        required: true
+        default: on-conflict
+        type: choice
+        options:
+          - never
+          - on-conflict
+          - always
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Resolve database name
+        id: resolve-db
+        env:
+          INPUT_DB_NAME: ${{ github.event.inputs.db_name }}
+          DEFAULT_DB_NAME: ${{ vars.SPACETIMEDB_DB_NAME }}
+        run: |
+          DB_NAME="$INPUT_DB_NAME"
+          if [ -z "$DB_NAME" ]; then
+            DB_NAME="$DEFAULT_DB_NAME"
+          fi
+          if [ -z "$DB_NAME" ]; then
+            echo "No database name set. Provide workflow input db_name or repo variable SPACETIMEDB_DB_NAME."
+            exit 1
+          fi
+          echo "db_name=$DB_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate Spacetime CLI
+        working-directory: server
+        env:
+          SPACETIMEDB_TOKEN: ${{ secrets.SPACETIMEDB_TOKEN }}
+        run: |
+          if [ -z "$SPACETIMEDB_TOKEN" ]; then
+            echo "Missing required secret: SPACETIMEDB_TOKEN"
+            exit 1
+          fi
+          ./node_modules/.bin/spacetime login --token "$SPACETIMEDB_TOKEN" --no-browser
+
+      - name: Publish module
+        working-directory: server
+        env:
+          DB_NAME: ${{ steps.resolve-db.outputs.db_name }}
+          DELETE_DATA: ${{ github.event.inputs.delete_data }}
+        run: |
+          ./node_modules/.bin/spacetime publish "$DB_NAME" --server maincloud --delete-data "$DELETE_DATA" -y
