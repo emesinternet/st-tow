@@ -38,6 +38,23 @@ jobs:
         working-directory: server
         run: npm ci
 
+      - name: Install Spacetime CLI
+        run: |
+          set -euo pipefail
+          SPACETIME_ROOT="$RUNNER_TEMP/spacetime-cli"
+          curl -sSf https://install.spacetimedb.com | sh -s -- -y --root-dir "$SPACETIME_ROOT"
+          if [ -x "$SPACETIME_ROOT/bin/spacetime" ]; then
+            SPACETIME_BIN="$SPACETIME_ROOT/bin/spacetime"
+          elif [ -x "$SPACETIME_ROOT/spacetime" ]; then
+            SPACETIME_BIN="$SPACETIME_ROOT/spacetime"
+          else
+            echo "Unable to locate installed spacetime CLI under $SPACETIME_ROOT"
+            find "$SPACETIME_ROOT" -maxdepth 3 -type f | sed -n '1,120p'
+            exit 1
+          fi
+          echo "SPACETIME_BIN=$SPACETIME_BIN" >> "$GITHUB_ENV"
+          "$SPACETIME_BIN" --version
+
       - name: Resolve database name
         id: resolve-db
         env:
@@ -63,7 +80,7 @@ jobs:
             echo "Missing required secret: SPACETIMEDB_TOKEN"
             exit 1
           fi
-          ./node_modules/.bin/spacetime login --token "$SPACETIMEDB_TOKEN" --no-browser
+          "$SPACETIME_BIN" login --token "$SPACETIMEDB_TOKEN" --no-browser
 
       - name: Publish module
         working-directory: server
@@ -71,4 +88,4 @@ jobs:
           DB_NAME: ${{ steps.resolve-db.outputs.db_name }}
           DELETE_DATA: ${{ github.event.inputs.delete_data }}
         run: |
-          ./node_modules/.bin/spacetime publish "$DB_NAME" --server maincloud --delete-data "$DELETE_DATA" -y
+          "$SPACETIME_BIN" publish "$DB_NAME" --server maincloud --delete-data "$DELETE_DATA" -y
