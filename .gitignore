@@ -3,3 +3,5 @@ server/node_modules/
 web/node_modules/
 web/dist/
 .DS_Store
+docs/
+scripts/

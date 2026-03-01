@@ -1,230 +1,53 @@
-# st-tow
+# Typing Fever!
 
-`st-tow` is **Typing Fever!**, a realtime SpacetimeDB typing tug-of-war game.
+Realtime Typing Tug of War.
 
-## Repository Layout
+## What Is This?
 
-- `server/`: SpacetimeDB TypeScript module (schema, reducers, tick loop)
-- `web/`: Vite + React + Tailwind + neo-brutalist UI client
-- `AGENTS.md`: contributor runbook and architecture notes
-- `plan.md`: planning notes
+**Typing Fever!** is a fast, social typing battle where two teams race to pull a dancing dragon to their side of the floor.
 
-## Current Gameplay
+You are not just typing for points. Every correct word moves the match in real time for everyone watching.
 
-- Host creates a lobby and shares the join code.
-- Players join and are team-balanced (A/B internally, shown as red/blue in UI).
-- Match flow:
-  - `Waiting -> PreGame(3s) -> InGame -> SuddenDeath -> TieBreakRps(optional) -> PostGame`
-- Words are per-player and advance only on correct completion.
-- Sudden death elimination is immediate on wrong submit or deadline timeout.
-- Tie-zone at match end triggers RPS tie-break modal flow.
-- Host has independent typing/power state:
-  - host score/power meter increases on host correct words
-  - host does not directly add rope force
-  - host cannot be eliminated
+## How It Plays
 
-## Current UX
+1. A host opens a lobby and players jump in.
+2. Players are split into Red and Blue.
+3. Everyone types assigned words as quickly and accurately as possible.
+4. Correct words pull momentum toward your team.
+5. When time runs out, sudden death and tie-break mechanics can decide everything.
 
-- Header: title, music selector, mute toggle, `Reset Session`, online status badge.
-- Landing: side-by-side `Join a Match` and `Host a Match` cards.
-- Host options before lobby creation:
-  - match minutes (`1..10`, default `3`)
-  - lock lobby after match start
-  - tie-zone width (`10/20/30/40%`)
-- Match HUD:
-  - large centered timer
-  - red/blue pull counters in tug area corners
-  - center tie-zone dancefloor + dragon overlay
-  - player markers and cheer bubbles inside tug area
-  - host power bar under tug area
-- Host controls in dedicated panel below typing area.
-- RPS voting/reveal modal for tie-breaks.
-- Post-game modal with team totals, host successful words, and player accuracy table.
+The match is loud, visual, and immediate: player markers bounce, speech bubbles pop, powers trigger, and the entire room feels every action.
 
-## Server Contracts
+## What Makes It Fun
 
-### Public tables
+- Team-vs-team tension with live momentum swings
+- Host-driven chaos with power-ups and mode shifts
+- Tie-zone endings that trigger Rock-Paper-Scissors showdowns
+- Party-style visuals: dancefloor effects, dragon center stage, music, and confetti
+- End-of-match stats that celebrate clutch players and team output
 
-- `lobby`
-- `lobby_settings`
-- `player`
-- `match`
-- `match_clock`
-- `game_event`
-- `tug_state`
-- `tug_player_state`
-- `tug_host_state`
-- `tug_camera_state`
-- `tug_webrtc_signal`
-- `tug_rps_state`
-- `tug_rps_vote`
+## How It Uses SpacetimeDB
 
-(`schedule` is the private scheduled table backing server ticks and timed closes.)
+Typing Fever! leans hard into SpacetimeDB’s realtime model:
 
-### Reducers
+- **Single shared game truth**: everyone sees the same state, instantly.
+- **Server-authoritative outcomes**: fairness for scoring, eliminations, tie-breaks, and winners.
+- **Live subscriptions**: players and hosts watch the match evolve without polling.
+- **Reducer-driven gameplay**: every action (typing, powers, votes) is a deterministic state transition.
+- **Built-in identity/session flow**: players can reconnect and continue with consistent state.
+- **Scheduled game timing**: countdowns, round clocks, and phase transitions stay synchronized.
 
-Core:
+The result is a multiplayer experience that feels immediate, reliable, and competitive even as matches get hectic.
 
-- `create_lobby`
-- `join_lobby`
-- `leave_lobby`
-- `set_lobby_setting`
-- `start_match`
-- `end_match`
-- `close_post_game`
-- `reset_lobby`
+## Core Experiences
 
-Tug:
+- Lobby creation and joining by code
+- Team typing tug-of-war match flow
+- Host powers and host score economy
+- Sudden death pressure phase
+- Tie-zone + RPS tie-break sequence
+- Post-game results and lobby lifecycle controls
 
-- `tug_init`
-- `tug_submit`
-- `tug_record_miss`
-- `tug_activate_power`
-- `tug_set_camera_enabled`
-- `tug_send_webrtc_signal`
-- `tug_rps_cast_vote`
-- `tug_rps_continue`
-- `tug_tick`
-- `tug_tick_scheduled`
+## Project Name
 
-## Local Development (Windows launcher + WSL runtime)
-
-### Daily start
-
-From Windows PowerShell:
-
-```powershell
-cd C:\Users\emesi\Desktop\scripts
-.\launch-local-windows.ps1
-```
-
-Launcher starts:
-
-1. SpacetimeDB server
-2. publish + bindings generation
-3. web dev server
-
-### Optional launcher modes
-
-```powershell
-cd C:\Users\emesi\Desktop\scripts
-.\launch-local-windows.ps1 -FirstRunChecks
-.\launch-local-windows.ps1 -StopOnly
-.\launch-local-windows.ps1 -DatabaseName st-tow-dev-20260228010101
-```
-
-### Run logs
-
-- `/tmp/sttow/<db>/ready.flag`
-- `/tmp/sttow/<db>/fail.flag`
-- `/tmp/sttow/<db>/stage.log`
-- `/tmp/sttow/<db>/build.log`
-- `/tmp/sttow/<db>/publish.log`
-- `/tmp/sttow/<db>/generate.log`
-- `/tmp/sttow/<db>/web.log`
-
-## Checks
-
-```bash
-cd ~/repos/st-tow/server && npm run format:check
-cd ~/repos/st-tow/server && npm run lint
-cd ~/repos/st-tow/server && npm run typecheck
-cd ~/repos/st-tow/server && npm run test
-cd ~/repos/st-tow/web && npm run format:check
-cd ~/repos/st-tow/web && npm run lint
-cd ~/repos/st-tow/web && npm run check:module-bindings
-cd ~/repos/st-tow/web && npm run typecheck
-cd ~/repos/st-tow/web && npm run test
-cd ~/repos/st-tow/web && npm run build
-```
-
-## Production Deploy (GitHub Pages + Spacetime Maincloud)
-
-This repo includes CI/CD workflows for:
-
-- web deploy: `.github/workflows/deploy-pages.yml`
-- server publish: `.github/workflows/publish-spacetime.yml`
-
-### 1) One-time setup (GitHub)
-
-In your GitHub repo:
-
-1. `Settings -> Pages`
-2. Source: `GitHub Actions`
-
-Then set repository variables:
-
-1. `Settings -> Secrets and variables -> Actions -> Variables`
-2. Add:
-   - `VITE_SPACETIMEDB_HOST`
-   - `VITE_SPACETIMEDB_DB_NAME`
-   - `SPACETIMEDB_DB_NAME`
-   - `VITE_BASE_PATH`
-
-Recommended values:
-
-- `VITE_SPACETIMEDB_HOST=https://maincloud.spacetimedb.com`
-- `VITE_SPACETIMEDB_DB_NAME=<your-db-name>`
-- `SPACETIMEDB_DB_NAME=<your-db-name>`
-- `VITE_BASE_PATH=/` for user/org pages or custom domain, `/<repo-name>/` for project pages
-
-Add repository secret:
-
-1. `Settings -> Secrets and variables -> Actions -> Secrets`
-2. Add:
-   - `SPACETIMEDB_TOKEN=<token from spacetime login>`
-
-### 2) One-time setup (Spacetime token)
-
-Generate a token locally and copy it:
-
-```bash
-spacetime login
-spacetime login show
-```
-
-Use the shown token for the GitHub secret `SPACETIMEDB_TOKEN`.
-
-### 3) Publish server module
-
-Use the GitHub Actions workflow:
-
-1. `Actions -> Publish Server To Spacetime Maincloud`
-2. `Run workflow`
-3. Optional `db_name` override
-4. `delete_data=on-conflict` (recommended default)
-
-### 4) Deploy web
-
-Push to `main` (or run `Deploy Web To GitHub Pages` manually).
-
-The workflow builds `web/` with your repo variables and deploys `web/dist` to Pages.
-
-## Engineering Docs
-
-- `docs/engineering/ui-conventions.md`
-- `docs/engineering/accessibility-checklist.md`
-- `docs/engineering/realtime-state-model.md`
-
-## Optional Scoped Subscription Mode
-
-Set `VITE_SCOPED_SUBSCRIPTIONS=1` in the web environment to enable scoped client subscriptions.
-
-- Base subscription: `lobby`, `player`, `match`
-- Detail subscriptions are scoped to the currently resolved lobby/match
-- Reconnect safety remains via full snapshot extraction on applied updates
-
-## Common Issues
-
-- `publish failed`:
-  - inspect `/tmp/sttow/<db>/publish.log`
-  - verify server is running on `127.0.0.1:3000`
-  - verify `server/dist/bundle.js` exists
-- `generate failed`:
-  - inspect `/tmp/sttow/<db>/generate.log`
-- unexpected auto-join behavior from stale auth:
-
-```js
-localStorage.removeItem('auth_token');
-location.reload();
-```
+This repo is still named `st-tow`, but the game brand is **Typing Fever!**
