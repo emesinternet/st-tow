@@ -34,9 +34,10 @@ const DEFAULT_WIN_THRESHOLD = 100;
 const DEFAULT_TIE_ZONE_PERCENT = 10;
 const MATCH_PHASE_TIE_BREAK_RPS = 'TieBreakRps';
 const HOST_POWER_SPECS: Array<{ id: string; label: string; cost: number }> = [
-  { id: 'tech_mode_burst', label: 'Tech Burst', cost: 1 },
-  { id: 'symbols_mode_burst', label: 'Symbols Burst', cost: 1 },
-  { id: 'difficulty_up_burst', label: 'Difficulty Up', cost: 1 },
+  { id: 'tech_mode_burst', label: 'Tech Burst', cost: 20 },
+  { id: 'symbols_mode_burst', label: 'Symbols Burst', cost: 20 },
+  { id: 'difficulty_up_burst', label: 'Difficulty Up', cost: 25 },
+  { id: 'flipper_burst', label: 'Flipper', cost: 15 },
 ];
 
 export interface SelectUiViewModelInput {

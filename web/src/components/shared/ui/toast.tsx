@@ -21,7 +21,7 @@ export const ToastViewport = React.forwardRef<
 ToastViewport.displayName = ToastPrimitive.Viewport.displayName;
 
 const toastVariants = cva(
-  'grid gap-[var(--space-1)] rounded-[var(--ui-radius-md)] border-[var(--ui-border-lg)] p-[var(--space-3)] shadow-neo data-[state=closed]:animate-[fade-enter_200ms_ease-in_reverse] data-[state=open]:animate-[fade-enter_240ms_ease-out]',
+  'grid gap-[var(--space-1)] rounded-[var(--ui-radius-md)] border-4 p-[var(--space-3)] shadow-neo data-[state=closed]:animate-[fade-enter_200ms_ease-in_reverse] data-[state=open]:animate-[fade-enter_240ms_ease-out]',
   {
     variants: {
       tone: {

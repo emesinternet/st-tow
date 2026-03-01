@@ -28,6 +28,7 @@ export const WORD_MODE_SYMBOLS = 'Symbols';
 export const HOST_POWER_TECH_MODE_BURST = 'tech_mode_burst';
 export const HOST_POWER_SYMBOLS_MODE_BURST = 'symbols_mode_burst';
 export const HOST_POWER_DIFFICULTY_UP_BURST = 'difficulty_up_burst';
+export const HOST_POWER_FLIPPER_BURST = 'flipper_burst';
 
 export const DEFAULT_LOBBY_SETTINGS: Record<string, number> = {
   round_seconds: 90,

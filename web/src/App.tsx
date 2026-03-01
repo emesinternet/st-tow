@@ -25,7 +25,9 @@ import discoTrack from '@/assets/music/disco.mp3';
 import funkyTrack from '@/assets/music/funky.mp3';
 import { useSpacetimeSession } from '@/data/useSpacetimeSession';
 import { parsePostGameCloseStartedPayload } from '@/lib/events';
+import { evaluateHostPowerActivationGuard, getCooldownRemainingMs } from '@/lib/hostPowerCooldown';
 import { selectUiViewModel } from '@/lib/selectors';
+import { useHostPowerCooldowns } from '@/lib/useHostPowerCooldowns';
 import { useHostWebcamMesh } from '@/lib/useHostWebcamMesh';
 import type { ToastMessage } from '@/types/ui';
 
@@ -126,6 +128,12 @@ export default function App() {
       }),
     [dismissedLobbyId, identity, pendingJoinCode, selectedLobbyId, snapshot, state]
   );
+  const hostPowerCooldowns = useHostPowerCooldowns({
+    role: ui.role,
+    lobbyId: ui.lobby?.lobbyId ?? '',
+    matchId: ui.matchHud?.matchId ?? '',
+  });
+  const { cooldownEndsByPowerId, getCooldownState, startCooldown } = hostPowerCooldowns;
 
   const selectedMusicTrack = useMemo(
     () => MUSIC_TRACKS.find((track) => track.id === selectedMusicTrackId) ?? MUSIC_TRACKS[0],
@@ -457,11 +465,33 @@ export default function App() {
       if (!ui.matchHud) {
         return;
       }
+
+      const power = ui.hostPanel?.powers.find((candidate) => candidate.id === powerId) ?? null;
+      const cooldownEndsAtMs = cooldownEndsByPowerId[powerId] ?? 0;
+      const cooldownRemainingMs = getCooldownRemainingMs(cooldownEndsAtMs, Date.now());
+      const guard = evaluateHostPowerActivationGuard({
+        power,
+        cooldownRemainingMs,
+      });
+      if (guard?.blocked) {
+        pushToast(guard.title, guard.description, 'neutral');
+        return;
+      }
+
       await withActionErrorToast('Could not activate power', () =>
         actions.activatePower(ui.matchHud!.matchId, powerId)
       );
+      startCooldown(powerId);
     },
-    [actions, ui.matchHud, withActionErrorToast]
+    [
+      actions,
+      cooldownEndsByPowerId,
+      pushToast,
+      startCooldown,
+      ui.hostPanel?.powers,
+      ui.matchHud,
+      withActionErrorToast,
+    ]
   );
 
   const handleSubmitWord = useCallback(
@@ -694,10 +724,17 @@ export default function App() {
             onSubmitWord={handleSubmitWord}
             onRecordMistake={handleRecordMistake}
             preMatch={!ui.matchHud || ui.matchHud.phase === 'PreGame'}
+            activePowerId={ui.matchHud?.activePowerId ?? ''}
           />
         ) : null}
         {ui.role === 'host' && ui.hostPanel ? (
-          <HostPowerPanel powers={ui.hostPanel.powers} onActivatePower={handleActivatePower} />
+          <HostPowerPanel
+            powers={ui.hostPanel.powers}
+            cooldownsByPowerId={Object.fromEntries(
+              ui.hostPanel.powers.map((power) => [power.id, getCooldownState(power.id)])
+            )}
+            onActivatePower={handleActivatePower}
+          />
         ) : null}
         {ui.role === 'host' && ui.lobby ? (
           <HostControlsPanel
@@ -728,7 +765,6 @@ export default function App() {
         banner={<ConnectionBanner state={state} errorMessage={errorMessage} />}
         header={
           <HeaderBar
-            connectionState={state}
             lobbyCode={ui.lobby?.joinCode ?? ''}
             onCopyLobbyCode={() => {
               void handleCopyLobbyCode();

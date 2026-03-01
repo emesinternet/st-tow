@@ -105,6 +105,12 @@ export interface HostPowerActionViewModel {
   disabledReason: string | null;
 }
 
+export interface HostPowerCooldownState {
+  active: boolean;
+  remainingMs: number;
+  progress01: number;
+}
+
 export interface HostPanelViewModel {
   canStart: boolean;
   canReset: boolean;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent } from '@/components/shared/ui/card';
 import { cn } from '@/lib/utils';
 import type { PlayerInputViewModel } from '@/types/ui';
@@ -9,6 +9,45 @@ interface PlayerInputPanelProps {
   onSubmitWord: (typed: string) => Promise<void>;
   onRecordMistake: () => Promise<void>;
   preMatch?: boolean;
+  activePowerId?: string;
+}
+
+const FLIPPER_POWER_ID = 'flipper_burst';
+const MIN_FLIPPED_LETTERS = 2;
+const MAX_FLIPPED_LETTERS = 4;
+
+function hashText(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function nextPseudoRandom(seed: number): number {
+  return (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+}
+
+function deriveFlippedLetterIndices(word: string, seedKey: string): Set<number> {
+  const letters = [...word];
+  const length = letters.length;
+  if (length <= 0) {
+    return new Set<number>();
+  }
+
+  const maxCount = Math.min(MAX_FLIPPED_LETTERS, length);
+  const minCount = Math.min(MIN_FLIPPED_LETTERS, maxCount);
+  const range = Math.max(1, maxCount - minCount + 1);
+  let seed = hashText(`${seedKey}:${word}`);
+  const count = minCount + (seed % range);
+
+  const indices = new Set<number>();
+  while (indices.size < count) {
+    seed = nextPseudoRandom(seed);
+    indices.add(seed % length);
+  }
+  return indices;
 }
 
 function isTypingBlockedTarget(target: EventTarget | null): boolean {
@@ -29,6 +68,7 @@ export function PlayerInputPanel({
   onSubmitWord,
   onRecordMistake,
   preMatch = false,
+  activePowerId = '',
 }: PlayerInputPanelProps) {
   const [typed, setTyped] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -43,6 +83,16 @@ export function PlayerInputPanel({
   const readyName = model?.playerName?.trim() || 'PLAYER';
   const displayWord = isEliminated ? 'ELIMINATED' : targetWord || '...';
   const canType = Boolean(model?.canSubmit) && Boolean(targetWord) && !submitting;
+  const isFlipperActive = activePowerId === FLIPPER_POWER_ID && !isEliminated && !showReadyMessage;
+  const flippedLetterIndices = useMemo(() => {
+    if (!isFlipperActive || !targetWord) {
+      return new Set<number>();
+    }
+    return deriveFlippedLetterIndices(
+      targetWord,
+      `${model?.playerId ?? 'unknown'}:${activePowerId}`
+    );
+  }, [activePowerId, isFlipperActive, model?.playerId, targetWord]);
 
   const recomputeScale = useCallback(() => {
     const track = scaleTrackRef.current;
@@ -225,6 +275,7 @@ export function PlayerInputPanel({
                     {displayWord.split('').map((char, index) => {
                       const isFilled = index < typed.length;
                       const isActive = index === typed.length;
+                      const shouldFlipLetter = isFlipperActive && flippedLetterIndices.has(index);
                       return (
                         <span
                           key={`${char}-${index}`}
@@ -239,7 +290,14 @@ export function PlayerInputPanel({
                             !isEliminated && isActive && canType ? 'bg-neo-yellow' : ''
                           )}
                         >
-                          {char}
+                          <span
+                            className={cn(
+                              'inline-block',
+                              shouldFlipLetter ? '[transform:scaleX(-1)]' : ''
+                            )}
+                          >
+                            {char}
+                          </span>
                         </span>
                       );
                     })}

@@ -74,10 +74,10 @@ function alphaTag(index: number): string {
 
 function composeExpandedCandidate(type: WordType, left: string, right: string): string {
   if (type === 'brace_pattern') {
-    return `{${left}|${right}}`;
+    return `{${left}/${right}}`;
   }
   if (type === 'pipe_pattern') {
-    return `${left}|${right}`;
+    return `${left}->${right}`;
   }
   if (type === 'mixed_token') {
     return `${left}&&${right}`;
@@ -492,7 +492,7 @@ const TECH_TIER_WORDS: Record<WordDifficultyTier, TierTechSource> = {
   1: {
     command: ['ls', 'cat', 'cd', 'pwd', 'echo', 'touch', 'mkdir'],
     flag: ['-a', '-l', '-h', '-v', '-n', '-r', '-f'],
-    operator: ['&&', '||', '==', '!=', '+=', '-=', '*='],
+    operator: ['&&', '++', '==', '!=', '+=', '-=', '*='],
     path_token: ['src/app', 'bin/run', '/tmp/log', './build', '../cache', '~/docs', '/var/tmp'],
   },
   2: {
@@ -512,7 +512,7 @@ const TECH_TIER_WORDS: Record<WordDifficultyTier, TierTechSource> = {
   3: {
     command: ['systemctl', 'journalctl', 'kubectl', 'docker', 'npm', 'pnpm', 'yarn'],
     flag: ['-watch', '-filter', '-target', '-output', '-stdin', '-stdout', '-json'],
-    operator: ['|>', '===', '!==', '<<', '>>', '::=', '%%'],
+    operator: ['<~', '===', '!==', '<<', '>>', '::=', '%%'],
     path_token: [
       'infra/terraform',
       'config/nginx',
@@ -534,7 +534,7 @@ const TECH_TIER_WORDS: Record<WordDifficultyTier, TierTechSource> = {
       '-profile',
       '-parallel',
     ],
-    operator: ['>>=', '<<=', '&=', '|=', '^=', '<=>', '??='],
+    operator: ['>>=', '<<=', '&=', '/=', '^=', '<=>', '??='],
     path_token: [
       'cluster/prod/eu',
       'services/auth/api',
@@ -556,7 +556,7 @@ const TECH_TIER_WORDS: Record<WordDifficultyTier, TierTechSource> = {
       '-only-show-errors',
       '-skip-verify',
     ],
-    operator: ['&&=', '||=', '>>>', '<<<', '=>=', '!==~', '/*/'],
+    operator: ['&&=', '**=', '>>>', '<<<', '=>=', '!==~', '/*/'],
     path_token: [
       'pipelines/deploy/prod',
       'observability/alerts/rules',
@@ -572,41 +572,41 @@ const TECH_TIER_WORDS: Record<WordDifficultyTier, TierTechSource> = {
 const SYMBOLS_TIER_WORDS: Record<WordDifficultyTier, TierSymbolsSource> = {
   1: {
     brace_pattern: ['{}', '[]', '()', '{[]}'],
-    pipe_pattern: ['a|b', 'x||y', 'cat|grep', 'ls|wc'],
-    mixed_token: ['{a}|b', '[x]=1', '(go)!', 'a+b=c'],
+    pipe_pattern: ['a->b', 'x=>y', 'cat->grep', 'ls->wc'],
+    mixed_token: ['{a}/b', '[x]=q', '(go)!', 'a+b=c'],
   },
   2: {
     brace_pattern: ['{foo}', '[bar]', '(baz)', '{x:[y]}'],
-    pipe_pattern: ['grep|sort', 'cut|uniq', 'cat|sed', 'awk|wc'],
-    mixed_token: ['a&&b||c', 'x->y::z', 'obj?.id', 'k=v&&ok'],
+    pipe_pattern: ['grep->sort', 'cut->uniq', 'cat->sed', 'awk->wc'],
+    mixed_token: ['a&&b::c', 'x->y::z', 'obj?.id', 'k=v&&ok'],
   },
   3: {
-    brace_pattern: ['{a:{b:c}}', '[1,2,{x}]', '((alpha))', '{[()]}'],
-    pipe_pattern: ['ps|grep|awk', 'cat|tr|sort', 'git|grep|wc', 'jq|sed|cat'],
-    mixed_token: ['arr[i]+=1', 'fn(x)=>y', 'x??=y', 'path::to::id'],
+    brace_pattern: ['{a:{b:c}}', '[i,j,{x}]', '((alpha))', '{[()]}'],
+    pipe_pattern: ['ps->grep->awk', 'cat->tr->sort', 'git->grep->wc', 'jq->sed->cat'],
+    mixed_token: ['arr[i]+=x', 'fn(x)=>y', 'x??=y', 'path::to::id'],
   },
   4: {
-    brace_pattern: ['{config:{env:{prod:true}}}', '[{a:1},{b:2}]', '(((())))', '{x:[{y:(z)}]}'],
-    pipe_pattern: ['kubectl|get|jq', 'docker|ps|grep', 'npm|run|build', 'curl|jq|awk'],
-    mixed_token: ['map<string,int>', 'x<<=2&&y', 'fn<t>(x:t)', 'a?.b?.c??d'],
+    brace_pattern: ['{config:{env:{prod:true}}}', '[{a:x},{b:y}]', '(((())))', '{x:[{y:(z)}]}'],
+    pipe_pattern: ['kubectl->get->jq', 'docker->ps->grep', 'npm->run->build', 'curl->jq->awk'],
+    mixed_token: ['map<string,int>', 'x<<=y&&z', 'fn<t>(x:t)', 'a?.b?.c??d'],
   },
   5: {
     brace_pattern: [
-      '{meta:{build:{id:42,ok:true}}}',
+      '{meta:{build:{id:xx,ok:true}}}',
       '[{x:[{y:[z]}]}]',
       '({({[]})})',
       '{a:{b:{c:{d:e}}}}',
     ],
     pipe_pattern: [
-      'cat|grep|sort|uniq',
-      'tcpdump|grep|awk|wc',
-      'journalctl|grep|tail|sed',
-      'find|xargs|parallel|tee',
+      'cat->grep->sort->uniq',
+      'tcpdump->grep->awk->wc',
+      'journalctl->grep->tail->sed',
+      'find->xargs->parallel->tee',
     ],
     mixed_token: [
-      '((a&&b)||c)&&!d',
-      'value::<<pipe>>::token',
-      '{id:1}|{id:2}',
+      '((a&&b)??c)&&!d',
+      'value::<<flow>>::token',
+      '{id:x}/{id:y}',
       'cmd --flag="{x:y}"',
     ],
   },

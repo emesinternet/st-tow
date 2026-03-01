@@ -37,3 +37,10 @@ test('normal mode entries are single words only', () => {
     );
   }
 });
+
+test('catalog entries do not contain pipe symbols or numeric digits', () => {
+  for (const entry of WORD_CATALOG) {
+    assert.equal(entry.value.includes('|'), false, `entry contains pipe: ${entry.value}`);
+    assert.equal(/[0-9]/.test(entry.value), false, `entry contains digit: ${entry.value}`);
+  }
+});

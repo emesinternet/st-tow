@@ -9,6 +9,7 @@ import {
 } from 'spacetimedb/server';
 import {
   DEFAULT_LOBBY_SETTINGS,
+  HOST_POWER_FLIPPER_BURST,
   GAME_TYPE_TUG_OF_WAR,
   HOST_POWER_DIFFICULTY_UP_BURST,
   HOST_POWER_SYMBOLS_MODE_BURST,
@@ -354,6 +355,7 @@ type MatchScheduleRow = Infer<typeof matchScheduleRow>;
 
 const PRE_GAME_COUNTDOWN_SECONDS = 3;
 const HOST_POWER_METER_MAX = 100;
+const HOST_POWER_GAIN_PER_CORRECT = 5;
 const RPS_VOTE_SECONDS = 10;
 // Includes hand bounce animation time plus a 3s tie hold before revote.
 const RPS_TIE_REVEAL_SECONDS = 5;
@@ -371,7 +373,8 @@ const WEBRTC_SIGNAL_TTL_MICROS = msToMicros(30_000);
 type HostPowerId =
   | typeof HOST_POWER_TECH_MODE_BURST
   | typeof HOST_POWER_SYMBOLS_MODE_BURST
-  | typeof HOST_POWER_DIFFICULTY_UP_BURST;
+  | typeof HOST_POWER_DIFFICULTY_UP_BURST
+  | typeof HOST_POWER_FLIPPER_BURST;
 
 interface HostPowerConfig {
   id: HostPowerId;
@@ -379,29 +382,41 @@ interface HostPowerConfig {
   durationMs: number;
   wordMode: WordMode | null;
   difficultyBonusTier: number;
+  rerollOnActivate: boolean;
 }
 
 const HOST_POWER_CONFIG: Record<HostPowerId, HostPowerConfig> = {
   [HOST_POWER_TECH_MODE_BURST]: {
     id: HOST_POWER_TECH_MODE_BURST,
-    cost: 1,
+    cost: 20,
     durationMs: 20_000,
     wordMode: WORD_MODE_TECH,
     difficultyBonusTier: 0,
+    rerollOnActivate: true,
   },
   [HOST_POWER_SYMBOLS_MODE_BURST]: {
     id: HOST_POWER_SYMBOLS_MODE_BURST,
-    cost: 1,
+    cost: 20,
     durationMs: 20_000,
     wordMode: WORD_MODE_SYMBOLS,
     difficultyBonusTier: 0,
+    rerollOnActivate: true,
   },
   [HOST_POWER_DIFFICULTY_UP_BURST]: {
     id: HOST_POWER_DIFFICULTY_UP_BURST,
-    cost: 1,
+    cost: 25,
     durationMs: 20_000,
     wordMode: null,
     difficultyBonusTier: 1,
+    rerollOnActivate: true,
+  },
+  [HOST_POWER_FLIPPER_BURST]: {
+    id: HOST_POWER_FLIPPER_BURST,
+    cost: 15,
+    durationMs: 20_000,
+    wordMode: null,
+    difficultyBonusTier: 0,
+    rerollOnActivate: false,
   },
 };
 
@@ -1575,7 +1590,8 @@ function getHostPowerConfig(powerId: string): HostPowerConfig | null {
   if (
     powerId === HOST_POWER_TECH_MODE_BURST ||
     powerId === HOST_POWER_SYMBOLS_MODE_BURST ||
-    powerId === HOST_POWER_DIFFICULTY_UP_BURST
+    powerId === HOST_POWER_DIFFICULTY_UP_BURST ||
+    powerId === HOST_POWER_FLIPPER_BURST
   ) {
     return HOST_POWER_CONFIG[powerId];
   }
@@ -2486,7 +2502,9 @@ export const tug_activate_power = spacetimedb.reducer(
       duration_ms: config.durationMs,
     });
 
-    rerollAllActiveWords(ctx, lobby, match, tugActive);
+    if (config.rerollOnActivate) {
+      rerollAllActiveWords(ctx, lobby, match, tugActive);
+    }
   }
 );
 
@@ -2740,7 +2758,10 @@ export const tug_submit = spacetimedb.reducer(
 
       if (hostResult.correct) {
         hostStateNext.correct_count += 1;
-        hostStateNext.power_meter = Math.min(HOST_POWER_METER_MAX, hostStateNext.power_meter + 1);
+        hostStateNext.power_meter = Math.min(
+          HOST_POWER_METER_MAX,
+          hostStateNext.power_meter + HOST_POWER_GAIN_PER_CORRECT
+        );
         hostStateNext.last_word_type = nextHostWord.type;
         emitGameEvent(ctx, lobby.lobby_id, match_id, 'host_submit_ok', {
           score: hostStateNext.score,

@@ -2,10 +2,11 @@ import { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/shared/ui/card';
 import { Button } from '@/components/shared/ui/button';
 import { Tooltip } from '@/components/shared/ui/tooltip';
-import type { HostPowerActionViewModel } from '@/types/ui';
+import type { HostPowerActionViewModel, HostPowerCooldownState } from '@/types/ui';
 
 interface HostPowerPanelProps {
   powers: HostPowerActionViewModel[];
+  cooldownsByPowerId: Record<string, HostPowerCooldownState>;
   onActivatePower: (powerId: string) => Promise<void>;
 }
 
@@ -15,6 +16,8 @@ const HOST_POWER_TOOLTIPS: Record<string, string> = {
     'Symbols Burst: Switches all active words to symbol-heavy words for 20 seconds.',
   difficulty_up_burst:
     'Difficulty Up: Boosts difficulty by one tier for 20 seconds and rerolls active words.',
+  flipper_burst:
+    'Flipper: Randomly mirrors 2 to 4 letters in active words so they appear backwards.',
 };
 
 function isHotkeyBlockedTarget(target: EventTarget | null): boolean {
@@ -47,7 +50,11 @@ function getHotkeyForIndex(index: number): string {
   return String(index + 1);
 }
 
-export function HostPowerPanel({ powers, onActivatePower }: HostPowerPanelProps) {
+export function HostPowerPanel({
+  powers,
+  cooldownsByPowerId,
+  onActivatePower,
+}: HostPowerPanelProps) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.altKey || event.ctrlKey || event.metaKey) {
@@ -69,7 +76,7 @@ export function HostPowerPanel({ powers, onActivatePower }: HostPowerPanelProps)
       }
 
       const power = powers[index];
-      if (!power || !power.enabled) {
+      if (!power || !power.enabled || (cooldownsByPowerId[power.id]?.active ?? false)) {
         return;
       }
 
@@ -81,16 +88,28 @@ export function HostPowerPanel({ powers, onActivatePower }: HostPowerPanelProps)
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [onActivatePower, powers]);
+  }, [cooldownsByPowerId, onActivatePower, powers]);
 
   if (!powers.length) {
     return null;
   }
 
   const getPowerTooltip = (power: HostPowerActionViewModel): string => {
+    const cooldown = cooldownsByPowerId[power.id] ?? {
+      active: false,
+      remainingMs: 0,
+      progress01: 1,
+    };
     const base = HOST_POWER_TOOLTIPS[power.id] ?? `${power.label}: Activates a temporary effect.`;
+    if (!power.enabled && power.disabledReason) {
+      return `${base} ${power.disabledReason}`;
+    }
+    if (cooldown.active) {
+      const seconds = Math.max(1, Math.ceil(cooldown.remainingMs / 1000));
+      return `${base} Cost: ${power.cost}. Cooling down: ${seconds}s.`;
+    }
     if (power.enabled) {
-      return `${base} Cost: ${power.cost}.`;
+      return `${base} Cost: ${power.cost}. Ready.`;
     }
     return `${base} Cost: ${power.cost}. ${power.disabledReason ?? 'Currently unavailable.'}`;
   };
@@ -101,25 +120,44 @@ export function HostPowerPanel({ powers, onActivatePower }: HostPowerPanelProps)
         <CardTitle>Host Power-Ups</CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2">
           {powers.map((power, index) => {
             const hotkey = getHotkeyForIndex(index);
+            const cooldown = cooldownsByPowerId[power.id] ?? {
+              active: false,
+              remainingMs: 0,
+              progress01: 1,
+            };
+            const disabled = !power.enabled || cooldown.active;
+            const progressPct = Math.max(0, Math.min(100, cooldown.progress01 * 100));
             return (
               <Tooltip key={power.id} content={getPowerTooltip(power)}>
                 <Button
                   type="button"
                   size="sm"
                   variant="teamB"
-                  disabled={!power.enabled}
+                  disabled={disabled}
+                  aria-disabled={disabled}
                   onClick={() => void onActivatePower(power.id)}
-                  className="w-full justify-between gap-3"
+                  className="relative w-full justify-between gap-3 overflow-hidden"
                 >
-                  <span>{power.label}</span>
-                  <span className="inline-flex items-center gap-2">
-                    <span>{power.cost}</span>
-                    <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded-[4px] border-2 border-neo-ink bg-neo-paper px-1 font-mono text-[10px] font-bold leading-none text-neo-ink">
-                      {hotkey}
-                    </kbd>
+                  {cooldown.active ? (
+                    <>
+                      <span className="pointer-events-none absolute inset-0 bg-neo-paper/45" />
+                      <span
+                        className="pointer-events-none absolute inset-y-0 left-0 bg-neo-teamB transition-[width] duration-100 motion-reduce:transition-none"
+                        style={{ width: `${progressPct}%` }}
+                      />
+                    </>
+                  ) : null}
+                  <span className="relative z-10 flex w-full items-center justify-between gap-3">
+                    <span>{power.label}</span>
+                    <span className="inline-flex items-center gap-2">
+                      <span>{power.cost}</span>
+                      <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded-[4px] border-2 border-neo-ink bg-neo-paper px-1 font-mono text-[10px] font-bold leading-none text-neo-ink">
+                        {hotkey}
+                      </kbd>
+                    </span>
                   </span>
                 </Button>
               </Tooltip>
