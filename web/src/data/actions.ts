@@ -1,4 +1,5 @@
 import type { DbConnection } from '@/module_bindings';
+import { Identity } from 'spacetimedb';
 
 type ReducerFn = (params: Record<string, unknown>) => Promise<void>;
 
@@ -53,6 +54,14 @@ export interface GameActions {
   activatePower: (matchId: string, powerId: string) => Promise<void>;
   voteRps: (matchId: string, choice: string) => Promise<void>;
   continueTieBreak: (matchId: string) => Promise<void>;
+  setCameraEnabled: (matchId: string, enabled: boolean) => Promise<void>;
+  sendWebrtcSignal: (
+    matchId: string,
+    streamEpoch: number,
+    toIdentity: string,
+    kind: string,
+    payloadJson: string
+  ) => Promise<void>;
 }
 
 export function buildActions(connection: DbConnection | null): GameActions {
@@ -138,6 +147,29 @@ export function buildActions(connection: DbConnection | null): GameActions {
       const conn = assertConnection(connection);
       await callReducer(conn, 'tug_rps_continue', {
         matchId,
+      });
+    },
+    setCameraEnabled: async (matchId: string, enabled: boolean) => {
+      const conn = assertConnection(connection);
+      await callReducer(conn, 'tug_set_camera_enabled', {
+        matchId,
+        enabled,
+      });
+    },
+    sendWebrtcSignal: async (
+      matchId: string,
+      streamEpoch: number,
+      toIdentity: string,
+      kind: string,
+      payloadJson: string
+    ) => {
+      const conn = assertConnection(connection);
+      await callReducer(conn, 'tug_send_webrtc_signal', {
+        matchId,
+        streamEpoch,
+        toIdentity: Identity.fromString(toIdentity),
+        kind,
+        payloadJson,
       });
     },
   };

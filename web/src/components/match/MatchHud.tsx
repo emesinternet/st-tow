@@ -9,6 +9,7 @@ interface MatchHudProps {
   hud: MatchHudViewModel;
   teamAPlayers: TeamPlayerViewModel[];
   teamBPlayers: TeamPlayerViewModel[];
+  cameraStream?: MediaStream | null;
 }
 
 const CHEER_PHRASES = [
@@ -45,9 +46,11 @@ function randomIntInclusive(min: number, max: number): number {
 function TeamMarkers({
   players,
   tone,
+  cameraMode = false,
 }: {
   players: TeamPlayerViewModel[];
   tone: "teamA" | "teamB";
+  cameraMode?: boolean;
 }) {
   const connected = players.filter((player) => player.status !== "Left");
   const ballClassName = tone === "teamA" ? "bg-neo-teamA" : "bg-neo-teamB";
@@ -196,7 +199,11 @@ function TeamMarkers({
                 transition={{ duration: 0.28, ease: "easeOut" }}
               >
                 {bubble}
-                <span className="max-w-[56px] truncate text-[9px] font-bold uppercase leading-tight text-neo-ink/85">
+                <span
+                  className={`max-w-[56px] truncate text-[9px] font-bold uppercase leading-tight ${
+                    cameraMode ? "text-white drop-shadow-[0_1px_0_#000]" : "text-neo-ink/85"
+                  }`}
+                >
                   {player.displayName}
                 </span>
                 <span
@@ -212,7 +219,11 @@ function TeamMarkers({
               className="relative flex h-7 flex-col items-center justify-end text-center"
             >
               {bubble}
-              <span className="max-w-[56px] truncate text-[9px] font-bold uppercase leading-tight text-neo-ink/85">
+              <span
+                className={`max-w-[56px] truncate text-[9px] font-bold uppercase leading-tight ${
+                  cameraMode ? "text-white drop-shadow-[0_1px_0_#000]" : "text-neo-ink/85"
+                }`}
+              >
                 {player.displayName}
               </span>
               <span
@@ -230,7 +241,9 @@ export function MatchHud({
   hud,
   teamAPlayers,
   teamBPlayers,
+  cameraStream = null,
 }: MatchHudProps) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const isLobbyPreview = hud.matchId.endsWith(":pre");
   const isRpsTieBreak = hud.phase === "TieBreakRps";
   const timerText =
@@ -252,6 +265,23 @@ export function MatchHud({
     0,
     tieZoneEndPercent - tieZoneStartPercent,
   );
+  const cameraVisualMode = Boolean(cameraStream) || hud.hostCameraEnabled;
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+    if (cameraStream) {
+      video.srcObject = cameraStream;
+      void video.play().catch(() => {
+        // Autoplay may be blocked until user interaction on some browsers.
+      });
+      return;
+    }
+    video.pause();
+    video.srcObject = null;
+  }, [cameraStream]);
 
   return (
     <Card className="overflow-visible">
@@ -262,11 +292,44 @@ export function MatchHud({
           </p>
         </div>
         <div className="bg-tug-war-gradient relative h-40 overflow-hidden rounded-[16px] border-4 border-neo-ink sm:h-48">
+          {cameraStream ? (
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="absolute inset-0 z-0 h-full w-full object-cover"
+            />
+          ) : null}
           <div className="pointer-events-none absolute top-2 left-3 z-40 font-display text-4xl font-black tabular-nums text-neo-teamA sm:text-5xl">
-            {hud.teamAPulls}
+            <span
+              style={
+                cameraVisualMode
+                  ? {
+                      WebkitTextStroke: "2px #000",
+                      textShadow:
+                        "1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000",
+                    }
+                  : undefined
+              }
+            >
+              {hud.teamAPulls}
+            </span>
           </div>
           <div className="pointer-events-none absolute top-2 right-3 z-40 font-display text-4xl font-black tabular-nums text-neo-teamB sm:text-5xl">
-            {hud.teamBPulls}
+            <span
+              style={
+                cameraVisualMode
+                  ? {
+                      WebkitTextStroke: "2px #000",
+                      textShadow:
+                        "1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000",
+                    }
+                  : undefined
+              }
+            >
+              {hud.teamBPulls}
+            </span>
           </div>
           <div className="absolute inset-0 z-0 grid grid-cols-2">
             <div className="bg-neo-teamA/10" />
@@ -277,6 +340,7 @@ export function MatchHud({
             style={{
               left: `${tieZoneStartPercent}%`,
               width: `${tieZoneWidthPercent}%`,
+              opacity: cameraVisualMode ? 0.42 : 1,
             }}
           >
             <div className="tie-zone-floor__shimmer" />
@@ -289,12 +353,12 @@ export function MatchHud({
             className="pointer-events-none absolute inset-y-0 z-20 w-[3px] bg-neo-ink"
             style={{ left: `calc(${tieZoneEndPercent}% - 1.5px)` }}
           />
-          <div className="absolute inset-1.5 z-20 grid grid-cols-2 gap-1 overflow-visible rounded-[12px] sm:inset-2">
-            <div className="pr-1.5 pl-2 pt-16 pb-0 sm:pr-2 sm:pl-3 sm:pt-20">
-              <TeamMarkers players={teamAPlayers} tone="teamA" />
+          <div className="pointer-events-none absolute inset-1.5 z-20 overflow-visible rounded-[12px] sm:inset-2">
+            <div className="absolute inset-y-0 left-0 w-1/4 pr-1.5 pl-2 pt-16 pb-0 sm:pr-2 sm:pl-3 sm:pt-20">
+              <TeamMarkers players={teamAPlayers} tone="teamA" cameraMode={cameraVisualMode} />
             </div>
-            <div className="pl-1.5 pr-2 pt-16 pb-0 sm:pl-2 sm:pr-3 sm:pt-20">
-              <TeamMarkers players={teamBPlayers} tone="teamB" />
+            <div className="absolute inset-y-0 right-0 w-1/4 pl-1.5 pr-2 pt-16 pb-0 sm:pl-2 sm:pr-3 sm:pt-20">
+              <TeamMarkers players={teamBPlayers} tone="teamB" cameraMode={cameraVisualMode} />
             </div>
           </div>
           <motion.img

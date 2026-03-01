@@ -183,6 +183,25 @@ const tugHostStateRow = {
   last_submit_at_micros: t.i64(),
 };
 
+const tugCameraStateRow = {
+  match_id: t.string().primaryKey(),
+  host_identity: t.identity().index(),
+  enabled: t.bool().index(),
+  stream_epoch: t.i32(),
+  updated_at_micros: t.i64().index(),
+};
+
+const tugWebrtcSignalRow = {
+  signal_id: t.string().primaryKey(),
+  match_id: t.string().index(),
+  stream_epoch: t.i32(),
+  from_identity: t.identity().index(),
+  to_identity: t.identity().index(),
+  kind: t.string().index(),
+  payload_json: t.string(),
+  created_at_micros: t.i64().index(),
+};
+
 const tugRpsStateRow = {
   match_id: t.string().primaryKey(),
   round_number: t.i32(),
@@ -283,6 +302,25 @@ const spacetimedb = schema({
     tugPlayerStateRow
   ),
   tug_host_state: table({ public: true }, tugHostStateRow),
+  tug_camera_state: table({ public: true }, tugCameraStateRow),
+  tug_webrtc_signal: table(
+    {
+      public: true,
+      indexes: [
+        {
+          accessor: 'by_match_created',
+          algorithm: 'btree',
+          columns: ['match_id', 'created_at_micros'],
+        },
+        {
+          accessor: 'by_match_target',
+          algorithm: 'btree',
+          columns: ['match_id', 'to_identity'],
+        },
+      ],
+    },
+    tugWebrtcSignalRow
+  ),
   tug_rps_state: table({ public: true }, tugRpsStateRow),
   tug_rps_vote: table(
     {
@@ -308,6 +346,8 @@ type MatchClockRow = InferTypeOfRow<typeof matchClockRow>;
 type TugStateRow = InferTypeOfRow<typeof tugStateRow>;
 type TugPlayerStateRow = InferTypeOfRow<typeof tugPlayerStateRow>;
 type TugHostStateRow = InferTypeOfRow<typeof tugHostStateRow>;
+type TugCameraStateRow = InferTypeOfRow<typeof tugCameraStateRow>;
+type TugWebrtcSignalRow = InferTypeOfRow<typeof tugWebrtcSignalRow>;
 type TugRpsStateRow = InferTypeOfRow<typeof tugRpsStateRow>;
 type TugRpsVoteRow = InferTypeOfRow<typeof tugRpsVoteRow>;
 type MatchScheduleRow = Infer<typeof matchScheduleRow>;
@@ -326,6 +366,7 @@ const SCHEDULE_KIND_POST_GAME_CLOSE = 'postgame_close';
 const RPS_STAGE_VOTING = 'Voting';
 const RPS_STAGE_REVEAL = 'Reveal';
 const TIE_ZONE_PERCENT_OPTIONS = new Set([10, 20, 30, 40]);
+const WEBRTC_SIGNAL_TTL_MICROS = msToMicros(30_000);
 
 type HostPowerId =
   | typeof HOST_POWER_TECH_MODE_BURST
@@ -384,6 +425,15 @@ function clampTier(value: number): WordDifficultyTier {
     return 5;
   }
   return value as WordDifficultyTier;
+}
+
+function isCameraAllowedPhase(phase: string): boolean {
+  return (
+    phase === MATCH_PHASE_PRE_GAME ||
+    phase === MATCH_PHASE_IN_GAME ||
+    phase === MATCH_PHASE_SUDDEN_DEATH ||
+    phase === MATCH_PHASE_TIE_BREAK_RPS
+  );
 }
 
 function replaceRow(table: any, current: any, next: any): void {
@@ -500,6 +550,16 @@ function getTugHostStateByMatchId(
   );
 }
 
+function getTugCameraStateByMatchId(
+  ctx: ReducerCtx<any>,
+  matchId: string
+): TugCameraStateRow | null {
+  return findFirst<TugCameraStateRow>(
+    ctx.db.tug_camera_state.iter() as Iterable<TugCameraStateRow>,
+    row => row.match_id === matchId
+  );
+}
+
 function getTugRpsStateByMatchId(
   ctx: ReducerCtx<any>,
   matchId: string
@@ -521,6 +581,51 @@ function listTugRpsVotesByMatch(
     }
   }
   return rows;
+}
+
+function listTugWebrtcSignalsByMatch(
+  ctx: ReducerCtx<any>,
+  matchId: string
+): TugWebrtcSignalRow[] {
+  const rows: TugWebrtcSignalRow[] = [];
+  for (const row of ctx.db.tug_webrtc_signal.iter() as Iterable<TugWebrtcSignalRow>) {
+    if (row.match_id === matchId) {
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+
+function clearTugWebrtcSignalsByMatch(
+  ctx: ReducerCtx<any>,
+  matchId: string
+): void {
+  for (const row of listTugWebrtcSignalsByMatch(ctx, matchId)) {
+    ctx.db.tug_webrtc_signal.delete(row);
+  }
+}
+
+function clearTugCameraStateForMatch(
+  ctx: ReducerCtx<any>,
+  matchId: string
+): void {
+  const row = getTugCameraStateByMatchId(ctx, matchId);
+  if (row) {
+    ctx.db.tug_camera_state.delete(row);
+  }
+}
+
+function cleanupStaleWebrtcSignals(
+  ctx: ReducerCtx<any>,
+  matchId: string,
+  nowMicrosValue: bigint
+): void {
+  const staleBefore = nowMicrosValue - WEBRTC_SIGNAL_TTL_MICROS;
+  for (const row of listTugWebrtcSignalsByMatch(ctx, matchId)) {
+    if (row.created_at_micros < staleBefore) {
+      ctx.db.tug_webrtc_signal.delete(row);
+    }
+  }
 }
 
 function clearTugRpsVotesByMatch(ctx: ReducerCtx<any>, matchId: string): void {
@@ -554,6 +659,9 @@ function clearMatchRuntimeRows(ctx: ReducerCtx<any>, matchId: string): void {
   if (hostState) {
     ctx.db.tug_host_state.delete(hostState);
   }
+
+  clearTugCameraStateForMatch(ctx, matchId);
+  clearTugWebrtcSignalsByMatch(ctx, matchId);
 
   for (const row of listTugPlayerStatesByMatch(ctx, matchId)) {
     ctx.db.tug_player_state.delete(row);
@@ -1004,6 +1112,20 @@ function findMembershipInLobby(
   );
 }
 
+function findLobbyMemberByIdentity(
+  ctx: ReducerCtx<any>,
+  lobbyId: string,
+  identity: InferTypeOfRow<typeof playerRow>['identity']
+): PlayerRow | null {
+  return findFirst<PlayerRow>(
+    ctx.db.player.iter() as Iterable<PlayerRow>,
+    row =>
+      row.lobby_id === lobbyId &&
+      row.identity.equals(identity) &&
+      row.status !== PLAYER_STATUS_LEFT
+  );
+}
+
 function ensureTeamsAssigned(ctx: ReducerCtx<any>, lobbyId: string): void {
   const players = listPlayersInLobby(ctx, lobbyId).filter(
     player => player.status !== PLAYER_STATUS_LEFT
@@ -1185,6 +1307,28 @@ function initializeTugState(
   });
 }
 
+function disableHostCameraForMatch(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  matchId: string,
+  reason: string
+): void {
+  const cameraState = getTugCameraStateByMatchId(ctx, matchId);
+  if (!cameraState) {
+    clearTugWebrtcSignalsByMatch(ctx, matchId);
+    return;
+  }
+
+  if (cameraState.enabled) {
+    emitGameEvent(ctx, lobby.lobby_id, matchId, 'host_camera_disabled', {
+      stream_epoch: cameraState.stream_epoch,
+      reason,
+    });
+  }
+  ctx.db.tug_camera_state.delete(cameraState);
+  clearTugWebrtcSignalsByMatch(ctx, matchId);
+}
+
 function finishMatch(
   ctx: ReducerCtx<any>,
   lobby: LobbyRow,
@@ -1211,6 +1355,7 @@ function finishMatch(
     status: LOBBY_STATUS_FINISHED,
   };
   replaceRow(ctx.db.lobby, lobby, lobbyNext);
+  disableHostCameraForMatch(ctx, lobby, match.match_id, 'match_finished');
 
   removeTickSchedule(ctx, match.match_id);
   const idleCloseAtMicros =
@@ -1726,6 +1871,7 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
   }
 
   const now = nowMicros(ctx);
+  cleanupStaleWebrtcSignals(ctx, matchId, now);
   const secondsRemaining = deriveSecondsRemaining(
     clock.phase_ends_at.microsSinceUnixEpoch,
     now
@@ -2204,6 +2350,8 @@ export const start_match = spacetimedb.reducer(
     ctx.db.match.insert(match);
     clearTugRpsStateForMatch(ctx, matchId);
     clearTugRpsVotesByMatch(ctx, matchId);
+    clearTugCameraStateForMatch(ctx, matchId);
+    clearTugWebrtcSignalsByMatch(ctx, matchId);
 
     ctx.db.match_clock.insert({
       match_id: matchId,
@@ -2329,6 +2477,8 @@ export const reset_lobby = spacetimedb.reducer(
 
       clearTugRpsStateForMatch(ctx, lobby.active_match_id);
       clearTugRpsVotesByMatch(ctx, lobby.active_match_id);
+      clearTugWebrtcSignalsByMatch(ctx, lobby.active_match_id);
+      clearTugCameraStateForMatch(ctx, lobby.active_match_id);
 
       const hostState = getTugHostStateByMatchId(ctx, lobby.active_match_id);
       if (hostState) {
@@ -2515,6 +2665,114 @@ export const tug_activate_power = spacetimedb.reducer(
     });
 
     rerollAllActiveWords(ctx, lobby, match, tugActive);
+  }
+);
+
+export const tug_set_camera_enabled = spacetimedb.reducer(
+  {
+    match_id: t.string(),
+    enabled: t.bool(),
+  },
+  (ctx, { match_id, enabled }) => {
+    const match = getMatchOrThrow(ctx, match_id);
+    if (!isCameraAllowedPhase(match.phase)) {
+      throw new Error('Camera can only be toggled during active match phases');
+    }
+
+    const lobby = getLobbyOrThrow(ctx, match.lobby_id);
+    assertHost(ctx, lobby);
+
+    const now = nowMicros(ctx);
+    const existing = getTugCameraStateByMatchId(ctx, match_id);
+    const nextEpoch = enabled
+      ? Math.max(1, (existing?.stream_epoch ?? 0) + 1)
+      : Math.max(1, existing?.stream_epoch ?? 1);
+    const nextState: TugCameraStateRow = {
+      match_id,
+      host_identity: lobby.host_identity,
+      enabled,
+      stream_epoch: nextEpoch,
+      updated_at_micros: now,
+    };
+
+    if (existing) {
+      replaceRow(ctx.db.tug_camera_state, existing, nextState);
+    } else {
+      ctx.db.tug_camera_state.insert(nextState);
+    }
+
+    clearTugWebrtcSignalsByMatch(ctx, match_id);
+
+    emitGameEvent(
+      ctx,
+      lobby.lobby_id,
+      match_id,
+      enabled ? 'host_camera_enabled' : 'host_camera_disabled',
+      {
+        stream_epoch: nextEpoch,
+      }
+    );
+  }
+);
+
+export const tug_send_webrtc_signal = spacetimedb.reducer(
+  {
+    match_id: t.string(),
+    stream_epoch: t.i32(),
+    to_identity: t.identity(),
+    kind: t.string(),
+    payload_json: t.string(),
+  },
+  (ctx, { match_id, stream_epoch, to_identity, kind, payload_json }) => {
+    const match = getMatchOrThrow(ctx, match_id);
+    if (!isCameraAllowedPhase(match.phase)) {
+      throw new Error('WebRTC signaling is only available during active match phases');
+    }
+
+    const lobby = getLobbyOrThrow(ctx, match.lobby_id);
+    const senderIsHost = lobby.host_identity.equals(ctx.sender);
+    if (!senderIsHost && !findLobbyMemberByIdentity(ctx, lobby.lobby_id, ctx.sender)) {
+      throw new Error('Sender is not an active lobby member');
+    }
+    const targetIsHost = lobby.host_identity.equals(to_identity);
+    if (!targetIsHost && !findLobbyMemberByIdentity(ctx, lobby.lobby_id, to_identity)) {
+      throw new Error('Target is not an active lobby member');
+    }
+
+    const cameraState = getTugCameraStateByMatchId(ctx, match_id);
+    if (!cameraState || !cameraState.enabled) {
+      emitGameEvent(ctx, lobby.lobby_id, match_id, 'webrtc_stream_error', {
+        reason: 'camera_not_enabled',
+      });
+      throw new Error('Host camera is not enabled');
+    }
+    if (cameraState.stream_epoch !== stream_epoch) {
+      emitGameEvent(ctx, lobby.lobby_id, match_id, 'webrtc_stream_error', {
+        reason: 'stale_stream_epoch',
+        current_stream_epoch: cameraState.stream_epoch,
+        stream_epoch,
+      });
+      throw new Error('Stale stream epoch');
+    }
+
+    const now = nowMicros(ctx);
+    ctx.db.tug_webrtc_signal.insert({
+      signal_id: newId(ctx, 'signal'),
+      match_id,
+      stream_epoch,
+      from_identity: ctx.sender,
+      to_identity,
+      kind,
+      payload_json,
+      created_at_micros: now,
+    });
+
+    emitGameEvent(ctx, lobby.lobby_id, match_id, 'webrtc_signal_sent', {
+      stream_epoch,
+      kind,
+      from_identity: ctx.sender.toHexString(),
+      to_identity: to_identity.toHexString(),
+    });
   }
 );
 

@@ -70,6 +70,25 @@ export interface NormalizedTugState {
   lastTickAtMicros: bigint;
 }
 
+export interface NormalizedTugCameraState {
+  matchId: string;
+  hostIdentity: string;
+  enabled: boolean;
+  streamEpoch: number;
+  updatedAtMicros: bigint;
+}
+
+export interface NormalizedTugWebrtcSignal {
+  signalId: string;
+  matchId: string;
+  streamEpoch: number;
+  fromIdentity: string;
+  toIdentity: string;
+  kind: string;
+  payloadJson: string;
+  createdAtMicros: bigint;
+}
+
 export interface NormalizedTugRpsState {
   matchId: string;
   roundNumber: number;
@@ -130,6 +149,8 @@ export interface SessionSnapshot {
   matches: NormalizedMatch[];
   clocks: NormalizedMatchClock[];
   tugStates: NormalizedTugState[];
+  tugCameraStates: NormalizedTugCameraState[];
+  tugWebrtcSignals: NormalizedTugWebrtcSignal[];
   tugRpsStates: NormalizedTugRpsState[];
   tugRpsVotes: NormalizedTugRpsVote[];
   tugPlayerStates: NormalizedTugPlayerState[];
@@ -145,6 +166,8 @@ export const EMPTY_SNAPSHOT: SessionSnapshot = {
   matches: [],
   clocks: [],
   tugStates: [],
+  tugCameraStates: [],
+  tugWebrtcSignals: [],
   tugRpsStates: [],
   tugRpsVotes: [],
   tugPlayerStates: [],
@@ -313,6 +336,29 @@ function normalizeTugState(row: GenericRow): NormalizedTugState {
   };
 }
 
+function normalizeTugCameraState(row: GenericRow): NormalizedTugCameraState {
+  return {
+    matchId: field<string>(row, 'matchId', 'match_id') ?? '',
+    hostIdentity: toIdentityHex(field(row, 'hostIdentity', 'host_identity')),
+    enabled: Boolean(field(row, 'enabled', 'enabled')),
+    streamEpoch: toNumber(field(row, 'streamEpoch', 'stream_epoch')),
+    updatedAtMicros: toBigInt(field(row, 'updatedAtMicros', 'updated_at_micros')),
+  };
+}
+
+function normalizeTugWebrtcSignal(row: GenericRow): NormalizedTugWebrtcSignal {
+  return {
+    signalId: field<string>(row, 'signalId', 'signal_id') ?? '',
+    matchId: field<string>(row, 'matchId', 'match_id') ?? '',
+    streamEpoch: toNumber(field(row, 'streamEpoch', 'stream_epoch')),
+    fromIdentity: toIdentityHex(field(row, 'fromIdentity', 'from_identity')),
+    toIdentity: toIdentityHex(field(row, 'toIdentity', 'to_identity')),
+    kind: field<string>(row, 'kind', 'kind') ?? '',
+    payloadJson: field<string>(row, 'payloadJson', 'payload_json') ?? '',
+    createdAtMicros: toBigInt(field(row, 'createdAtMicros', 'created_at_micros')),
+  };
+}
+
 function normalizeTugRpsState(row: GenericRow): NormalizedTugRpsState {
   return {
     matchId: field<string>(row, 'matchId', 'match_id') ?? '',
@@ -384,6 +430,12 @@ export function extractSnapshot(connection: DbConnection): SessionSnapshot {
     matches: tableRows(connection, ['match']).map(normalizeMatch),
     clocks: tableRows(connection, ['match_clock', 'matchClock']).map(normalizeMatchClock),
     tugStates: tableRows(connection, ['tug_state', 'tugState']).map(normalizeTugState),
+    tugCameraStates: tableRows(connection, ['tug_camera_state', 'tugCameraState']).map(
+      normalizeTugCameraState
+    ),
+    tugWebrtcSignals: tableRows(connection, ['tug_webrtc_signal', 'tugWebrtcSignal']).map(
+      normalizeTugWebrtcSignal
+    ),
     tugRpsStates: tableRows(connection, ['tug_rps_state', 'tugRpsState']).map(normalizeTugRpsState),
     tugRpsVotes: tableRows(connection, ['tug_rps_vote', 'tugRpsVote']).map(normalizeTugRpsVote),
     tugPlayerStates: tableRows(connection, ['tug_player_state', 'tugPlayerState']).map(normalizeTugPlayerState),

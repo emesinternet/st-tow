@@ -5,6 +5,7 @@ import type {
   NormalizedMatchClock,
   NormalizedPlayer,
   NormalizedTugHostState,
+  NormalizedTugCameraState,
   NormalizedTugPlayerState,
   NormalizedTugRpsState,
   NormalizedTugRpsVote,
@@ -273,7 +274,8 @@ function buildHostPanelModel(
   isHost: boolean,
   lobby: NormalizedLobby,
   match: NormalizedMatch | null,
-  hostState: NormalizedTugHostState | null
+  hostState: NormalizedTugHostState | null,
+  cameraState: NormalizedTugCameraState | null
 ): HostPanelViewModel {
   const canStart = isHost && lobby.status === 'Waiting';
   const canReset = isHost;
@@ -293,6 +295,21 @@ function buildHostPanelModel(
     endDisabledReason = 'Only the host can end a match.';
   } else if (!match || match.phase === 'PostGame') {
     endDisabledReason = 'There is no active match to end.';
+  }
+  const isCameraPhase =
+    (!match && lobby.status === 'Waiting') ||
+    (!!match &&
+      (match.phase === 'PreGame' ||
+        match.phase === 'InGame' ||
+        match.phase === 'SuddenDeath' ||
+        match.phase === MATCH_PHASE_TIE_BREAK_RPS));
+  const canToggleCamera = isHost && isCameraPhase;
+  const cameraEnabled = Boolean(cameraState?.enabled);
+  let cameraDisabledReason: string | null = null;
+  if (!isHost) {
+    cameraDisabledReason = 'Only the host can control camera.';
+  } else if (!isCameraPhase) {
+    cameraDisabledReason = 'Camera is only available during active match phases.';
   }
 
   const powers: HostPowerActionViewModel[] = HOST_POWER_SPECS.map(spec => {
@@ -337,9 +354,12 @@ function buildHostPanelModel(
     canStart,
     canReset,
     canEndMatch,
+    canToggleCamera,
+    cameraEnabled,
     startDisabledReason,
     resetDisabledReason,
     endDisabledReason,
+    cameraDisabledReason,
     powers,
   };
 }
@@ -573,6 +593,7 @@ function buildMatchHudModel(
   teamBPlayers: NormalizedPlayer[],
   matchPlayerStates: NormalizedTugPlayerState[],
   hostState: NormalizedTugHostState | null,
+  cameraState: NormalizedTugCameraState | null,
   myState: NormalizedTugPlayerState | null
 ): MatchHudViewModel {
   const ropePosition = tug?.ropePosition ?? 0;
@@ -632,6 +653,9 @@ function buildMatchHudModel(
     effectiveTier,
     activePowerId,
     activePowerSecondsRemaining,
+    hostCameraEnabled: Boolean(cameraState?.enabled),
+    hostCameraStreamEpoch: Math.max(0, cameraState?.streamEpoch ?? 0),
+    hostCameraHostIdentity: cameraState?.hostIdentity || null,
     hostScore: hostState ? hostState.score : null,
     hostSuccessfulWords: hostState ? hostState.correctCount : null,
     hostCurrentWord: hostState?.currentWord ?? '',
@@ -672,6 +696,9 @@ function buildPreMatchHudModel(
     effectiveTier: 1,
     activePowerId: '',
     activePowerSecondsRemaining: null,
+    hostCameraEnabled: false,
+    hostCameraStreamEpoch: 0,
+    hostCameraHostIdentity: null,
     hostScore: null,
     hostSuccessfulWords: null,
     hostCurrentWord: '',
@@ -760,6 +787,9 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
   const hostState = match
     ? snapshot.tugHostStates.find(item => item.matchId === match.matchId) ?? null
     : null;
+  const cameraState = match
+    ? snapshot.tugCameraStates.find(item => item.matchId === match.matchId) ?? null
+    : null;
 
   const myTugState =
     match && myPlayer
@@ -791,6 +821,7 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
           teamBPlayers,
           matchPlayerStates,
           hostState,
+          cameraState,
           myTugState
         )
       : null,
@@ -815,7 +846,8 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
       isSameIdentity(lobby.hostIdentity, identity),
       lobby,
       match,
-      hostState
+      hostState,
+      cameraState
     ),
     playerInput: buildPlayerInputModel(role, myPlayer, match, myTugState, hostState),
     events: buildEventFeed(snapshot, lobby.lobbyId),

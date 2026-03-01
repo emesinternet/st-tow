@@ -4,7 +4,7 @@ interface AppShellProps {
   header: ReactNode;
   banner: ReactNode;
   primary: ReactNode;
-  secondary: ReactNode;
+  secondary?: ReactNode;
   backgroundClassName?: string;
 }
 
@@ -22,7 +22,7 @@ export function AppShell({
         {header}
 
         <section className="space-y-6">{primary}</section>
-        <aside className="mt-auto space-y-6 pt-8">{secondary}</aside>
+        {secondary ? <aside className="mt-auto space-y-6 pt-8">{secondary}</aside> : null}
       </div>
     </div>
   );

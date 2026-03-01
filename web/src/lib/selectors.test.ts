@@ -86,6 +86,16 @@ function makeBaseSnapshot(): SessionSnapshot {
         lastTickAtMicros: 0n,
       },
     ],
+    tugCameraStates: [
+      {
+        matchId: 'match-1',
+        hostIdentity: 'c200host',
+        enabled: true,
+        streamEpoch: 2,
+        updatedAtMicros: 0n,
+      },
+    ],
+    tugWebrtcSignals: [],
     tugRpsStates: [],
     tugRpsVotes: [],
     tugPlayerStates: [
@@ -180,8 +190,13 @@ test('selector exposes host score from tug_host_state when present', () => {
   assert.equal(vm.matchHud?.wordMode, 'Normal');
   assert.equal(vm.matchHud?.effectiveTier, 3);
   assert.equal(vm.matchHud?.activePowerId, 'tech_mode_burst');
+  assert.equal(vm.matchHud?.hostCameraEnabled, true);
+  assert.equal(vm.matchHud?.hostCameraStreamEpoch, 2);
+  assert.equal(vm.matchHud?.hostCameraHostIdentity, 'c200host');
   assert.equal(vm.playerInput?.currentWord, 'captain');
   assert.equal(vm.hostPanel?.powers.some(power => power.enabled), true);
+  assert.equal(vm.hostPanel?.cameraEnabled, true);
+  assert.equal(vm.hostPanel?.canToggleCamera, true);
 });
 
 test('selector derives pre-match seconds from round_seconds setting with fallback', () => {
@@ -194,6 +209,8 @@ test('selector derives pre-match seconds from round_seconds setting with fallbac
   snapshot.matches = [];
   snapshot.clocks = [];
   snapshot.tugStates = [];
+  snapshot.tugCameraStates = [];
+  snapshot.tugWebrtcSignals = [];
   snapshot.tugRpsStates = [];
   snapshot.tugRpsVotes = [];
   snapshot.tugPlayerStates = [];

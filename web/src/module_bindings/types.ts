@@ -84,6 +84,15 @@ export const Schedule = __t.object("Schedule", {
 });
 export type Schedule = __Infer<typeof Schedule>;
 
+export const TugCameraState = __t.object("TugCameraState", {
+  matchId: __t.string(),
+  hostIdentity: __t.identity(),
+  enabled: __t.bool(),
+  streamEpoch: __t.i32(),
+  updatedAtMicros: __t.i64(),
+});
+export type TugCameraState = __Infer<typeof TugCameraState>;
+
 export const TugHostState = __t.object("TugHostState", {
   matchId: __t.string(),
   hostIdentity: __t.identity(),
@@ -153,4 +162,16 @@ export const TugState = __t.object("TugState", {
   lastTickAtMicros: __t.i64(),
 });
 export type TugState = __Infer<typeof TugState>;
+
+export const TugWebrtcSignal = __t.object("TugWebrtcSignal", {
+  signalId: __t.string(),
+  matchId: __t.string(),
+  streamEpoch: __t.i32(),
+  fromIdentity: __t.identity(),
+  toIdentity: __t.identity(),
+  kind: __t.string(),
+  payloadJson: __t.string(),
+  createdAtMicros: __t.i64(),
+});
+export type TugWebrtcSignal = __Infer<typeof TugWebrtcSignal>;
 

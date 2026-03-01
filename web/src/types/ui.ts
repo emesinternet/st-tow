@@ -60,6 +60,9 @@ export interface MatchHudViewModel {
   effectiveTier: number;
   activePowerId: string;
   activePowerSecondsRemaining: number | null;
+  hostCameraEnabled: boolean;
+  hostCameraStreamEpoch: number;
+  hostCameraHostIdentity: string | null;
   // Kept for compatibility with existing post-game/stats surfaces.
   hostScore: number | null;
   hostSuccessfulWords: number | null;
@@ -106,9 +109,12 @@ export interface HostPanelViewModel {
   canStart: boolean;
   canReset: boolean;
   canEndMatch: boolean;
+  canToggleCamera: boolean;
+  cameraEnabled: boolean;
   startDisabledReason: string | null;
   resetDisabledReason: string | null;
   endDisabledReason: string | null;
+  cameraDisabledReason: string | null;
   powers: HostPowerActionViewModel[];
 }
 

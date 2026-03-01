@@ -10,9 +10,7 @@ import { MatchHud } from '@/components/match/MatchHud';
 import { PostGameStatsModal } from '@/components/match/PostGameStatsModal';
 import { RpsTieBreakModal } from '@/components/match/RpsTieBreakModal';
 import { PlayerInputPanel } from '@/components/player/PlayerInputPanel';
-import { EventFeed } from '@/components/shared/EventFeed';
 import { ConfettiBurst } from '@/components/shared/ConfettiBurst';
-import { Badge } from '@/components/shared/ui/badge';
 import { Button } from '@/components/shared/ui/button';
 import { Volume2, VolumeX } from 'lucide-react';
 import {
@@ -27,10 +25,10 @@ import discoTrack from '@/assets/music/disco.mp3';
 import funkyTrack from '@/assets/music/funky.mp3';
 import { useSpacetimeSession } from '@/data/useSpacetimeSession';
 import { selectUiViewModel } from '@/lib/selectors';
-import type { RpsTieBreakViewModel, ToastMessage } from '@/types/ui';
+import { useHostWebcamMesh } from '@/lib/useHostWebcamMesh';
+import type { ToastMessage } from '@/types/ui';
 
 const GAME_TYPE_TUG_OF_WAR = 'tug_of_war';
-type DebugModal = 'none' | 'countdown' | 'rpsVoting' | 'rpsReveal' | 'postGame';
 type TieZoneSize = 'small' | 'medium' | 'large' | 'xlarge';
 
 const TIE_ZONE_PERCENT_BY_SIZE: Record<TieZoneSize, number> = {
@@ -134,8 +132,6 @@ export default function App() {
   const [lastConfettiMatchId, setLastConfettiMatchId] = useState('');
   const [confettiBurstKey, setConfettiBurstKey] = useState(0);
   const [confettiVisible, setConfettiVisible] = useState(false);
-  const [debugModal, setDebugModal] = useState<DebugModal>('none');
-  const [debugRpsVote, setDebugRpsVote] = useState<'rock' | 'paper' | 'scissors' | ''>('');
   const [nowMillis, setNowMillis] = useState(() => Date.now());
   const [selectedMusicTrackId, setSelectedMusicTrackId] = useState<MusicTrackId>(() =>
     loadStoredTrackId()
@@ -333,14 +329,7 @@ export default function App() {
   }, [attemptPlayMusic, musicMuted, selectedMusicTrackId]);
 
   useEffect(() => {
-    if (ui.phase === 'landing' && debugModal !== 'none') {
-      setDebugModal('none');
-      setDebugRpsVote('');
-    }
-  }, [debugModal, ui.phase]);
-
-  useEffect(() => {
-    if (ui.phase === 'post' || debugModal === 'postGame') {
+    if (ui.phase === 'post') {
       return;
     }
     if (confettiTimeoutRef.current != null) {
@@ -350,7 +339,7 @@ export default function App() {
     if (confettiVisible) {
       setConfettiVisible(false);
     }
-  }, [confettiVisible, debugModal, ui.phase]);
+  }, [confettiVisible, ui.phase]);
 
   const pushToast = useCallback(
     (
@@ -549,10 +538,6 @@ export default function App() {
   }, [actions, ui.matchHud]);
   const handleVoteRps = useCallback(
     async (choice: 'rock' | 'paper' | 'scissors') => {
-      if (debugModal === 'rpsVoting') {
-        setDebugRpsVote(choice);
-        return;
-      }
       if (!ui.rpsTieBreak) {
         return;
       }
@@ -560,20 +545,16 @@ export default function App() {
         actions.voteRps(ui.rpsTieBreak!.matchId, choice)
       );
     },
-    [actions, debugModal, ui.rpsTieBreak, withActionErrorToast]
+    [actions, ui.rpsTieBreak, withActionErrorToast]
   );
   const handleContinueTieBreak = useCallback(async () => {
-    if (debugModal === 'rpsReveal') {
-      setDebugModal('none');
-      return;
-    }
     if (!ui.rpsTieBreak) {
       return;
     }
     await withActionErrorToast('Could not continue to post-game', () =>
       actions.continueTieBreak(ui.rpsTieBreak!.matchId)
     );
-  }, [actions, debugModal, ui.rpsTieBreak, withActionErrorToast]);
+  }, [actions, ui.rpsTieBreak, withActionErrorToast]);
   const fireConfettiBurst = useCallback(() => {
     setConfettiBurstKey(current => current + 1);
     setConfettiVisible(true);
@@ -611,6 +592,16 @@ export default function App() {
       pushToast('Copy failed', message, 'danger');
     }
   }, [pushToast, ui.lobby]);
+
+  const webcamMesh = useHostWebcamMesh({
+    role: ui.role,
+    identity,
+    lobby: ui.lobby,
+    hud: ui.matchHud,
+    snapshot,
+    actions,
+    pushToast,
+  });
 
   const myTeam = useMemo(() => {
     if (!ui.lobby) {
@@ -675,30 +666,6 @@ export default function App() {
     fireConfettiBurst();
   }, [fireConfettiBurst, lastConfettiMatchId, myTeam, ui.matchHud, ui.phase]);
 
-  const debugRpsModel = useMemo<RpsTieBreakViewModel | null>(() => {
-    if (debugModal !== 'rpsVoting' && debugModal !== 'rpsReveal') {
-      return null;
-    }
-    const isVoting = debugModal === 'rpsVoting';
-    return {
-      matchId: ui.matchHud?.matchId ?? 'debug-match',
-      roundNumber: 2,
-      stage: isVoting ? 'Voting' : 'Reveal',
-      secondsRemaining: isVoting ? 8 : 0,
-      canVote: isVoting && ui.role === 'player' && (myTeam === 'A' || myTeam === 'B'),
-      myTeam: myTeam as 'A' | 'B' | '',
-      myVote: isVoting ? debugRpsVote : '',
-      myTeamCounts:
-        ui.role === 'player' && (myTeam === 'A' || myTeam === 'B')
-          ? { rock: 2, paper: 1, scissors: 0 }
-          : null,
-      opponentTeamCounts: isVoting ? null : { rock: 1, paper: 0, scissors: 3 },
-      teamAChoice: 'paper',
-      teamBChoice: 'rock',
-      winnerTeam: 'A',
-      canHostContinue: !isVoting && ui.role === 'host',
-    };
-  }, [debugModal, debugRpsVote, myTeam, ui.matchHud?.matchId, ui.role]);
   const teamTone = ui.lobby ? resolveTeamTone(ui.lobby) : 'neutral';
   const backgroundClassName =
     teamTone === 'teamA'
@@ -736,6 +703,17 @@ export default function App() {
       >
         {musicMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
       </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="neutral"
+        onClick={() => {
+          localStorage.removeItem('auth_token');
+          window.location.reload();
+        }}
+      >
+        Reset Session
+      </Button>
     </div>
   );
 
@@ -762,6 +740,7 @@ export default function App() {
             hud={ui.matchHud ?? ui.preMatchHud!}
             teamAPlayers={ui.lobby?.teamA ?? []}
             teamBPlayers={ui.lobby?.teamB ?? []}
+            cameraStream={webcamMesh.backgroundStream}
           />
         ) : null}
         {ui.playerInput ? (
@@ -777,9 +756,13 @@ export default function App() {
             lobby={ui.lobby}
             hud={ui.matchHud}
             hostPanel={ui.hostPanel}
+            cameraEnabled={webcamMesh.cameraEnabled}
+            cameraToggleEnabled={webcamMesh.cameraToggleEnabled}
+            cameraBusy={webcamMesh.cameraBusy}
             onStartMatch={handleStartMatch}
             onResetLobby={handleResetLobby}
             onEndMatch={handleEndMatch}
+            onSetCameraEnabled={webcamMesh.toggleCamera}
           />
         ) : null}
         {ui.role === 'host' &&
@@ -794,75 +777,10 @@ export default function App() {
       </>
     );
 
-  const secondary = (
-    <EventFeed
-      events={ui.events}
-      headerAction={
-        <div className="flex flex-wrap items-center justify-end gap-1">
-          <Badge variant="neutral">Role {ui.role}</Badge>
-          <Button
-            type="button"
-            size="sm"
-            variant={debugModal === 'countdown' ? 'teamB' : 'neutral'}
-            onClick={() => {
-              setDebugModal(current => (current === 'countdown' ? 'none' : 'countdown'));
-            }}
-          >
-            DBG Countdown
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={debugModal === 'rpsVoting' ? 'teamB' : 'neutral'}
-            onClick={() => {
-              setDebugRpsVote('');
-              setDebugModal(current => (current === 'rpsVoting' ? 'none' : 'rpsVoting'));
-            }}
-          >
-            DBG RPS Vote
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={debugModal === 'rpsReveal' ? 'teamB' : 'neutral'}
-            onClick={() => {
-              setDebugModal(current => (current === 'rpsReveal' ? 'none' : 'rpsReveal'));
-            }}
-          >
-            DBG RPS Reveal
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={debugModal === 'postGame' ? 'teamB' : 'neutral'}
-            disabled={!ui.lobby}
-            onClick={() => {
-              setDebugModal(current => (current === 'postGame' ? 'none' : 'postGame'));
-            }}
-          >
-            DBG Post Game
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="neutral"
-            onClick={() => {
-              localStorage.removeItem('auth_token');
-              window.location.reload();
-            }}
-          >
-            Reset Session
-          </Button>
-        </div>
-      }
-    />
-  );
-
   const showCountdownOverlay =
-    debugModal === 'countdown' ||
-    (ui.matchHud?.phase === 'PreGame' &&
-      ui.matchHud.secondsRemaining != null &&
-      ui.matchHud.secondsRemaining > 0);
+    ui.matchHud?.phase === 'PreGame' &&
+    ui.matchHud.secondsRemaining != null &&
+    ui.matchHud.secondsRemaining > 0;
 
   return (
     <ToastProvider duration={2200} swipeDirection="right">
@@ -880,26 +798,22 @@ export default function App() {
           />
         }
         primary={primary}
-        secondary={secondary}
+        secondary={null}
       />
       <CountdownOverlay
         visible={showCountdownOverlay}
-        secondsRemaining={debugModal === 'countdown' ? 3 : ui.matchHud?.secondsRemaining ?? null}
+        secondsRemaining={ui.matchHud?.secondsRemaining ?? null}
       />
       <ConfettiBurst burstKey={confettiBurstKey} visible={confettiVisible} />
       <RpsTieBreakModal
-        model={debugRpsModel ?? ui.rpsTieBreak}
+        model={ui.rpsTieBreak}
         role={ui.role}
         onVote={handleVoteRps}
         onContinue={handleContinueTieBreak}
       />
       <PostGameStatsModal
-        open={debugModal === 'postGame' ? true : postGameModalOpen}
+        open={postGameModalOpen}
         onClose={() => {
-          if (debugModal === 'postGame') {
-            setDebugModal('none');
-            return;
-          }
           void handleClosePostGame();
         }}
         onResetMatch={handleResetLobby}

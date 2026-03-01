@@ -47,6 +47,8 @@ import TugInitReducer from "./tug_init_reducer";
 import TugRecordMissReducer from "./tug_record_miss_reducer";
 import TugRpsCastVoteReducer from "./tug_rps_cast_vote_reducer";
 import TugRpsContinueReducer from "./tug_rps_continue_reducer";
+import TugSendWebrtcSignalReducer from "./tug_send_webrtc_signal_reducer";
+import TugSetCameraEnabledReducer from "./tug_set_camera_enabled_reducer";
 import TugSubmitReducer from "./tug_submit_reducer";
 import TugTickReducer from "./tug_tick_reducer";
 
@@ -59,11 +61,13 @@ import LobbySettingsRow from "./lobby_settings_table";
 import MatchRow from "./match_table";
 import MatchClockRow from "./match_clock_table";
 import PlayerRow from "./player_table";
+import TugCameraStateRow from "./tug_camera_state_table";
 import TugHostStateRow from "./tug_host_state_table";
 import TugPlayerStateRow from "./tug_player_state_table";
 import TugRpsStateRow from "./tug_rps_state_table";
 import TugRpsVoteRow from "./tug_rps_vote_table";
 import TugStateRow from "./tug_state_table";
+import TugWebrtcSignalRow from "./tug_webrtc_signal_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -205,6 +209,26 @@ const tablesSchema = __schema({
       { name: 'player_player_id_key', constraint: 'unique', columns: ['playerId'] },
     ],
   }, PlayerRow),
+  tug_camera_state: __table({
+    name: 'tug_camera_state',
+    indexes: [
+      { name: 'enabled', algorithm: 'btree', columns: [
+        'enabled',
+      ] },
+      { name: 'host_identity', algorithm: 'btree', columns: [
+        'hostIdentity',
+      ] },
+      { name: 'match_id', algorithm: 'btree', columns: [
+        'matchId',
+      ] },
+      { name: 'updated_at_micros', algorithm: 'btree', columns: [
+        'updatedAtMicros',
+      ] },
+    ],
+    constraints: [
+      { name: 'tug_camera_state_match_id_key', constraint: 'unique', columns: ['matchId'] },
+    ],
+  }, TugCameraStateRow),
   tug_host_state: __table({
     name: 'tug_host_state',
     indexes: [
@@ -299,6 +323,40 @@ const tablesSchema = __schema({
       { name: 'tug_state_match_id_key', constraint: 'unique', columns: ['matchId'] },
     ],
   }, TugStateRow),
+  tug_webrtc_signal: __table({
+    name: 'tug_webrtc_signal',
+    indexes: [
+      { name: 'created_at_micros', algorithm: 'btree', columns: [
+        'createdAtMicros',
+      ] },
+      { name: 'from_identity', algorithm: 'btree', columns: [
+        'fromIdentity',
+      ] },
+      { name: 'kind', algorithm: 'btree', columns: [
+        'kind',
+      ] },
+      { name: 'by_match_created', algorithm: 'btree', columns: [
+        'matchId',
+        'createdAtMicros',
+      ] },
+      { name: 'match_id', algorithm: 'btree', columns: [
+        'matchId',
+      ] },
+      { name: 'by_match_target', algorithm: 'btree', columns: [
+        'matchId',
+        'toIdentity',
+      ] },
+      { name: 'signal_id', algorithm: 'btree', columns: [
+        'signalId',
+      ] },
+      { name: 'to_identity', algorithm: 'btree', columns: [
+        'toIdentity',
+      ] },
+    ],
+    constraints: [
+      { name: 'tug_webrtc_signal_signal_id_key', constraint: 'unique', columns: ['signalId'] },
+    ],
+  }, TugWebrtcSignalRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
@@ -316,6 +374,8 @@ const reducersSchema = __reducers(
   __reducerSchema("tug_record_miss", TugRecordMissReducer),
   __reducerSchema("tug_rps_cast_vote", TugRpsCastVoteReducer),
   __reducerSchema("tug_rps_continue", TugRpsContinueReducer),
+  __reducerSchema("tug_send_webrtc_signal", TugSendWebrtcSignalReducer),
+  __reducerSchema("tug_set_camera_enabled", TugSetCameraEnabledReducer),
   __reducerSchema("tug_submit", TugSubmitReducer),
   __reducerSchema("tug_tick", TugTickReducer),
 );

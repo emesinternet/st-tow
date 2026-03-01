@@ -19,6 +19,8 @@ import TugInitReducer from "../tug_init_reducer";
 import TugRecordMissReducer from "../tug_record_miss_reducer";
 import TugRpsCastVoteReducer from "../tug_rps_cast_vote_reducer";
 import TugRpsContinueReducer from "../tug_rps_continue_reducer";
+import TugSendWebrtcSignalReducer from "../tug_send_webrtc_signal_reducer";
+import TugSetCameraEnabledReducer from "../tug_set_camera_enabled_reducer";
 import TugSubmitReducer from "../tug_submit_reducer";
 import TugTickReducer from "../tug_tick_reducer";
 
@@ -35,6 +37,8 @@ export type TugInitParams = __Infer<typeof TugInitReducer>;
 export type TugRecordMissParams = __Infer<typeof TugRecordMissReducer>;
 export type TugRpsCastVoteParams = __Infer<typeof TugRpsCastVoteReducer>;
 export type TugRpsContinueParams = __Infer<typeof TugRpsContinueReducer>;
+export type TugSendWebrtcSignalParams = __Infer<typeof TugSendWebrtcSignalReducer>;
+export type TugSetCameraEnabledParams = __Infer<typeof TugSetCameraEnabledReducer>;
 export type TugSubmitParams = __Infer<typeof TugSubmitReducer>;
 export type TugTickParams = __Infer<typeof TugTickReducer>;
 

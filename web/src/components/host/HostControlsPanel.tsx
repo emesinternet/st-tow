@@ -1,4 +1,3 @@
-import { Badge } from '@/components/shared/ui/badge';
 import { Button } from '@/components/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/shared/ui/card';
 import type { HostPanelViewModel, LobbyViewModel, MatchHudViewModel } from '@/types/ui';
@@ -7,22 +6,31 @@ interface HostControlsPanelProps {
   lobby: LobbyViewModel | null;
   hud: MatchHudViewModel | null;
   hostPanel: HostPanelViewModel | null;
+  cameraEnabled: boolean;
+  cameraToggleEnabled: boolean;
+  cameraBusy: boolean;
   onStartMatch: () => Promise<void>;
   onResetLobby: () => Promise<void>;
   onEndMatch: () => Promise<void>;
+  onSetCameraEnabled: (enabled: boolean) => Promise<void>;
 }
 
 export function HostControlsPanel({
   lobby,
   hud,
   hostPanel,
+  cameraEnabled,
+  cameraToggleEnabled,
+  cameraBusy,
   onStartMatch,
   onResetLobby,
   onEndMatch,
+  onSetCameraEnabled,
 }: HostControlsPanelProps) {
   const canStart = hostPanel?.canStart ?? false;
   const canReset = hostPanel?.canReset ?? false;
   const canEndMatch = hostPanel?.canEndMatch ?? false;
+  const canToggleCamera = cameraToggleEnabled;
   const isMatchInProgress =
     lobby?.status === 'Running' ||
     lobby?.status === 'SuddenDeath' ||
@@ -33,16 +41,17 @@ export function HostControlsPanel({
 
   return (
     <Card>
-      <CardHeader className="mb-2 flex flex-row items-start justify-between gap-2">
+      <CardHeader className="mb-1">
         <CardTitle className="text-lg">Host Controls</CardTitle>
-        {lobby?.status ? <Badge variant="info">{lobby.status}</Badge> : null}
       </CardHeader>
       <CardContent>
-        <div className="flex flex-nowrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
-            variant={isMatchInProgress ? 'danger' : 'teamB'}
-            className="min-w-0 flex-1"
+            variant={isMatchInProgress ? 'danger' : 'neutral'}
+            className={`min-w-[180px] flex-[2] ${
+              isMatchInProgress ? '' : 'bg-neo-success text-neo-paper'
+            }`}
             disabled={isMatchInProgress ? !canEndMatch : !canStart}
             onClick={() => {
               if (isMatchInProgress) {
@@ -57,11 +66,23 @@ export function HostControlsPanel({
           <Button
             type="button"
             variant="neutral"
-            className="shrink-0"
+            className="min-w-[132px] flex-1"
             disabled={!canReset}
             onClick={() => void onResetLobby()}
           >
             Reset Lobby
+          </Button>
+          <Button
+            type="button"
+            variant={cameraEnabled ? 'teamB' : 'neutral'}
+            className="min-w-[152px] flex-1"
+            disabled={!canToggleCamera || cameraBusy}
+            onClick={() => {
+              void onSetCameraEnabled(!cameraEnabled);
+            }}
+            title={hostPanel?.cameraDisabledReason ?? undefined}
+          >
+            {cameraBusy ? 'Camera...' : cameraEnabled ? 'Disable Camera' : 'Enable Camera'}
           </Button>
         </div>
       </CardContent>

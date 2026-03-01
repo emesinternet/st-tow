@@ -85,6 +85,8 @@ export function useSpacetimeSession(): SpacetimeSession {
             tables.match,
             tables.match_clock,
             tables.tug_state,
+            tables.tug_camera_state,
+            tables.tug_webrtc_signal,
             tables.tug_rps_state,
             tables.tug_rps_vote,
             tables.tug_player_state,

@@ -34,29 +34,45 @@ export function LandingPanel({
   return (
     <div className="mx-auto grid w-full max-w-[1200px] gap-4 lg:grid-cols-2">
       <Card>
-        <CardHeader>
-          <CardTitle>Join a Match</CardTitle>
-          <CardDescription>Enter a lobby code and jump in.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
-            <label className="block space-y-1">
-              <span className="font-display text-xs font-bold uppercase tracking-wide">Join Code</span>
-              <Input
-                value={joinCode}
-                maxLength={6}
-                onChange={event => onJoinCodeChange(event.target.value.toUpperCase())}
-                placeholder="ABC123"
-              />
-            </label>
-            <Button
-              type="button"
-              variant="default"
-              className="w-full sm:w-auto"
-              onClick={() => void onJoin()}
-            >
-              Join Lobby
-            </Button>
+        <CardContent className="flex h-full min-h-[260px] flex-col justify-between gap-3">
+          <div className="space-y-2">
+            <CardTitle className="text-neo-ink">How to Play</CardTitle>
+            <CardDescription className="text-neo-ink">
+              Your goal is to hype up the dancing dragon and pull it to your side of the floor.
+            </CardDescription>
+            <p className="font-body text-sm text-neo-ink">
+              Type your assigned words as fast as you can. Every correct word adds momentum for
+              your team and drags the dragon toward your side.
+            </p>
+            <p className="font-body text-sm text-neo-ink">
+              When the timer ends, sudden death begins. Mistakes can eliminate players, and if the
+              dragon lands in the tie zone, teams settle it with rock-paper-scissors.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <div>
+              <CardTitle className="text-neo-ink">Join a Match</CardTitle>
+              <p className="font-body text-sm text-neo-ink">Enter a lobby code and jump in.</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+              <label className="block space-y-1">
+                <span className="font-display text-xs font-bold uppercase tracking-wide">Join Code</span>
+                <Input
+                  value={joinCode}
+                  maxLength={6}
+                  onChange={event => onJoinCodeChange(event.target.value.toUpperCase())}
+                  placeholder="ABC123"
+                />
+              </label>
+              <Button
+                type="button"
+                variant="default"
+                className="w-full sm:w-auto"
+                onClick={() => void onJoin()}
+              >
+                Join Lobby
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
