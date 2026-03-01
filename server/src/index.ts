@@ -351,6 +351,7 @@ type TugCameraStateRow = InferTypeOfRow<typeof tugCameraStateRow>;
 type TugWebrtcSignalRow = InferTypeOfRow<typeof tugWebrtcSignalRow>;
 type TugRpsStateRow = InferTypeOfRow<typeof tugRpsStateRow>;
 type TugRpsVoteRow = InferTypeOfRow<typeof tugRpsVoteRow>;
+type GameEventRow = InferTypeOfRow<typeof gameEventRow>;
 type MatchScheduleRow = Infer<typeof matchScheduleRow>;
 
 const PRE_GAME_COUNTDOWN_SECONDS = 3;
@@ -980,6 +981,52 @@ function listPlayersInLobby(ctx: ReducerCtx<any>, lobbyId: string): PlayerRow[] 
   return players;
 }
 
+function listMatchesInLobby(ctx: ReducerCtx<any>, lobbyId: string): MatchRow[] {
+  const matches: MatchRow[] = [];
+  for (const match of ctx.db.match.iter() as Iterable<MatchRow>) {
+    if (match.lobby_id === lobbyId) {
+      matches.push(match);
+    }
+  }
+  return matches;
+}
+
+function clearGameEventsForLobby(ctx: ReducerCtx<any>, lobbyId: string): void {
+  for (const event of ctx.db.game_event.iter() as Iterable<GameEventRow>) {
+    if (event.lobby_id === lobbyId) {
+      ctx.db.game_event.delete(event);
+    }
+  }
+}
+
+function clearGameEventsForMatch(ctx: ReducerCtx<any>, matchId: string): void {
+  for (const event of ctx.db.game_event.iter() as Iterable<GameEventRow>) {
+    if (event.match_id === matchId) {
+      ctx.db.game_event.delete(event);
+    }
+  }
+}
+
+function purgeClosedLobbyData(ctx: ReducerCtx<any>, lobbyId: string): void {
+  for (const match of listMatchesInLobby(ctx, lobbyId)) {
+    clearMatchRuntimeRows(ctx, match.match_id);
+    ctx.db.match.delete(match);
+  }
+
+  removeLobbySetting(ctx, lobbyId, POST_GAME_CLOSE_AT_SETTING_KEY);
+  removeLobbySetting(ctx, lobbyId, POST_GAME_IDLE_CLOSE_AT_SETTING_KEY);
+
+  for (const row of listLobbySettings(ctx, lobbyId)) {
+    ctx.db.lobby_settings.delete(row);
+  }
+
+  for (const player of listPlayersInLobby(ctx, lobbyId)) {
+    ctx.db.player.delete(player);
+  }
+
+  clearGameEventsForLobby(ctx, lobbyId);
+}
+
 function closeLobbyAfterPostGame(ctx: ReducerCtx<any>, lobby: LobbyRow, matchId: string): void {
   const closedAt = nowMicros(ctx);
 
@@ -995,21 +1042,7 @@ function closeLobbyAfterPostGame(ctx: ReducerCtx<any>, lobby: LobbyRow, matchId:
     });
   }
 
-  clearMatchRuntimeRows(ctx, matchId);
-
-  const match = getMatchById(ctx, matchId);
-  if (match) {
-    ctx.db.match.delete(match);
-  }
-
-  removeLobbySetting(ctx, lobby.lobby_id, POST_GAME_CLOSE_AT_SETTING_KEY);
-  removeLobbySetting(ctx, lobby.lobby_id, POST_GAME_IDLE_CLOSE_AT_SETTING_KEY);
-  for (const row of listLobbySettings(ctx, lobby.lobby_id)) {
-    ctx.db.lobby_settings.delete(row);
-  }
-  for (const player of listPlayersInLobby(ctx, lobby.lobby_id)) {
-    ctx.db.player.delete(player);
-  }
+  purgeClosedLobbyData(ctx, lobby.lobby_id);
   ctx.db.lobby.delete(lobby);
 }
 
@@ -1331,6 +1364,7 @@ function runPostGameCloseTick(ctx: ReducerCtx<any>, matchId: string): void {
   if (!lobby) {
     clearMatchRuntimeRows(ctx, matchId);
     ctx.db.match.delete(match);
+    clearGameEventsForMatch(ctx, matchId);
     return;
   }
 
@@ -2242,14 +2276,7 @@ export const leave_lobby = spacetimedb.reducer({ lobby_id: t.string() }, (ctx, {
       }
     }
 
-    removeLobbySetting(ctx, lobby_id, POST_GAME_CLOSE_AT_SETTING_KEY);
-    removeLobbySetting(ctx, lobby_id, POST_GAME_IDLE_CLOSE_AT_SETTING_KEY);
-    for (const row of listLobbySettings(ctx, lobby_id)) {
-      ctx.db.lobby_settings.delete(row);
-    }
-    for (const member of listPlayersInLobby(ctx, lobby_id)) {
-      ctx.db.player.delete(member);
-    }
+    purgeClosedLobbyData(ctx, lobby_id);
     ctx.db.lobby.delete(lobby);
     return;
   }

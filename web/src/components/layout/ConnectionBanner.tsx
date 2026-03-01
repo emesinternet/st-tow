@@ -22,14 +22,17 @@ export function ConnectionBanner({ state, errorMessage }: ConnectionBannerProps)
 
   return (
     <Card
-      className="mb-4 border-neo-danger bg-neo-yellow/75"
+      className="border-neo-danger bg-neo-yellow/75"
       role="status"
       aria-live={state === 'error' ? 'assertive' : 'polite'}
       aria-atomic="true"
     >
       <div className="flex items-center justify-between gap-3">
         <p className="font-body text-sm font-semibold text-neo-ink">{copy}</p>
-        <Badge variant={state === 'error' || state === 'disconnected' ? 'danger' : 'accent'}>
+        <Badge
+          className={state === 'disconnected' ? 'border-2' : undefined}
+          variant={state === 'error' || state === 'disconnected' ? 'danger' : 'accent'}
+        >
           {badgeLabel}
         </Badge>
       </div>
