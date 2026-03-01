@@ -16,15 +16,16 @@ export function ConnectionBanner({ state, errorMessage }: ConnectionBannerProps)
     state === 'connecting'
       ? 'Connecting to SpacetimeDB...'
       : state === 'disconnected'
-        ? 'Disconnected from SpacetimeDB. Realtime updates are paused.'
+        ? 'Reconnecting to server. Realtime updates are paused.'
         : `Connection error: ${errorMessage ?? 'Unknown error'}`;
+  const badgeLabel = state === 'disconnected' ? 'OFFLINE' : state;
 
   return (
     <Card className="mb-4 border-neo-danger bg-neo-yellow/75">
       <div className="flex items-center justify-between gap-3">
         <p className="font-body text-sm font-semibold text-neo-ink">{copy}</p>
         <Badge variant={state === 'error' || state === 'disconnected' ? 'danger' : 'accent'}>
-          {state}
+          {badgeLabel}
         </Badge>
       </div>
     </Card>

@@ -6,10 +6,12 @@ interface LandingPanelProps {
   displayName: string;
   joinCode: string;
   roundMinutes: number;
+  lockLobby: boolean;
   tieZoneSize: 'small' | 'medium' | 'large' | 'xlarge';
   onDisplayNameChange: (next: string) => void;
   onJoinCodeChange: (next: string) => void;
   onRoundMinutesChange: (next: number) => void;
+  onLockLobbyChange: (next: boolean) => void;
   onTieZoneSizeChange: (next: 'small' | 'medium' | 'large' | 'xlarge') => void;
   onJoin: () => Promise<void>;
   onCreateLobby: () => Promise<void>;
@@ -19,10 +21,12 @@ export function LandingPanel({
   displayName,
   joinCode,
   roundMinutes,
+  lockLobby,
   tieZoneSize,
   onDisplayNameChange,
   onJoinCodeChange,
   onRoundMinutesChange,
+  onLockLobbyChange,
   onTieZoneSizeChange,
   onJoin,
   onCreateLobby,
@@ -69,6 +73,23 @@ export function LandingPanel({
 
         <label className="block space-y-1">
           <span className="font-display text-xs font-bold uppercase tracking-wide">
+            Lock Lobby
+          </span>
+          <span className="flex items-center gap-2 rounded-[12px] border-4 border-neo-ink bg-neo-paper px-3 py-2 shadow-neo-sm">
+            <input
+              type="checkbox"
+              checked={lockLobby}
+              onChange={event => onLockLobbyChange(event.target.checked)}
+              className="neo-focus h-4 w-4 cursor-pointer accent-neo-teamB"
+            />
+            <span className="font-body text-sm text-neo-ink">
+              Block new players from joining after match start
+            </span>
+          </span>
+        </label>
+
+        <label className="block space-y-1">
+          <span className="font-display text-xs font-bold uppercase tracking-wide">
             Tie Zone Width
           </span>
           <select
@@ -97,11 +118,21 @@ export function LandingPanel({
           />
         </label>
 
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="default" onClick={() => void onJoin()}>
+        <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+          <Button
+            type="button"
+            variant="default"
+            className="w-full"
+            onClick={() => void onJoin()}
+          >
             Join Lobby
           </Button>
-          <Button type="button" variant="teamB" onClick={() => void onCreateLobby()}>
+          <Button
+            type="button"
+            variant="teamB"
+            className="w-full"
+            onClick={() => void onCreateLobby()}
+          >
             Host New Lobby
           </Button>
         </div>

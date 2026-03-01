@@ -38,6 +38,7 @@ export interface GameActions {
   createLobby: (
     gameType: string,
     roundSeconds: number,
+    lockInProgressJoin: boolean,
     tieZonePercent: number
   ) => Promise<void>;
   joinLobby: (joinCode: string, displayName: string) => Promise<void>;
@@ -59,12 +60,14 @@ export function buildActions(connection: DbConnection | null): GameActions {
     createLobby: async (
       gameType: string,
       roundSeconds: number,
+      lockInProgressJoin: boolean,
       tieZonePercent: number
     ) => {
       const conn = assertConnection(connection);
       await callReducer(conn, 'create_lobby', {
         gameType,
         roundSeconds,
+        lockInProgressJoin,
         tieZonePercent,
       });
     },

@@ -1960,9 +1960,10 @@ export const create_lobby = spacetimedb.reducer(
   {
     game_type: t.string(),
     round_seconds: t.i32(),
+    lock_in_progress_join: t.bool(),
     tie_zone_percent: t.i32(),
   },
-  (ctx, { game_type, round_seconds, tie_zone_percent }) => {
+  (ctx, { game_type, round_seconds, lock_in_progress_join, tie_zone_percent }) => {
     if (game_type !== GAME_TYPE_TUG_OF_WAR) {
       throw new Error(`Unsupported game type: ${game_type}`);
     }
@@ -2008,6 +2009,12 @@ export const create_lobby = spacetimedb.reducer(
     upsertLobbySetting(
       ctx,
       lobbyId,
+      LOBBY_SETTING_KEYS.lock_in_progress_join,
+      JSON.stringify(lock_in_progress_join ? 1 : 0)
+    );
+    upsertLobbySetting(
+      ctx,
+      lobbyId,
       LOBBY_SETTING_KEYS.tie_zone_percent,
       JSON.stringify(tie_zone_percent)
     );
@@ -2015,6 +2022,7 @@ export const create_lobby = spacetimedb.reducer(
       join_code: joinCode,
       game_type,
       round_seconds,
+      lock_in_progress_join,
       tie_zone_percent,
     });
   }
@@ -2058,6 +2066,17 @@ export const join_lobby = spacetimedb.reducer(
         player_id: existing.player_id,
       });
       return;
+    }
+
+    const lockInProgressJoin =
+      getLobbySettingInt(
+        ctx,
+        lobby.lobby_id,
+        LOBBY_SETTING_KEYS.lock_in_progress_join,
+        DEFAULT_LOBBY_SETTINGS.lock_in_progress_join
+      ) > 0;
+    if (lockInProgressJoin && lobby.status !== LOBBY_STATUS_WAITING) {
+      throw new Error('Lobby is locked after match start');
     }
 
     const team = chooseBalancedTeam(listPlayersInLobby(ctx, lobby.lobby_id));

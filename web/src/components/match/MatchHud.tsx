@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import dragonGif from "@/assets/dragon.gif";
-import { Badge } from "@/components/shared/ui/badge";
 import { Card, CardContent } from "@/components/shared/ui/card";
 import { formatSeconds } from "@/lib/format";
 import type { MatchHudViewModel, TeamPlayerViewModel } from "@/types/ui";
@@ -10,8 +9,6 @@ interface MatchHudProps {
   hud: MatchHudViewModel;
   teamAPlayers: TeamPlayerViewModel[];
   teamBPlayers: TeamPlayerViewModel[];
-  lobbyCode?: string;
-  onCopyLobbyCode?: () => void;
 }
 
 const CHEER_PHRASES = [
@@ -233,8 +230,6 @@ export function MatchHud({
   hud,
   teamAPlayers,
   teamBPlayers,
-  lobbyCode,
-  onCopyLobbyCode,
 }: MatchHudProps) {
   const isLobbyPreview = hud.matchId.endsWith(":pre");
   const isRpsTieBreak = hud.phase === "TieBreakRps";
@@ -258,82 +253,21 @@ export function MatchHud({
     tieZoneEndPercent - tieZoneStartPercent,
   );
 
-  const activePowerLabel: Record<string, string> = {
-    tech_mode_burst: "Tech Mode",
-    symbols_mode_burst: "Symbols Mode",
-    difficulty_up_burst: "Difficulty Up",
-  };
-
   return (
     <Card className="overflow-visible">
-      <CardContent className="space-y-4 p-4">
-        <div className="flex flex-wrap items-end justify-around gap-3 text-center font-display font-black tracking-wide">
-          <p className="text-4xl tabular-nums text-neo-teamA sm:text-5xl">
-            {hud.teamAPulls}
+      <CardContent className="space-y-4 px-4 pb-4 pt-0">
+        <div className="flex justify-center text-center font-display font-black tracking-wide">
+          <p className="text-4xl tabular-nums text-neo-ink sm:text-5xl">
+            {timerText}
           </p>
-          <div className="relative flex min-w-[180px] justify-center pt-3">
-            {lobbyCode ? (
-              <Badge
-                variant="accent"
-                className="absolute left-1/2 top-0 z-40 -translate-x-1/2 -translate-y-[115%] cursor-pointer select-text rounded-[12px] border-4 px-5 py-1 text-2xl font-black tracking-[0.18em] sm:text-3xl"
-                role="button"
-                tabIndex={0}
-                title="Copy lobby code"
-                onClick={() => {
-                  onCopyLobbyCode?.();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onCopyLobbyCode?.();
-                  }
-                }}
-              >
-                {lobbyCode}
-              </Badge>
-            ) : null}
-            <p className="text-4xl tabular-nums text-neo-ink sm:text-5xl">
-              {timerText}
-            </p>
-          </div>
-          <p className="text-4xl tabular-nums text-neo-teamB sm:text-5xl">
-            {hud.teamBPulls}
-          </p>
-        </div>
-        <div className="space-y-1">
-          <div className="flex items-center justify-between gap-2">
-            <p className="font-display text-xs font-black uppercase tracking-wide text-neo-ink">
-              Host Power
-            </p>
-            <p className="font-mono text-xs font-bold text-neo-ink">
-              {hostPowerPercent}%
-            </p>
-          </div>
-          <div className="h-7 overflow-hidden rounded-[12px] border-4 border-neo-ink bg-neo-paper">
-            <div
-              className="h-full bg-neo-yellow transition-[width]"
-              style={{ width: `${hostPowerPercent}%` }}
-            />
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-display text-[11px] font-bold uppercase tracking-wide text-neo-muted">
-              Mode {hud.wordMode} | Tier {hud.effectiveTier}
-            </p>
-            {hud.activePowerId ? (
-              <p className="font-display text-[11px] font-black uppercase tracking-wide text-neo-danger">
-                {activePowerLabel[hud.activePowerId] ?? hud.activePowerId}
-                {hud.activePowerSecondsRemaining != null
-                  ? ` ${hud.activePowerSecondsRemaining}s`
-                  : ""}
-              </p>
-            ) : (
-              <p className="font-display text-[11px] font-bold uppercase tracking-wide text-neo-muted">
-                No Active Effect
-              </p>
-            )}
-          </div>
         </div>
         <div className="bg-tug-war-gradient relative h-40 overflow-hidden rounded-[16px] border-4 border-neo-ink sm:h-48">
+          <div className="pointer-events-none absolute top-2 left-3 z-40 font-display text-4xl font-black tabular-nums text-neo-teamA sm:text-5xl">
+            {hud.teamAPulls}
+          </div>
+          <div className="pointer-events-none absolute top-2 right-3 z-40 font-display text-4xl font-black tabular-nums text-neo-teamB sm:text-5xl">
+            {hud.teamBPulls}
+          </div>
           <div className="absolute inset-0 z-0 grid grid-cols-2">
             <div className="bg-neo-teamA/10" />
             <div className="bg-neo-teamB/10" />
@@ -370,6 +304,22 @@ export function MatchHud({
             animate={{ left: `${hud.normalizedRopePosition}%` }}
             transition={{ type: "spring", stiffness: 150, damping: 24 }}
           />
+        </div>
+        <div>
+          <div className="relative h-7 overflow-hidden rounded-[12px] border-4 border-neo-ink bg-neo-paper">
+            <div
+              className="h-full bg-neo-yellow transition-[width]"
+              style={{ width: `${hostPowerPercent}%` }}
+            />
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-between px-2">
+              <p className="font-display text-xs font-black uppercase tracking-wide text-neo-ink">
+                Host Power
+              </p>
+              <p className="font-mono text-xs font-bold text-neo-ink">
+                {hostPowerPercent}%
+              </p>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>

@@ -10,7 +10,6 @@ interface HostControlsPanelProps {
   onStartMatch: () => Promise<void>;
   onResetLobby: () => Promise<void>;
   onEndMatch: () => Promise<void>;
-  variant?: 'card' | 'inline';
 }
 
 export function HostControlsPanel({
@@ -20,95 +19,50 @@ export function HostControlsPanel({
   onStartMatch,
   onResetLobby,
   onEndMatch,
-  variant = 'card',
 }: HostControlsPanelProps) {
   const canStart = hostPanel?.canStart ?? false;
   const canReset = hostPanel?.canReset ?? false;
   const canEndMatch = hostPanel?.canEndMatch ?? false;
-
-  if (variant === 'inline') {
-    return (
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="teamB"
-          disabled={!canStart}
-          onClick={() => void onStartMatch()}
-        >
-          Start
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="danger"
-          disabled={!canEndMatch}
-          onClick={() => void onEndMatch()}
-        >
-          End
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="neutral"
-          disabled={!canReset}
-          onClick={() => void onResetLobby()}
-        >
-          Reset
-        </Button>
-      </div>
-    );
-  }
+  const isMatchInProgress =
+    lobby?.status === 'Running' ||
+    lobby?.status === 'SuddenDeath' ||
+    hud?.phase === 'PreGame' ||
+    hud?.phase === 'InGame' ||
+    hud?.phase === 'SuddenDeath' ||
+    hud?.phase === 'TieBreakRps';
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="mb-2 flex flex-row items-start justify-between gap-2">
         <CardTitle className="text-lg">Host Controls</CardTitle>
+        {lobby?.status ? <Badge variant="info">{lobby.status}</Badge> : null}
       </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="neutral">Lobby {lobby?.status ?? 'none'}</Badge>
-          <Badge variant="accent">Role Panel</Badge>
-          {hud ? <Badge variant="info">Match {hud.phase}</Badge> : null}
-        </div>
-
-        <div className="grid gap-2">
+      <CardContent>
+        <div className="flex flex-nowrap items-center gap-2">
           <Button
             type="button"
-            variant="teamB"
-            disabled={!canStart}
-            onClick={() => void onStartMatch()}
+            variant={isMatchInProgress ? 'danger' : 'teamB'}
+            className="min-w-0 flex-1"
+            disabled={isMatchInProgress ? !canEndMatch : !canStart}
+            onClick={() => {
+              if (isMatchInProgress) {
+                void onEndMatch();
+                return;
+              }
+              void onStartMatch();
+            }}
           >
-            Start Match
+            {isMatchInProgress ? 'End Match' : 'Start Match'}
           </Button>
-          {!canStart && hostPanel?.startDisabledReason ? (
-            <p className="font-body text-xs text-neo-muted">{hostPanel.startDisabledReason}</p>
-          ) : null}
-
-          <Button
-            type="button"
-            variant="danger"
-            disabled={!canEndMatch}
-            onClick={() => void onEndMatch()}
-          >
-            End Match
-          </Button>
-          {!canEndMatch && hostPanel?.endDisabledReason ? (
-            <p className="font-body text-xs text-neo-muted">{hostPanel.endDisabledReason}</p>
-          ) : null}
-
           <Button
             type="button"
             variant="neutral"
+            className="shrink-0"
             disabled={!canReset}
             onClick={() => void onResetLobby()}
           >
             Reset Lobby
           </Button>
-          {!canReset && hostPanel?.resetDisabledReason ? (
-            <p className="font-body text-xs text-neo-muted">{hostPanel.resetDisabledReason}</p>
-          ) : null}
-
         </div>
       </CardContent>
     </Card>

@@ -31,6 +31,7 @@ export const HOST_POWER_DIFFICULTY_UP_BURST = 'difficulty_up_burst';
 
 export const DEFAULT_LOBBY_SETTINGS: Record<string, number> = {
   round_seconds: 90,
+  lock_in_progress_join: 0,
   tie_zone_percent: 10,
   win_threshold: 100,
   word_rotate_ms: 3000,
@@ -40,6 +41,7 @@ export const DEFAULT_LOBBY_SETTINGS: Record<string, number> = {
 
 export const LOBBY_SETTING_KEYS = {
   round_seconds: 'round_seconds',
+  lock_in_progress_join: 'lock_in_progress_join',
   tie_zone_percent: 'tie_zone_percent',
   win_threshold: 'win_threshold',
   word_rotate_ms: 'word_rotate_ms',

@@ -122,6 +122,7 @@ export default function App() {
   const [displayName, setDisplayName] = useState('Player');
   const [joinCode, setJoinCode] = useState('');
   const [roundMinutes, setRoundMinutes] = useState(1);
+  const [lockLobby, setLockLobby] = useState(false);
   const [tieZoneSize, setTieZoneSize] = useState<TieZoneSize>('small');
   const [pendingRoundSeconds, setPendingRoundSeconds] = useState<number | null>(null);
   const [pendingJoinCode, setPendingJoinCode] = useState('');
@@ -393,10 +394,15 @@ export default function App() {
     const roundSeconds = Math.max(1, Math.min(60, Math.trunc(roundMinutes))) * 60;
     const tieZonePercent = TIE_ZONE_PERCENT_BY_SIZE[tieZoneSize];
     await withActionErrorToast('Could not create lobby', () =>
-      actions.createLobby(GAME_TYPE_TUG_OF_WAR, roundSeconds, tieZonePercent)
+      actions.createLobby(
+        GAME_TYPE_TUG_OF_WAR,
+        roundSeconds,
+        lockLobby,
+        tieZonePercent
+      )
     );
     setPendingRoundSeconds(roundSeconds);
-  }, [actions, roundMinutes, tieZoneSize, withActionErrorToast]);
+  }, [actions, lockLobby, roundMinutes, tieZoneSize, withActionErrorToast]);
 
   useEffect(() => {
     if (pendingRoundSeconds == null) {
@@ -739,10 +745,12 @@ export default function App() {
         displayName={displayName}
         joinCode={joinCode}
         roundMinutes={roundMinutes}
+        lockLobby={lockLobby}
         tieZoneSize={tieZoneSize}
         onDisplayNameChange={setDisplayName}
         onJoinCodeChange={setJoinCode}
         onRoundMinutesChange={setRoundMinutes}
+        onLockLobbyChange={setLockLobby}
         onTieZoneSizeChange={setTieZoneSize}
         onJoin={handleJoinLobby}
         onCreateLobby={handleCreateLobby}
@@ -754,10 +762,6 @@ export default function App() {
             hud={ui.matchHud ?? ui.preMatchHud!}
             teamAPlayers={ui.lobby?.teamA ?? []}
             teamBPlayers={ui.lobby?.teamB ?? []}
-            lobbyCode={ui.lobby?.joinCode ?? ''}
-            onCopyLobbyCode={() => {
-              void handleCopyLobbyCode();
-            }}
           />
         ) : null}
         {ui.playerInput ? (
@@ -766,6 +770,16 @@ export default function App() {
             onSubmitWord={handleSubmitWord}
             onRecordMistake={handleRecordMistake}
             preMatch={!ui.matchHud || ui.matchHud.phase === 'PreGame'}
+          />
+        ) : null}
+        {ui.role === 'host' && ui.lobby ? (
+          <HostControlsPanel
+            lobby={ui.lobby}
+            hud={ui.matchHud}
+            hostPanel={ui.hostPanel}
+            onStartMatch={handleStartMatch}
+            onResetLobby={handleResetLobby}
+            onEndMatch={handleEndMatch}
           />
         ) : null}
         {ui.role === 'host' &&
@@ -858,21 +872,11 @@ export default function App() {
         header={
           <HeaderBar
             connectionState={state}
-            lobbyStatus={ui.lobby?.status ?? ''}
+            lobbyCode={ui.lobby?.joinCode ?? ''}
+            onCopyLobbyCode={() => {
+              void handleCopyLobbyCode();
+            }}
             musicControls={headerMusicControls}
-            controls={
-              ui.role === 'host' ? (
-                <HostControlsPanel
-                  lobby={ui.lobby}
-                  hud={ui.matchHud}
-                  hostPanel={ui.hostPanel}
-                  onStartMatch={handleStartMatch}
-                  onResetLobby={handleResetLobby}
-                  onEndMatch={handleEndMatch}
-                  variant="inline"
-                />
-              ) : null
-            }
           />
         }
         primary={primary}
