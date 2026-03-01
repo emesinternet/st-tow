@@ -8,7 +8,7 @@ export default [
   },
   js.configs.recommended,
   {
-    files: ['src/**/*.ts'],
+    files: ['src/**/*.ts', 'stress/**/*.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {

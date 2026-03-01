@@ -1,6 +1,7 @@
-import { motion, useReducedMotion } from 'framer-motion';
-import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import dragonGif from '@/assets/dragon.gif';
+import { Badge } from '@/components/shared/ui/badge';
 import { Card, CardContent } from '@/components/shared/ui/card';
 import { formatSeconds } from '@/lib/format';
 import type { MatchHudViewModel, TeamPlayerViewModel } from '@/types/ui';
@@ -11,6 +12,20 @@ interface MatchHudProps {
   teamBPlayers: TeamPlayerViewModel[];
   cameraStream?: MediaStream | null;
 }
+
+const POWER_DURATION_SECONDS_BY_ID: Record<string, number> = {
+  flipper_burst: 20,
+  difficulty_up_burst: 20,
+  tech_mode_burst: 20,
+  symbols_mode_burst: 20,
+};
+
+const POWER_LABEL_BY_ID: Record<string, string> = {
+  flipper_burst: 'Flipper',
+  difficulty_up_burst: 'Difficulty Up',
+  tech_mode_burst: 'Tech Burst',
+  symbols_mode_burst: 'Symbols Burst',
+};
 
 const CHEER_PHRASES = [
   'Get it!',
@@ -40,6 +55,14 @@ function randomIntInclusive(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function hashString(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash >>> 0;
+}
+
 function TeamMarkers({
   players,
   tone,
@@ -52,7 +75,20 @@ function TeamMarkers({
   reducedMotion?: boolean;
 }) {
   const connected = players.filter((player) => player.status !== 'Left');
+  const connectedSignature = useMemo(
+    () => connected.map((player) => `${player.playerId}:${player.correctCount}`).join('|'),
+    [connected]
+  );
   const ballClassName = tone === 'teamA' ? 'bg-neo-teamA' : 'bg-neo-teamB';
+  const density = connected.length;
+  const markerSizeClass =
+    density >= 40 ? 'h-2 w-2' : density >= 24 ? 'h-2.5 w-2.5' : 'h-3 w-3';
+  const nameClass =
+    density >= 40
+      ? 'max-w-[36px] text-[8px]'
+      : density >= 24
+        ? 'max-w-[48px] text-[9px]'
+        : 'max-w-[64px] text-[10px]';
   const prevCountsRef = useRef(new Map<string, number>());
   const [bounceTokens, setBounceTokens] = useState<Record<string, number>>({});
   const [cheerByPlayer, setCheerByPlayer] = useState<
@@ -79,6 +115,10 @@ function TeamMarkers({
         prevCountsRef.current.delete(playerId);
         disconnectedPlayerIds.push(playerId);
       }
+    }
+
+    if (triggeredPlayerIds.length === 0 && disconnectedPlayerIds.length === 0) {
+      return;
     }
 
     setBounceTokens((current) => {
@@ -148,7 +188,7 @@ function TeamMarkers({
 
       return changed ? next : current;
     });
-  }, [connected]);
+  }, [connectedSignature]);
 
   useEffect(() => {
     const timeouts = cheerTimeoutsRef.current;
@@ -160,15 +200,33 @@ function TeamMarkers({
     };
   }, []);
 
+  const positionedPlayers = useMemo(
+    () =>
+      connected.map((player, index) => {
+        const hash = hashString(`${player.playerId}:${index}`);
+        const spreadCount = Math.max(1, connected.length);
+        const baseX = ((index + 0.5) / spreadCount) * 100;
+        const jitterRange = density >= 40 ? 0.8 : density >= 24 ? 1.4 : 2.2;
+        const jitter = ((hash % 2001) / 1000 - 1) * jitterRange;
+        const xPercent = Math.max(1.5, Math.min(98.5, baseX + jitter));
+        const bottomPx = hash % 3;
+        return {
+          player,
+          xPercent,
+          bottomPx,
+        };
+      }),
+    [connected, density]
+  );
+
   return (
-    <div className="flex h-full items-end overflow-x-auto overflow-y-visible px-1">
-      <div className="grid min-h-full w-full grid-cols-[repeat(auto-fill,minmax(48px,1fr))] content-end items-end gap-x-1 gap-y-1">
-        {connected.map((player) => {
+    <div className="relative h-full w-full overflow-visible">
+      {positionedPlayers.map(({ player, xPercent, bottomPx }) => {
           const cheer = cheerByPlayer[player.playerId];
           const bubble = cheer ? (
             <motion.span
               key={`${player.playerId}:cheer:${cheer.token}`}
-              className="pointer-events-none absolute -top-3 z-10 max-w-[80px] truncate rounded-[8px] border border-neo-ink bg-neo-paper px-1 py-0.5 text-[9px] font-black uppercase leading-none text-neo-ink"
+              className="pointer-events-none absolute bottom-[100%] left-1/2 z-10 mb-1 max-w-[92px] -translate-x-1/2 truncate rounded-[9px] border border-neo-ink bg-neo-paper px-1.5 py-0.5 text-[10px] font-black uppercase leading-none text-neo-ink"
               initial={{ opacity: 0, y: 6, scale: 0.9 }}
               animate={{
                 opacity: [0, 1, 1, 0],
@@ -190,21 +248,26 @@ function TeamMarkers({
             return (
               <motion.div
                 key={`${player.playerId}:${bounceTokens[player.playerId]}`}
-                className="relative flex h-7 flex-col items-center justify-end text-center"
+                className="absolute z-40 flex flex-col items-center justify-end text-center"
+                style={{
+                  left: `${xPercent}%`,
+                  bottom: `${bottomPx}px`,
+                  transform: 'translateX(-50%)',
+                }}
                 initial={{ y: 0 }}
                 animate={{ y: reducedMotion ? 0 : [0, -(cheer?.jumpHeight ?? 10), 0] }}
                 transition={{ duration: reducedMotion ? 0.12 : 0.28, ease: 'easeOut' }}
               >
                 {bubble}
                 <span
-                  className={`max-w-[56px] truncate text-[9px] font-bold uppercase leading-tight ${
+                  className={`${nameClass} truncate font-bold uppercase leading-tight ${
                     cameraMode ? 'text-white drop-shadow-[0_1px_0_#000]' : 'text-neo-ink/85'
                   }`}
                 >
                   {player.displayName}
                 </span>
                 <span
-                  className={`mt-0.5 h-2.5 w-2.5 rounded-full border border-neo-ink ${ballClassName}`}
+                  className={`mt-0.5 rounded-full border border-neo-ink ${markerSizeClass} ${ballClassName}`}
                 />
               </motion.div>
             );
@@ -213,23 +276,27 @@ function TeamMarkers({
           return (
             <div
               key={player.playerId}
-              className="relative flex h-7 flex-col items-center justify-end text-center"
+              className="absolute z-20 flex flex-col items-center justify-end text-center"
+              style={{
+                left: `${xPercent}%`,
+                bottom: `${bottomPx}px`,
+                transform: 'translateX(-50%)',
+              }}
             >
               {bubble}
               <span
-                className={`max-w-[56px] truncate text-[9px] font-bold uppercase leading-tight ${
+                className={`${nameClass} truncate font-bold uppercase leading-tight ${
                   cameraMode ? 'text-white drop-shadow-[0_1px_0_#000]' : 'text-neo-ink/85'
                 }`}
               >
                 {player.displayName}
               </span>
               <span
-                className={`mt-0.5 h-2.5 w-2.5 rounded-full border border-neo-ink ${ballClassName}`}
+                className={`mt-0.5 rounded-full border border-neo-ink ${markerSizeClass} ${ballClassName}`}
               />
             </div>
           );
         })}
-      </div>
     </div>
   );
 }
@@ -239,6 +306,15 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers, cameraStream = null 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const isLobbyPreview = hud.matchId.endsWith(':pre');
   const isRpsTieBreak = hud.phase === 'TieBreakRps';
+  const isSuddenDeath = hud.phase === 'SuddenDeath';
+  const activePowerSeconds = hud.activePowerSecondsRemaining ?? 0;
+  const hasActivePower = Boolean(hud.activePowerId) && activePowerSeconds > 0;
+  const activePowerDuration = POWER_DURATION_SECONDS_BY_ID[hud.activePowerId] ?? 20;
+  const activePowerLabel = POWER_LABEL_BY_ID[hud.activePowerId] ?? 'Host Power';
+  const activePowerLeftPct = Math.max(
+    0,
+    Math.min(100, (activePowerSeconds / Math.max(1, activePowerDuration)) * 100)
+  );
   const timerText =
     hud.phase === 'PreGame' && !isLobbyPreview
       ? 'READY'
@@ -255,6 +331,9 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers, cameraStream = null 
       : Math.min(100, tieZoneStartPercent + 10);
   const tieZoneWidthPercent = Math.max(0, tieZoneEndPercent - tieZoneStartPercent);
   const cameraVisualMode = Boolean(cameraStream) || hud.hostCameraEnabled;
+  const badgeTransition = prefersReducedMotion
+    ? { duration: 0.01 }
+    : { duration: 0.16, ease: 'easeOut' as const };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -278,93 +357,134 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers, cameraStream = null 
         <div className="flex justify-center text-center font-display font-black tracking-wide">
           <p className="text-4xl leading-none tabular-nums text-neo-ink sm:text-5xl">{timerText}</p>
         </div>
-        <div className="bg-tug-war-gradient relative h-[12.5rem] overflow-hidden rounded-[16px] border-4 border-neo-ink sm:h-[15rem]">
-          {cameraStream ? (
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="absolute inset-0 z-0 h-full w-full object-cover"
+        <div className="relative">
+          <AnimatePresence>
+            {isSuddenDeath ? (
+              <div className="pointer-events-none absolute top-0 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.96 }}
+                  transition={badgeTransition}
+                >
+                  <Badge variant="danger" className="px-3 py-1 text-sm">
+                    Sudden Death
+                  </Badge>
+                </motion.div>
+              </div>
+            ) : null}
+          </AnimatePresence>
+          <AnimatePresence>
+            {hasActivePower ? (
+              <div className="pointer-events-none absolute bottom-0 left-1/2 z-50 w-[min(92%,360px)] -translate-x-1/2 translate-y-1/2">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  transition={badgeTransition}
+                >
+                  <div className="relative h-8 overflow-hidden rounded-[12px] border-4 border-neo-ink bg-[#8ec3ef] shadow-neo-sm">
+                    <div
+                      className="absolute inset-y-0 left-0 bg-neo-teamB transition-[width] duration-200 motion-reduce:transition-none"
+                      style={{ width: `${activePowerLeftPct}%` }}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-between px-2 font-display text-xs font-black uppercase tracking-wide text-white">
+                      <span>{activePowerLabel}</span>
+                      <span className="font-mono">{activePowerSeconds}s</span>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+            ) : null}
+          </AnimatePresence>
+          <div className="bg-tug-war-gradient relative h-[12.5rem] overflow-hidden rounded-[16px] border-4 border-neo-ink sm:h-[15rem]">
+            {cameraStream ? (
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="absolute inset-0 z-0 h-full w-full object-cover"
+              />
+            ) : null}
+            <div className="pointer-events-none absolute top-2 left-3 z-40 font-display text-4xl font-black tabular-nums text-neo-teamA sm:text-5xl">
+              <span
+                style={
+                  cameraVisualMode
+                    ? {
+                        WebkitTextStroke: '2px #000',
+                        textShadow:
+                          '1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000',
+                      }
+                    : undefined
+                }
+              >
+                {hud.teamAPulls}
+              </span>
+            </div>
+            <div className="pointer-events-none absolute top-2 right-3 z-40 font-display text-4xl font-black tabular-nums text-neo-teamB sm:text-5xl">
+              <span
+                style={
+                  cameraVisualMode
+                    ? {
+                        WebkitTextStroke: '2px #000',
+                        textShadow:
+                          '1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000',
+                      }
+                    : undefined
+                }
+              >
+                {hud.teamBPulls}
+              </span>
+            </div>
+            <div className="absolute inset-0 z-0 grid grid-cols-2">
+              <div className="bg-neo-teamA/10" />
+              <div className="bg-neo-teamB/10" />
+            </div>
+            <div
+              className="tie-zone-floor absolute inset-y-0 z-10"
+              style={{
+                left: `${tieZoneStartPercent}%`,
+                width: `${tieZoneWidthPercent}%`,
+                opacity: cameraVisualMode ? 0.42 : 1,
+              }}
+            >
+              <div className="tie-zone-floor__shimmer" />
+            </div>
+            <div
+              className="pointer-events-none absolute inset-y-0 z-20 w-[3px] bg-neo-ink"
+              style={{ left: `calc(${tieZoneStartPercent}% - 1.5px)` }}
             />
-          ) : null}
-          <div className="pointer-events-none absolute top-2 left-3 z-40 font-display text-4xl font-black tabular-nums text-neo-teamA sm:text-5xl">
-            <span
-              style={
-                cameraVisualMode
-                  ? {
-                      WebkitTextStroke: '2px #000',
-                      textShadow:
-                        '1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000',
-                    }
-                  : undefined
-              }
-            >
-              {hud.teamAPulls}
-            </span>
-          </div>
-          <div className="pointer-events-none absolute top-2 right-3 z-40 font-display text-4xl font-black tabular-nums text-neo-teamB sm:text-5xl">
-            <span
-              style={
-                cameraVisualMode
-                  ? {
-                      WebkitTextStroke: '2px #000',
-                      textShadow:
-                        '1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000',
-                    }
-                  : undefined
-              }
-            >
-              {hud.teamBPulls}
-            </span>
-          </div>
-          <div className="absolute inset-0 z-0 grid grid-cols-2">
-            <div className="bg-neo-teamA/10" />
-            <div className="bg-neo-teamB/10" />
-          </div>
-          <div
-            className="tie-zone-floor absolute inset-y-0 z-10"
-            style={{
-              left: `${tieZoneStartPercent}%`,
-              width: `${tieZoneWidthPercent}%`,
-              opacity: cameraVisualMode ? 0.42 : 1,
-            }}
-          >
-            <div className="tie-zone-floor__shimmer" />
-          </div>
-          <div
-            className="pointer-events-none absolute inset-y-0 z-20 w-[3px] bg-neo-ink"
-            style={{ left: `calc(${tieZoneStartPercent}% - 1.5px)` }}
-          />
-          <div
-            className="pointer-events-none absolute inset-y-0 z-20 w-[3px] bg-neo-ink"
-            style={{ left: `calc(${tieZoneEndPercent}% - 1.5px)` }}
-          />
-          <div className="pointer-events-none absolute inset-1.5 z-20 overflow-visible rounded-[12px] sm:inset-2">
-            <div className="absolute inset-y-0 left-0 w-1/4 pr-1.5 pl-2 pt-16 pb-0 sm:pr-2 sm:pl-3 sm:pt-20">
-              <TeamMarkers
-                players={teamAPlayers}
-                tone="teamA"
-                cameraMode={cameraVisualMode}
-                reducedMotion={Boolean(prefersReducedMotion)}
-              />
+            <div
+              className="pointer-events-none absolute inset-y-0 z-20 w-[3px] bg-neo-ink"
+              style={{ left: `calc(${tieZoneEndPercent}% - 1.5px)` }}
+            />
+            <div className="pointer-events-none absolute inset-1.5 z-20 overflow-visible rounded-[12px] sm:inset-2">
+              <div className="absolute inset-y-0 left-0 w-1/4 pr-1.5 pl-2 pt-16 pb-0 sm:pr-2 sm:pl-3 sm:pt-20">
+                <TeamMarkers
+                  players={teamAPlayers}
+                  tone="teamA"
+                  cameraMode={cameraVisualMode}
+                  reducedMotion={Boolean(prefersReducedMotion)}
+                />
+              </div>
+              <div className="absolute inset-y-0 right-0 w-1/4 pl-1.5 pr-2 pt-16 pb-0 sm:pl-2 sm:pr-3 sm:pt-20">
+                <TeamMarkers
+                  players={teamBPlayers}
+                  tone="teamB"
+                  cameraMode={cameraVisualMode}
+                  reducedMotion={Boolean(prefersReducedMotion)}
+                />
+              </div>
             </div>
-            <div className="absolute inset-y-0 right-0 w-1/4 pl-1.5 pr-2 pt-16 pb-0 sm:pl-2 sm:pr-3 sm:pt-20">
-              <TeamMarkers
-                players={teamBPlayers}
-                tone="teamB"
-                cameraMode={cameraVisualMode}
-                reducedMotion={Boolean(prefersReducedMotion)}
-              />
-            </div>
+            <motion.img
+              src={dragonGif}
+              alt="Dragon rope marker"
+              className="pointer-events-none absolute top-1/2 z-30 block h-[86%] max-h-[96px] w-auto max-w-none -translate-x-1/2 -translate-y-1/2 object-contain"
+              animate={{ left: `${hud.normalizedRopePosition}%` }}
+              transition={{ type: 'spring', stiffness: 150, damping: 24 }}
+            />
           </div>
-          <motion.img
-            src={dragonGif}
-            alt="Dragon rope marker"
-            className="pointer-events-none absolute top-1/2 z-30 block h-[86%] max-h-[96px] w-auto max-w-none -translate-x-1/2 -translate-y-1/2 object-contain"
-            animate={{ left: `${hud.normalizedRopePosition}%` }}
-            transition={{ type: 'spring', stiffness: 150, damping: 24 }}
-          />
         </div>
       </CardContent>
     </Card>

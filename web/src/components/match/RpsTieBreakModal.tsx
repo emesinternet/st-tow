@@ -91,8 +91,8 @@ export function RpsTieBreakModal({ model, role, onVote, onContinue }: RpsTieBrea
   if (!model) {
     return null;
   }
-  const displayTeamAChoice = isReveal && !revealResolved ? 'rock' : model.teamAChoice || 'rock';
-  const displayTeamBChoice = isReveal && !revealResolved ? 'rock' : model.teamBChoice || 'rock';
+  const displayTeamAChoice = isReveal && !revealResolved ? 'rock' : model.teamAChoice;
+  const displayTeamBChoice = isReveal && !revealResolved ? 'rock' : model.teamBChoice;
   const voteButtonVariant =
     model.myTeam === 'A' ? 'teamA' : model.myTeam === 'B' ? 'teamB' : 'neutral';
   const mirrorVoteHands = model.myTeam === 'B';

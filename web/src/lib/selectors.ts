@@ -452,6 +452,30 @@ function isRpsChoice(value: string): value is 'rock' | 'paper' | 'scissors' {
   return value === 'rock' || value === 'paper' || value === 'scissors';
 }
 
+function normalizeRpsChoice(value: string): 'rock' | 'paper' | 'scissors' | '' {
+  const normalized = value.trim().toLowerCase();
+  return isRpsChoice(normalized) ? normalized : '';
+}
+
+function resolveRpsWinnerFromChoices(
+  teamAChoice: 'rock' | 'paper' | 'scissors' | '',
+  teamBChoice: 'rock' | 'paper' | 'scissors' | ''
+): 'A' | 'B' | '' {
+  if (!teamAChoice || !teamBChoice || teamAChoice === teamBChoice) {
+    return '';
+  }
+
+  if (
+    (teamAChoice === 'rock' && teamBChoice === 'scissors') ||
+    (teamAChoice === 'paper' && teamBChoice === 'rock') ||
+    (teamAChoice === 'scissors' && teamBChoice === 'paper')
+  ) {
+    return 'A';
+  }
+
+  return 'B';
+}
+
 function buildRpsTieBreakModel(
   role: UiRole,
   match: NormalizedMatch | null,
@@ -470,21 +494,22 @@ function buildRpsTieBreakModel(
   const countsA = { rock: 0, paper: 0, scissors: 0 };
   const countsB = { rock: 0, paper: 0, scissors: 0 };
   for (const vote of rpsVotes) {
-    if (!isRpsChoice(vote.choice)) {
+    const normalizedChoice = normalizeRpsChoice(vote.choice);
+    if (!normalizedChoice) {
       continue;
     }
     if (vote.team === 'A') {
-      countsA[vote.choice] += 1;
+      countsA[normalizedChoice] += 1;
       continue;
     }
     if (vote.team === 'B') {
-      countsB[vote.choice] += 1;
+      countsB[normalizedChoice] += 1;
     }
   }
 
   const myTeam = myPlayer?.team === 'A' || myPlayer?.team === 'B' ? myPlayer.team : '';
   const myVote = myPlayer ? rpsVotes.find((vote) => vote.playerId === myPlayer.playerId) : null;
-  const myVoteChoice = myVote && isRpsChoice(myVote.choice) ? myVote.choice : '';
+  const myVoteChoice = myVote ? normalizeRpsChoice(myVote.choice) : '';
 
   const nowMicros = BigInt(Math.trunc(snapshotGeneratedAt)) * 1000n;
   const remainingMicros =
@@ -512,8 +537,14 @@ function buildRpsTieBreakModel(
     }
   }
 
-  const teamAChoice = isRpsChoice(rpsState.teamAChoice) ? rpsState.teamAChoice : '';
-  const teamBChoice = isRpsChoice(rpsState.teamBChoice) ? rpsState.teamBChoice : '';
+  const teamAChoice = normalizeRpsChoice(rpsState.teamAChoice);
+  const teamBChoice = normalizeRpsChoice(rpsState.teamBChoice);
+  const derivedWinnerTeam =
+    rpsState.stage === 'Reveal' ? resolveRpsWinnerFromChoices(teamAChoice, teamBChoice) : '';
+  const effectiveWinnerTeam =
+    rpsState.winnerTeam === 'A' || rpsState.winnerTeam === 'B'
+      ? rpsState.winnerTeam
+      : derivedWinnerTeam;
 
   return {
     matchId: match.matchId,
@@ -527,7 +558,7 @@ function buildRpsTieBreakModel(
     opponentTeamCounts,
     teamAChoice,
     teamBChoice,
-    winnerTeam: rpsState.winnerTeam,
+    winnerTeam: effectiveWinnerTeam,
     canHostContinue:
       role === 'host' &&
       rpsState.stage === 'Reveal' &&

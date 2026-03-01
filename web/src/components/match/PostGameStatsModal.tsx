@@ -140,18 +140,18 @@ export function PostGameStatsModal({
             style={hasRows ? { maxHeight: `${tableMaxHeightPx}px` } : undefined}
           >
             <table className="w-full border-collapse text-left">
-              <thead className="bg-neo-yellow/50">
+              <thead>
                 <tr>
-                  <th className="border-b-2 border-neo-ink px-3 py-1.5 font-display text-xs font-black uppercase tracking-wide">
+                  <th className="sticky top-0 z-10 border-b-2 border-neo-ink bg-neo-yellow px-3 py-1.5 font-display text-xs font-black uppercase tracking-wide">
                     Player
                   </th>
-                  <th className="border-b-2 border-neo-ink px-3 py-1.5 font-display text-xs font-black uppercase tracking-wide">
+                  <th className="sticky top-0 z-10 border-b-2 border-neo-ink bg-neo-yellow px-3 py-1.5 font-display text-xs font-black uppercase tracking-wide">
                     Team
                   </th>
-                  <th className="border-b-2 border-neo-ink px-3 py-1.5 text-right font-display text-xs font-black uppercase tracking-wide">
+                  <th className="sticky top-0 z-10 border-b-2 border-neo-ink bg-neo-yellow px-3 py-1.5 text-right font-display text-xs font-black uppercase tracking-wide">
                     Accuracy
                   </th>
-                  <th className="border-b-2 border-neo-ink px-3 py-1.5 text-right font-display text-xs font-black uppercase tracking-wide">
+                  <th className="sticky top-0 z-10 border-b-2 border-neo-ink bg-neo-yellow px-3 py-1.5 text-right font-display text-xs font-black uppercase tracking-wide">
                     Words
                   </th>
                 </tr>

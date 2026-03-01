@@ -94,4 +94,12 @@ test('player correct submit increments team force and cumulative pulls', () => {
   assert.equal(teamB.teamAPulls, 8);
   assert.equal(teamB.teamBForce, 4);
   assert.equal(teamB.teamBPulls, 3);
+
+  const scaledDown = applyPlayerCorrectSubmission(
+    { teamAForce: 2, teamBForce: 1, teamAPulls: 5, teamBPulls: 4 },
+    TEAM_A,
+    0
+  );
+  assert.equal(scaledDown.teamAForce, 2);
+  assert.equal(scaledDown.teamAPulls, 6);
 });

@@ -6,11 +6,12 @@
   "scripts": {
     "build": "spacetime build",
     "publish": "spacetime publish",
-    "lint": "eslint --max-warnings=0 \"src/**/*.ts\"",
-    "format": "node ./node_modules/prettier/bin/prettier.cjs --write \"src/**/*.ts\" \"*.{ts,js,json,md}\"",
-    "format:check": "node ./node_modules/prettier/bin/prettier.cjs --check \"src/**/*.ts\" \"*.{ts,js,json,md}\"",
+    "stress:live": "node ./node_modules/tsx/dist/cli.mjs stress/live/runner.ts",
+    "lint": "eslint --max-warnings=0 \"src/**/*.ts\" \"stress/**/*.ts\"",
+    "format": "node ./node_modules/prettier/bin/prettier.cjs --write \"src/**/*.ts\" \"stress/**/*.ts\" \"*.{ts,js,json,md}\"",
+    "format:check": "node ./node_modules/prettier/bin/prettier.cjs --check \"src/**/*.ts\" \"stress/**/*.ts\" \"*.{ts,js,json,md}\"",
     "typecheck": "node ./node_modules/typescript/bin/tsc -p tsconfig.json",
-    "test": "tsx --test \"src/**/*.test.ts\""
+    "test": "tsx --test \"src/**/*.test.ts\" \"stress/**/*.test.ts\""
   },
   "dependencies": {
     "spacetimedb": "^2.0.2"

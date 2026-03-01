@@ -285,6 +285,7 @@ export function PlayerInputPanel({
           <input
             ref={mobileInputRef}
             type="text"
+            data-typing-input="true"
             inputMode="text"
             autoCapitalize="off"
             autoCorrect="off"

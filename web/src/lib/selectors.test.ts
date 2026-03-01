@@ -361,6 +361,76 @@ test('selector exposes both team choices in reveal stage', () => {
   assert.equal(vm.rpsTieBreak?.canHostContinue, true);
 });
 
+test('selector derives reveal winner from choices when winner team is temporarily empty', () => {
+  const snapshot = makeBaseSnapshot();
+  snapshot.matches[0] = {
+    ...snapshot.matches[0],
+    phase: 'TieBreakRps',
+  };
+  snapshot.tugRpsStates = [
+    {
+      matchId: 'match-1',
+      roundNumber: 2,
+      stage: 'Reveal',
+      votingEndsAtMicros: 0n,
+      teamAChoice: 'rock',
+      teamBChoice: 'paper',
+      winnerTeam: '',
+      createdAtMicros: 0n,
+    },
+  ];
+  snapshot.tugRpsVotes = [];
+
+  const vm = selectUiViewModel({
+    connectionState: 'connected',
+    snapshot,
+    identity: 'c200host',
+    selectedLobbyId: '',
+    pendingJoinCode: '',
+    ignoredLobbyId: '',
+  });
+
+  assert.equal(vm.rpsTieBreak?.stage, 'Reveal');
+  assert.equal(vm.rpsTieBreak?.teamAChoice, 'rock');
+  assert.equal(vm.rpsTieBreak?.teamBChoice, 'paper');
+  assert.equal(vm.rpsTieBreak?.winnerTeam, 'B');
+  assert.equal(vm.rpsTieBreak?.canHostContinue, false);
+});
+
+test('selector normalizes reveal choices before winner derivation', () => {
+  const snapshot = makeBaseSnapshot();
+  snapshot.matches[0] = {
+    ...snapshot.matches[0],
+    phase: 'TieBreakRps',
+  };
+  snapshot.tugRpsStates = [
+    {
+      matchId: 'match-1',
+      roundNumber: 3,
+      stage: 'Reveal',
+      votingEndsAtMicros: 0n,
+      teamAChoice: ' Rock ',
+      teamBChoice: 'PAPER',
+      winnerTeam: '',
+      createdAtMicros: 0n,
+    },
+  ];
+  snapshot.tugRpsVotes = [];
+
+  const vm = selectUiViewModel({
+    connectionState: 'connected',
+    snapshot,
+    identity: 'c200host',
+    selectedLobbyId: '',
+    pendingJoinCode: '',
+    ignoredLobbyId: '',
+  });
+
+  assert.equal(vm.rpsTieBreak?.teamAChoice, 'rock');
+  assert.equal(vm.rpsTieBreak?.teamBChoice, 'paper');
+  assert.equal(vm.rpsTieBreak?.winnerTeam, 'B');
+});
+
 test('selector does not resolve lobby from Left membership', () => {
   const snapshot = makeBaseSnapshot();
   snapshot.players[0] = {

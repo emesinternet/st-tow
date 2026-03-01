@@ -361,6 +361,12 @@ const RPS_VOTE_SECONDS = 10;
 const RPS_TIE_REVEAL_SECONDS = 5;
 const POST_GAME_CLOSE_DELAY_SECONDS = 10;
 const POST_GAME_IDLE_CLOSE_DELAY_SECONDS = 300;
+const MAX_PLAYERS_PER_LOBBY = 50;
+const FORCE_SCALING_BASELINE_FORCE_BUDGET = 4;
+const FORCE_SCALING_TEAM_EXPONENT = 1.6;
+const FORCE_SCALING_LOBBY_REFERENCE = 10;
+const FORCE_SCALING_LOBBY_EXPONENT = 2.1;
+const FORCE_SCALING_MIN_CHANCE = 0.00005;
 const POST_GAME_CLOSE_AT_SETTING_KEY = '__postgame_close_at_micros';
 const POST_GAME_IDLE_CLOSE_AT_SETTING_KEY = '__postgame_idle_close_at_micros';
 const SCHEDULE_KIND_TICK = 'tick';
@@ -1026,6 +1032,38 @@ function countActiveByTeam(players: PlayerRow[]): { a: number; b: number } {
   return { a, b };
 }
 
+function computeSubmissionForceGain(
+  ctx: ReducerCtx<any>,
+  lobbyId: string,
+  team: string
+): number {
+  const counts = countActiveByTeam(listPlayersInLobby(ctx, lobbyId));
+  const teamActiveCount = team === TEAM_A ? counts.a : team === TEAM_B ? counts.b : 0;
+  const totalActiveCount = counts.a + counts.b;
+
+  if (teamActiveCount <= 0) {
+    return 0;
+  }
+
+  if (teamActiveCount <= 2) {
+    return 1;
+  }
+
+  const teamScale =
+    FORCE_SCALING_BASELINE_FORCE_BUDGET / Math.pow(teamActiveCount, FORCE_SCALING_TEAM_EXPONENT);
+  const lobbyScale =
+    totalActiveCount <= 0
+      ? 1
+      : Math.pow(FORCE_SCALING_LOBBY_REFERENCE / totalActiveCount, FORCE_SCALING_LOBBY_EXPONENT);
+
+  const chance = Math.min(
+    1,
+    Math.max(FORCE_SCALING_MIN_CHANCE, teamScale * lobbyScale)
+  );
+  const roll = Number(ctx.random.uint32() % 10_000) / 10_000;
+  return roll < chance ? 1 : 0;
+}
+
 function chooseBalancedTeam(players: PlayerRow[]): string {
   const counts = countActiveByTeam(players);
   return counts.a <= counts.b ? TEAM_A : TEAM_B;
@@ -1334,8 +1372,16 @@ function runPostGameCloseTick(ctx: ReducerCtx<any>, matchId: string): void {
   closeLobbyAfterPostGame(ctx, lobby, matchId);
 }
 
+function normalizeRpsChoice(value: string): RpsChoice | '' {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'rock' || normalized === 'paper' || normalized === 'scissors') {
+    return normalized;
+  }
+  return '';
+}
+
 function isValidRpsChoice(value: string): value is RpsChoice {
-  return value === 'rock' || value === 'paper' || value === 'scissors';
+  return normalizeRpsChoice(value) !== '';
 }
 
 function randomRpsChoice(ctx: ReducerCtx<any>): RpsChoice {
@@ -1383,15 +1429,16 @@ function countRpsVotesByTeam(
     if (!player || player.status === PLAYER_STATUS_LEFT) {
       continue;
     }
-    if (!isValidRpsChoice(vote.choice)) {
+    const normalizedChoice = normalizeRpsChoice(vote.choice);
+    if (!normalizedChoice) {
       continue;
     }
     if (vote.team === TEAM_A) {
-      counts.a[vote.choice] += 1;
+      counts.a[normalizedChoice] += 1;
       continue;
     }
     if (vote.team === TEAM_B) {
-      counts.b[vote.choice] += 1;
+      counts.b[normalizedChoice] += 1;
     }
   }
 
@@ -1546,6 +1593,37 @@ function transitionToSuddenDeath(
 
   emitGameEvent(ctx, lobby.lobby_id, match.match_id, 'sudden_death_started', {});
   return { lobby: lobbyNext, match: matchNext, tug: tugNext };
+}
+
+function maybeTransitionExpiredInGameOnSubmit(
+  ctx: ReducerCtx<any>,
+  lobby: LobbyRow,
+  match: MatchRow,
+  tug: TugStateRow
+): { lobby: LobbyRow; match: MatchRow; tug: TugStateRow } {
+  if (match.phase !== MATCH_PHASE_IN_GAME) {
+    return { lobby, match, tug };
+  }
+
+  const clock = getMatchClockByMatchId(ctx, match.match_id);
+  if (!clock) {
+    return { lobby, match, tug };
+  }
+
+  const now = nowMicros(ctx);
+  if (!isPhaseExpired(clock.phase_ends_at.microsSinceUnixEpoch, now)) {
+    return { lobby, match, tug };
+  }
+
+  if (clock.seconds_remaining !== 0 || clock.phase_ends_at.microsSinceUnixEpoch !== now) {
+    replaceRow(ctx.db.match_clock, clock, {
+      ...clock,
+      phase_ends_at: new Timestamp(now),
+      seconds_remaining: 0,
+    });
+  }
+
+  return transitionToSuddenDeath(ctx, lobby, match, tug);
 }
 
 function transitionPreGameToInGame(
@@ -1833,8 +1911,10 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
     const voteCounts = countRpsVotesByTeam(ctx, lobby, matchId);
     let teamAChoice = resolveMajorityRpsChoiceFromCounts(voteCounts.a);
     let teamBChoice = resolveMajorityRpsChoiceFromCounts(voteCounts.b);
-    if (!teamAChoice && !teamBChoice) {
+    if (!teamAChoice) {
       teamAChoice = randomRpsChoice(ctx);
+    }
+    if (!teamBChoice) {
       teamBChoice = randomRpsChoice(ctx);
     }
     const winnerTeam = resolveRpsWinner(teamAChoice, teamBChoice);
@@ -1898,7 +1978,10 @@ function runTugTick(ctx: ReducerCtx<any>, matchId: string): void {
   tug = maybeExpireTimedPower(ctx, lobby, match, tug, now);
   tug = updateTiersOnTugState(ctx, lobby, match, tug);
 
-  if (match.phase === MATCH_PHASE_IN_GAME && secondsRemaining > 0) {
+  if (
+    (match.phase === MATCH_PHASE_IN_GAME && secondsRemaining > 0) ||
+    match.phase === MATCH_PHASE_SUDDEN_DEATH
+  ) {
     const tugNext: TugStateRow = {
       ...tug,
       rope_position: tug.rope_position + (tug.team_a_force - tug.team_b_force),
@@ -2071,6 +2154,13 @@ export const join_lobby = spacetimedb.reducer(
     const isNewOrLeftMembership = !existing || existing.status === PLAYER_STATUS_LEFT;
     if (lockInProgressJoin && hasStartedMatch && isNewOrLeftMembership) {
       throw new Error('Lobby is locked after match start');
+    }
+
+    const activeOrEliminatedCount = listPlayersInLobby(ctx, lobby.lobby_id).filter(
+      (player) => player.status !== PLAYER_STATUS_LEFT
+    ).length;
+    if (isNewOrLeftMembership && activeOrEliminatedCount >= MAX_PLAYERS_PER_LOBBY) {
+      throw new Error(`Lobby is full (max ${MAX_PLAYERS_PER_LOBBY} players)`);
     }
 
     if (existing) {
@@ -2681,7 +2771,8 @@ export const tug_rps_cast_vote = spacetimedb.reducer(
       throw new Error('Tie-break voting is closed');
     }
 
-    if (!isValidRpsChoice(choice)) {
+    const normalizedChoice = normalizeRpsChoice(choice);
+    if (!normalizedChoice) {
       throw new Error('Invalid RPS choice');
     }
 
@@ -2706,7 +2797,7 @@ export const tug_rps_cast_vote = spacetimedb.reducer(
       match_id,
       player_id: player.player_id,
       team: player.team,
-      choice,
+      choice: normalizedChoice,
       submitted_at_micros: nowMicros(ctx),
     };
     if (existing) {
@@ -2759,15 +2850,20 @@ export const tug_submit = spacetimedb.reducer(
     typed: t.string(),
   },
   (ctx, { match_id, typed }) => {
-    const match = getMatchOrThrow(ctx, match_id);
-    if (match.phase !== MATCH_PHASE_IN_GAME && match.phase !== MATCH_PHASE_SUDDEN_DEATH) {
-      throw new Error('Match is not accepting submissions');
-    }
-
-    const lobby = getLobbyOrThrow(ctx, match.lobby_id);
-    const tug = getTugStateByMatchId(ctx, match_id);
+    let match = getMatchOrThrow(ctx, match_id);
+    let lobby = getLobbyOrThrow(ctx, match.lobby_id);
+    let tug = getTugStateByMatchId(ctx, match_id);
     if (!tug) {
       throw new Error('Tug state not initialized');
+    }
+
+    const transitioned = maybeTransitionExpiredInGameOnSubmit(ctx, lobby, match, tug);
+    lobby = transitioned.lobby;
+    match = transitioned.match;
+    tug = transitioned.tug;
+
+    if (match.phase !== MATCH_PHASE_IN_GAME && match.phase !== MATCH_PHASE_SUDDEN_DEATH) {
+      throw new Error('Match is not accepting submissions');
     }
 
     if (lobby.host_identity.equals(ctx.sender)) {
@@ -2822,7 +2918,7 @@ export const tug_submit = spacetimedb.reducer(
     }
 
     if (player.status !== PLAYER_STATUS_ACTIVE) {
-      throw new Error('Player is not active');
+      return;
     }
 
     const stateId = tugPlayerStateId(match_id, player.player_id);
@@ -2869,7 +2965,8 @@ export const tug_submit = spacetimedb.reducer(
           teamAPulls: 0,
           teamBPulls: 0,
         },
-        player.team
+        player.team,
+        computeSubmissionForceGain(ctx, lobby.lobby_id, player.team)
       );
       const tugNext: TugStateRow = {
         ...tug,

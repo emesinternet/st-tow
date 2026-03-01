@@ -48,6 +48,7 @@ export function LandingPanel({
               When the timer ends, sudden death begins. Mistakes can eliminate players, and if the
               dragon lands in the tie zone, teams settle it with rock-paper-scissors.
             </p>
+            <p className="ui-subtext">Lobbies support up to 50 total players.</p>
           </div>
           <div className="space-y-2">
             <div>

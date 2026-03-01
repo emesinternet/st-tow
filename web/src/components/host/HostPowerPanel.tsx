@@ -25,6 +25,9 @@ function isHotkeyBlockedTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
     return false;
   }
+  if (target instanceof HTMLInputElement && target.dataset.typingInput === 'true') {
+    return false;
+  }
   if (target.isContentEditable) {
     return true;
   }
@@ -87,19 +90,23 @@ export function HostPowerPanel({
       if (!Number.isInteger(index) || index < 0 || index >= orderedPowers.length) {
         return;
       }
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === 'function') {
+        event.stopImmediatePropagation();
+      }
 
       const power = orderedPowers[index];
       if (!power || !power.enabled || (cooldownsByPowerId[power.id]?.active ?? false)) {
         return;
       }
 
-      event.preventDefault();
       void onActivatePower(power.id);
     };
 
-    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, { capture: true });
     return () => {
-      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keydown', onKeyDown, { capture: true });
     };
   }, [cooldownsByPowerId, onActivatePower, orderedPowers]);
 

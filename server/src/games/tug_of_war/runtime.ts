@@ -71,19 +71,22 @@ export function isPhaseExpired(phaseEndsAtMicros: bigint, nowMicros: bigint): bo
 
 export function applyPlayerCorrectSubmission(
   state: TeamSubmitState,
-  team: string
+  team: string,
+  forceGain = 1
 ): TeamSubmitState {
+  const normalizedForceGain = Math.max(0, Math.trunc(forceGain));
+
   if (team === TEAM_A) {
     return {
       ...state,
-      teamAForce: state.teamAForce + 1,
+      teamAForce: state.teamAForce + normalizedForceGain,
       teamAPulls: state.teamAPulls + 1,
     };
   }
   if (team === TEAM_B) {
     return {
       ...state,
-      teamBForce: state.teamBForce + 1,
+      teamBForce: state.teamBForce + normalizedForceGain,
       teamBPulls: state.teamBPulls + 1,
     };
   }
