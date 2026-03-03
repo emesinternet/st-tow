@@ -1,5 +1,7 @@
 # Typing Fever!
 
+![Static Badge](https://img.shields.io/badge/VIBECODED-8A2BE2)
+
 Realtime Typing Tug of War.
 
 ## What Is This?

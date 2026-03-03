@@ -11,11 +11,15 @@ interface MatchHudProps {
   teamAPlayers: TeamPlayerViewModel[];
   teamBPlayers: TeamPlayerViewModel[];
   cameraStream?: MediaStream | null;
+  latestPowerActivation?: {
+    eventId: string;
+    powerId: string;
+    atMicros: bigint;
+  } | null;
 }
 
 const POWER_DURATION_SECONDS_BY_ID: Record<string, number> = {
   flipper_burst: 20,
-  difficulty_up_burst: 20,
   tech_mode_burst: 20,
   symbols_mode_burst: 20,
 };
@@ -26,6 +30,13 @@ const POWER_LABEL_BY_ID: Record<string, string> = {
   tech_mode_burst: 'Tech Burst',
   symbols_mode_burst: 'Symbols Burst',
 };
+const POWER_DURATION_FILL_CLASS_BY_ID: Record<string, string> = {
+  flipper_burst: 'bg-neo-teamB',
+  tech_mode_burst: 'bg-neo-teamA',
+  symbols_mode_burst: 'bg-neo-success',
+};
+const DIFFICULTY_UP_POWER_ID = 'difficulty_up_burst';
+const TIMED_POWER_IDS = new Set(['flipper_burst', 'tech_mode_burst', 'symbols_mode_burst']);
 
 const CHEER_PHRASES = [
   'Get it!',
@@ -81,8 +92,7 @@ function TeamMarkers({
   );
   const ballClassName = tone === 'teamA' ? 'bg-neo-teamA' : 'bg-neo-teamB';
   const density = connected.length;
-  const markerSizeClass =
-    density >= 40 ? 'h-2 w-2' : density >= 24 ? 'h-2.5 w-2.5' : 'h-3 w-3';
+  const markerSizeClass = density >= 40 ? 'h-2 w-2' : density >= 24 ? 'h-2.5 w-2.5' : 'h-3 w-3';
   const nameClass =
     density >= 40
       ? 'max-w-[36px] text-[8px]'
@@ -188,7 +198,7 @@ function TeamMarkers({
 
       return changed ? next : current;
     });
-  }, [connectedSignature]);
+  }, [connected, connectedSignature]);
 
   useEffect(() => {
     const timeouts = cheerTimeoutsRef.current;
@@ -222,66 +232,41 @@ function TeamMarkers({
   return (
     <div className="relative h-full w-full overflow-visible">
       {positionedPlayers.map(({ player, xPercent, bottomPx }) => {
-          const cheer = cheerByPlayer[player.playerId];
-          const bubble = cheer ? (
-            <motion.span
-              key={`${player.playerId}:cheer:${cheer.token}`}
-              className="pointer-events-none absolute bottom-[100%] left-1/2 z-10 mb-1 max-w-[92px] -translate-x-1/2 truncate rounded-[9px] border border-neo-ink bg-neo-paper px-1.5 py-0.5 text-[10px] font-black uppercase leading-none text-neo-ink"
-              initial={{ opacity: 0, y: 6, scale: 0.9 }}
-              animate={{
-                opacity: [0, 1, 1, 0],
-                y: [
-                  6,
-                  -Math.round(cheer.bubbleLift * 0.35),
-                  -Math.round(cheer.bubbleLift * 0.65),
-                  -cheer.bubbleLift,
-                ],
-                scale: [0.9, 1, 1, 0.98],
-              }}
-              transition={{ duration: reducedMotion ? 0.12 : 1.05, ease: 'easeOut' }}
-            >
-              {cheer.phrase}
-            </motion.span>
-          ) : null;
+        const cheer = cheerByPlayer[player.playerId];
+        const bubble = cheer ? (
+          <motion.span
+            key={`${player.playerId}:cheer:${cheer.token}`}
+            className="pointer-events-none absolute bottom-[100%] left-1/2 z-10 mb-1 max-w-[92px] -translate-x-1/2 truncate rounded-[9px] border border-neo-ink bg-neo-paper px-1.5 py-0.5 text-[10px] font-black uppercase leading-none text-neo-ink"
+            initial={{ opacity: 0, y: 6, scale: 0.9 }}
+            animate={{
+              opacity: [0, 1, 1, 0],
+              y: [
+                6,
+                -Math.round(cheer.bubbleLift * 0.35),
+                -Math.round(cheer.bubbleLift * 0.65),
+                -cheer.bubbleLift,
+              ],
+              scale: [0.9, 1, 1, 0.98],
+            }}
+            transition={{ duration: reducedMotion ? 0.12 : 1.05, ease: 'easeOut' }}
+          >
+            {cheer.phrase}
+          </motion.span>
+        ) : null;
 
-          if ((bounceTokens[player.playerId] ?? 0) > 0) {
-            return (
-              <motion.div
-                key={`${player.playerId}:${bounceTokens[player.playerId]}`}
-                className="absolute z-40 flex flex-col items-center justify-end text-center"
-                style={{
-                  left: `${xPercent}%`,
-                  bottom: `${bottomPx}px`,
-                  transform: 'translateX(-50%)',
-                }}
-                initial={{ y: 0 }}
-                animate={{ y: reducedMotion ? 0 : [0, -(cheer?.jumpHeight ?? 10), 0] }}
-                transition={{ duration: reducedMotion ? 0.12 : 0.28, ease: 'easeOut' }}
-              >
-                {bubble}
-                <span
-                  className={`${nameClass} truncate font-bold uppercase leading-tight ${
-                    cameraMode ? 'text-white drop-shadow-[0_1px_0_#000]' : 'text-neo-ink/85'
-                  }`}
-                >
-                  {player.displayName}
-                </span>
-                <span
-                  className={`mt-0.5 rounded-full border border-neo-ink ${markerSizeClass} ${ballClassName}`}
-                />
-              </motion.div>
-            );
-          }
-
+        if ((bounceTokens[player.playerId] ?? 0) > 0) {
           return (
-            <div
-              key={player.playerId}
-              className="absolute z-20 flex flex-col items-center justify-end text-center"
+            <motion.div
+              key={`${player.playerId}:${bounceTokens[player.playerId]}`}
+              className="absolute z-40 flex flex-col items-center justify-end text-center"
               style={{
                 left: `${xPercent}%`,
                 bottom: `${bottomPx}px`,
                 transform: 'translateX(-50%)',
               }}
+              initial={{ y: 0 }}
+              animate={{ y: reducedMotion ? 0 : [0, -(cheer?.jumpHeight ?? 10), 0] }}
+              transition={{ duration: reducedMotion ? 0.12 : 0.28, ease: 'easeOut' }}
             >
               {bubble}
               <span
@@ -294,23 +279,58 @@ function TeamMarkers({
               <span
                 className={`mt-0.5 rounded-full border border-neo-ink ${markerSizeClass} ${ballClassName}`}
               />
-            </div>
+            </motion.div>
           );
-        })}
+        }
+
+        return (
+          <div
+            key={player.playerId}
+            className="absolute z-20 flex flex-col items-center justify-end text-center"
+            style={{
+              left: `${xPercent}%`,
+              bottom: `${bottomPx}px`,
+              transform: 'translateX(-50%)',
+            }}
+          >
+            {bubble}
+            <span
+              className={`${nameClass} truncate font-bold uppercase leading-tight ${
+                cameraMode ? 'text-white drop-shadow-[0_1px_0_#000]' : 'text-neo-ink/85'
+              }`}
+            >
+              {player.displayName}
+            </span>
+            <span
+              className={`mt-0.5 rounded-full border border-neo-ink ${markerSizeClass} ${ballClassName}`}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-export function MatchHud({ hud, teamAPlayers, teamBPlayers, cameraStream = null }: MatchHudProps) {
+export function MatchHud({
+  hud,
+  teamAPlayers,
+  teamBPlayers,
+  cameraStream = null,
+  latestPowerActivation = null,
+}: MatchHudProps) {
   const prefersReducedMotion = useReducedMotion();
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [difficultyUpBadgeEventId, setDifficultyUpBadgeEventId] = useState('');
   const isLobbyPreview = hud.matchId.endsWith(':pre');
   const isRpsTieBreak = hud.phase === 'TieBreakRps';
   const isSuddenDeath = hud.phase === 'SuddenDeath';
   const activePowerSeconds = hud.activePowerSecondsRemaining ?? 0;
   const hasActivePower = Boolean(hud.activePowerId) && activePowerSeconds > 0;
+  const hasTimedActivePower =
+    hasActivePower && TIMED_POWER_IDS.has((hud.activePowerId ?? '').toLowerCase());
   const activePowerDuration = POWER_DURATION_SECONDS_BY_ID[hud.activePowerId] ?? 20;
   const activePowerLabel = POWER_LABEL_BY_ID[hud.activePowerId] ?? 'Host Power';
+  const activePowerFillClass = POWER_DURATION_FILL_CLASS_BY_ID[hud.activePowerId] ?? 'bg-neo-teamB';
   const activePowerLeftPct = Math.max(
     0,
     Math.min(100, (activePowerSeconds / Math.max(1, activePowerDuration)) * 100)
@@ -334,6 +354,26 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers, cameraStream = null 
   const badgeTransition = prefersReducedMotion
     ? { duration: 0.01 }
     : { duration: 0.16, ease: 'easeOut' as const };
+  const showDifficultyUpBadge = difficultyUpBadgeEventId.length > 0;
+  const showTimedPowerBadge = hasTimedActivePower;
+  const latestPowerId = latestPowerActivation?.powerId ?? '';
+  const latestPowerEventId = latestPowerActivation?.eventId ?? '';
+
+  useEffect(() => {
+    if (latestPowerId !== DIFFICULTY_UP_POWER_ID || !latestPowerEventId) {
+      return;
+    }
+
+    const token = latestPowerEventId;
+    setDifficultyUpBadgeEventId(token);
+    const timeoutId = window.setTimeout(() => {
+      setDifficultyUpBadgeEventId((current) => (current === token ? '' : current));
+    }, 1500);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [latestPowerEventId, latestPowerId]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -375,7 +415,7 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers, cameraStream = null 
             ) : null}
           </AnimatePresence>
           <AnimatePresence>
-            {hasActivePower ? (
+            {showTimedPowerBadge ? (
               <div className="pointer-events-none absolute bottom-0 left-1/2 z-50 w-[min(92%,360px)] -translate-x-1/2 translate-y-1/2">
                 <motion.div
                   initial={{ opacity: 0, scale: 0.98 }}
@@ -383,14 +423,41 @@ export function MatchHud({ hud, teamAPlayers, teamBPlayers, cameraStream = null 
                   exit={{ opacity: 0, scale: 0.98 }}
                   transition={badgeTransition}
                 >
-                  <div className="relative h-8 overflow-hidden rounded-[12px] border-4 border-neo-ink bg-[#8ec3ef] shadow-neo-sm">
+                  <div className="relative h-8 overflow-hidden rounded-[12px] border-4 border-neo-ink bg-[#1A233A] shadow-neo-sm">
                     <div
-                      className="absolute inset-y-0 left-0 bg-neo-teamB transition-[width] duration-200 motion-reduce:transition-none"
+                      className={`absolute inset-y-0 left-0 transition-[width] duration-200 motion-reduce:transition-none ${activePowerFillClass}`}
                       style={{ width: `${activePowerLeftPct}%` }}
                     />
-                    <div className="absolute inset-0 flex items-center justify-between px-2 font-display text-xs font-black uppercase tracking-wide text-white">
+                    <div className="absolute inset-0 flex items-center justify-between px-2 font-display text-xs font-black uppercase tracking-wide text-neo-paper">
                       <span>{activePowerLabel}</span>
                       <span className="font-mono">{activePowerSeconds}s</span>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+            ) : null}
+          </AnimatePresence>
+          <AnimatePresence>
+            {showDifficultyUpBadge ? (
+              <div className="pointer-events-none absolute bottom-0 left-1/2 z-50 w-[min(92%,360px)] -translate-x-1/2 translate-y-1/2">
+                <motion.div
+                  key={difficultyUpBadgeEventId}
+                  initial={false}
+                  animate={{
+                    opacity: prefersReducedMotion ? 1 : [1, 1, 1, 1, 1, 1, 0],
+                    scale: prefersReducedMotion ? 1 : [1, 1.04, 1, 1.04, 1, 1.04, 1],
+                    y: prefersReducedMotion ? 0 : [0, -8, 0, -8, 0, -8, 0],
+                  }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{
+                    duration: prefersReducedMotion ? 0.01 : 1.5,
+                    ease: 'easeOut',
+                    times: [0, 0.12, 0.24, 0.38, 0.52, 0.7, 1],
+                  }}
+                >
+                  <div className="inline-flex h-[var(--ui-control-h-sm)] w-full items-center justify-center gap-[var(--space-2)] rounded-[var(--ui-radius-md)] border-4 border-neo-ink bg-neo-teamB px-[var(--space-3)] font-display text-[var(--ui-text-xs)] font-bold uppercase tracking-wide text-neo-paper shadow-neo">
+                    <div className="flex items-center justify-center">
+                      <span>Difficulty Up</span>
                     </div>
                   </div>
                 </motion.div>

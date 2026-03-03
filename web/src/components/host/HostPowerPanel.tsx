@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type CSSProperties } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/shared/ui/card';
 import { Button } from '@/components/shared/ui/button';
 import { Tooltip } from '@/components/shared/ui/tooltip';
@@ -16,7 +16,7 @@ const HOST_POWER_TOOLTIPS: Record<string, string> = {
   symbols_mode_burst:
     'Symbols Burst: Switches all active words to symbol-heavy words for 20 seconds.',
   difficulty_up_burst:
-    'Difficulty Up: Boosts difficulty by one tier for 20 seconds and rerolls active words.',
+    'Difficulty Up: Instantly boosts difficulty by one tier for the rest of the match and rerolls active words.',
   flipper_burst:
     'Flipper: Randomly mirrors 2 to 4 letters in active words so they appear backwards.',
 };
@@ -115,6 +115,17 @@ export function HostPowerPanel({
   }
   const hostPowerValue = Math.max(0, Math.trunc(hostPowerMeter));
   const hostPowerPercent = Math.max(0, Math.min(100, hostPowerValue));
+  const hostPowerShakeIntensity = Math.max(0, Math.min(1, (hostPowerPercent - 60) / 40));
+  const hostPowerBlurPx = Math.max(0, Math.min(1, (hostPowerPercent - 80) / 20)) * 0.9;
+  const hostPowerShakeStyle: CSSProperties | undefined =
+    hostPowerShakeIntensity > 0
+      ? ({
+          '--host-power-shake-x': `${(0.35 + hostPowerShakeIntensity * 1.65).toFixed(2)}px`,
+          '--host-power-shake-y': `${(0.25 + hostPowerShakeIntensity * 1.15).toFixed(2)}px`,
+          '--host-power-shake-r': `${(0.08 + hostPowerShakeIntensity * 0.47).toFixed(3)}deg`,
+          '--host-power-shake-duration': `${Math.round(220 - hostPowerShakeIntensity * 95)}ms`,
+        } as CSSProperties)
+      : undefined;
 
   const getPowerTooltip = (power: HostPowerActionViewModel): string => {
     const cooldown = cooldownsByPowerId[power.id] ?? {
@@ -142,8 +153,17 @@ export function HostPowerPanel({
         <CardTitle>Use Power to Cause Choas</CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="relative mb-2 h-7 overflow-hidden rounded-[12px] border-4 border-neo-ink bg-neo-paper">
-          <div className="h-full bg-neo-yellow transition-[width]" style={{ width: `${hostPowerPercent}%` }} />
+        <div
+          className={`relative mb-2 h-7 overflow-hidden rounded-[12px] border-4 border-neo-ink bg-neo-paper transition-[filter] duration-100 motion-reduce:transition-none ${hostPowerShakeIntensity > 0 ? 'host-power-meter-shake' : ''}`}
+          style={{
+            ...hostPowerShakeStyle,
+            filter: hostPowerBlurPx > 0 ? `blur(${hostPowerBlurPx.toFixed(2)}px)` : 'none',
+          }}
+        >
+          <div
+            className="h-full bg-neo-yellow transition-[width] duration-100 motion-reduce:transition-none"
+            style={{ width: `${hostPowerPercent}%` }}
+          />
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-between px-2">
             <p className="font-display text-xs font-black uppercase tracking-wide text-neo-ink">
               Host Power
@@ -170,7 +190,7 @@ export function HostPowerPanel({
                   disabled={disabled}
                   aria-disabled={disabled}
                   onClick={() => void onActivatePower(power.id)}
-                  className="relative w-full justify-between gap-3 overflow-hidden"
+                  className="relative w-full justify-between gap-3 overflow-hidden text-neo-paper disabled:text-neo-paper"
                 >
                   {cooldown.active ? (
                     <>

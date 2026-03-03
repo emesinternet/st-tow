@@ -74,9 +74,13 @@ export function PlayerInputPanel({
   const [submitting, setSubmitting] = useState(false);
   const [rowScale, setRowScale] = useState(1);
   const [scaledRowHeight, setScaledRowHeight] = useState(64);
+  const [feedbackFlashToken, setFeedbackFlashToken] = useState(0);
+  const [feedbackFlashTone, setFeedbackFlashTone] = useState<'danger' | ''>('');
+  const [mistakeShakeToken, setMistakeShakeToken] = useState(0);
   const scaleTrackRef = useRef<HTMLDivElement | null>(null);
   const scaleRowRef = useRef<HTMLDivElement | null>(null);
   const mobileInputRef = useRef<HTMLInputElement | null>(null);
+  const feedbackFlashTimeoutRef = useRef<number | null>(null);
 
   const targetWord = model?.currentWord ?? '';
   const isEliminated = model?.playerStatus === 'Eliminated';
@@ -119,6 +123,22 @@ export function PlayerInputPanel({
     setScaledRowHeight((current) => (Math.abs(current - nextHeight) < 1 ? current : nextHeight));
   }, []);
 
+  const triggerFeedbackFlash = useCallback((tone: 'danger') => {
+    if (feedbackFlashTimeoutRef.current != null) {
+      window.clearTimeout(feedbackFlashTimeoutRef.current);
+      feedbackFlashTimeoutRef.current = null;
+    }
+    if (tone === 'danger') {
+      setMistakeShakeToken((current) => current + 1);
+    }
+    setFeedbackFlashTone(tone);
+    setFeedbackFlashToken((current) => current + 1);
+    feedbackFlashTimeoutRef.current = window.setTimeout(() => {
+      setFeedbackFlashTone('');
+      feedbackFlashTimeoutRef.current = null;
+    }, 200);
+  }, []);
+
   useEffect(() => {
     setTyped('');
     setSubmitting(false);
@@ -155,6 +175,7 @@ export function PlayerInputPanel({
       setTyped(progress.nextTyped);
 
       if (progress.feedback === 'rejected') {
+        triggerFeedbackFlash('danger');
         void onRecordMistake().catch(() => {
           // Mistake telemetry is best-effort and should never block local typing flow.
         });
@@ -175,8 +196,17 @@ export function PlayerInputPanel({
         setSubmitting(false);
       }
     },
-    [canType, onRecordMistake, onSubmitWord, targetWord]
+    [canType, onRecordMistake, onSubmitWord, targetWord, triggerFeedbackFlash]
   );
+
+  useEffect(() => {
+    return () => {
+      if (feedbackFlashTimeoutRef.current != null) {
+        window.clearTimeout(feedbackFlashTimeoutRef.current);
+        feedbackFlashTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!canType) {
@@ -272,8 +302,29 @@ export function PlayerInputPanel({
   }, [canType, isEliminated, showReadyMessage]);
 
   return (
-    <Card>
-      <CardContent className="space-y-3" onPointerDown={focusTypingInput}>
+    <Card
+      className="relative overflow-hidden"
+      style={
+        mistakeShakeToken > 0
+          ? {
+              animationName: mistakeShakeToken % 2 === 0 ? 'mistake-shake-a' : 'mistake-shake-b',
+              animationDuration: '180ms',
+              animationTimingFunction: 'cubic-bezier(0.2, 0.9, 0.3, 1)',
+            }
+          : undefined
+      }
+    >
+      {feedbackFlashTone ? (
+        <span
+          key={feedbackFlashToken}
+          aria-hidden="true"
+          className={cn(
+            'mistake-flash-overlay pointer-events-none absolute inset-0 z-0',
+            feedbackFlashTone === 'danger' ? 'bg-neo-danger' : 'bg-neo-success'
+          )}
+        />
+      ) : null}
+      <CardContent className="relative z-10 space-y-3" onPointerDown={focusTypingInput}>
         <p className="sr-only" aria-live="polite" aria-atomic="true">
           {showReadyMessage
             ? `Get ready to type ${readyName}`

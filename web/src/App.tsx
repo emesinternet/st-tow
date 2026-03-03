@@ -23,9 +23,14 @@ import {
 } from '@/components/shared/ui/toast';
 import chillhouseTrack from '@/assets/music/chillhouse.mp3';
 import discoTrack from '@/assets/music/disco.mp3';
+import eurobeatTrack from '@/assets/music/eurobeat.mp3';
 import funkyTrack from '@/assets/music/funky.mp3';
 import { useSpacetimeSession } from '@/data/useSpacetimeSession';
-import { parsePostGameCloseStartedPayload } from '@/lib/events';
+import {
+  parsePostGameCloseStartedPayload,
+  summarizeHostAccuracy,
+  summarizeLatestHostPowerActivation,
+} from '@/lib/events';
 import { evaluateHostPowerActivationGuard, getCooldownRemainingMs } from '@/lib/hostPowerCooldown';
 import { selectUiViewModel } from '@/lib/selectors';
 import { useHostPowerCooldowns } from '@/lib/useHostPowerCooldowns';
@@ -46,6 +51,7 @@ const MUSIC_TRACKS = [
   { id: 'disco', label: 'Disco', src: discoTrack },
   { id: 'chillhouse', label: 'Chillhouse', src: chillhouseTrack },
   { id: 'funky', label: 'Funky', src: funkyTrack },
+  { id: 'eurobeat', label: 'Eurobeat', src: eurobeatTrack },
 ] as const;
 type MusicTrackId = (typeof MUSIC_TRACKS)[number]['id'];
 
@@ -649,6 +655,20 @@ export default function App() {
     }
     return '';
   }, [ui.lobby]);
+  const hostAccuracy = useMemo(() => {
+    const matchId = ui.matchHud?.matchId ?? '';
+    if (!matchId) {
+      return 0;
+    }
+    return summarizeHostAccuracy(snapshot.events, matchId).accuracy;
+  }, [snapshot.events, ui.matchHud?.matchId]);
+  const latestHostPowerActivation = useMemo(() => {
+    const matchId = ui.matchHud?.matchId ?? '';
+    if (!matchId) {
+      return null;
+    }
+    return summarizeLatestHostPowerActivation(snapshot.events, matchId);
+  }, [snapshot.events, ui.matchHud?.matchId]);
   const postGameCloseSecondsRemaining = useMemo(() => {
     if (ui.phase !== 'post' || !ui.lobby) {
       return null;
@@ -758,6 +778,7 @@ export default function App() {
             teamAPlayers={ui.lobby?.teamA ?? []}
             teamBPlayers={ui.lobby?.teamB ?? []}
             cameraStream={webcamMesh.backgroundStream}
+            latestPowerActivation={ui.matchHud ? latestHostPowerActivation : null}
           />
         ) : null}
         {ui.playerInput ? (
@@ -841,6 +862,7 @@ export default function App() {
         role={ui.role}
         lobby={ui.lobby}
         hud={ui.matchHud}
+        hostAccuracy={hostAccuracy}
         waitingForHostSeconds={ui.role === 'player' ? postGameCloseSecondsRemaining : null}
       />
       {leaveLobbyConfirmOpen ? (

@@ -173,6 +173,52 @@ test('selector keeps force fields physical and pull fields cumulative', () => {
   assert.equal(vm.lobby?.teamB[0]?.accuracy, 83);
 });
 
+test('selector keeps player accuracy in post-game states', () => {
+  const snapshot = makeBaseSnapshot();
+  snapshot.lobbies[0] = {
+    ...snapshot.lobbies[0],
+    status: 'Finished',
+  };
+  snapshot.matches[0] = {
+    ...snapshot.matches[0],
+    phase: 'PostGame',
+    winnerTeam: '',
+  };
+
+  const vm = selectUiViewModel({
+    connectionState: 'connected',
+    snapshot,
+    identity: 'c200abcd',
+    selectedLobbyId: '',
+    pendingJoinCode: '',
+    ignoredLobbyId: '',
+  });
+
+  assert.equal(vm.phase, 'post');
+  assert.equal(vm.lobby?.teamA[0]?.accuracy, 75);
+  assert.equal(vm.lobby?.teamB[0]?.accuracy, 83);
+});
+
+test('selector never shows 100 accuracy when submit count has misses', () => {
+  const snapshot = makeBaseSnapshot();
+  snapshot.tugPlayerStates[0] = {
+    ...snapshot.tugPlayerStates[0],
+    correctCount: 299,
+    submitCount: 300,
+  };
+
+  const vm = selectUiViewModel({
+    connectionState: 'connected',
+    snapshot,
+    identity: 'c200abcd',
+    selectedLobbyId: '',
+    pendingJoinCode: '',
+    ignoredLobbyId: '',
+  });
+
+  assert.equal(vm.lobby?.teamA[0]?.accuracy, 99);
+});
+
 test('selector exposes host score from tug_host_state when present', () => {
   const vm = selectUiViewModel({
     connectionState: 'connected',
@@ -200,6 +246,27 @@ test('selector exposes host score from tug_host_state when present', () => {
   );
   assert.equal(vm.hostPanel?.cameraEnabled, true);
   assert.equal(vm.hostPanel?.canToggleCamera, true);
+});
+
+test('selector clamps ramp and effective tier to 8', () => {
+  const snapshot = makeBaseSnapshot();
+  snapshot.tugStates[0] = {
+    ...snapshot.tugStates[0],
+    rampTier: 12,
+    difficultyBonusTier: 5,
+  };
+
+  const vm = selectUiViewModel({
+    connectionState: 'connected',
+    snapshot,
+    identity: 'c200host',
+    selectedLobbyId: '',
+    pendingJoinCode: '',
+    ignoredLobbyId: '',
+  });
+
+  assert.equal(vm.matchHud?.rampTier, 8);
+  assert.equal(vm.matchHud?.effectiveTier, 8);
 });
 
 test('selector derives pre-match seconds from round_seconds setting with fallback', () => {

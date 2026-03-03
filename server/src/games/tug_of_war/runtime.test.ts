@@ -21,17 +21,19 @@ test('countdown timing helpers model 3s pregame expiration', () => {
   assert.equal(isPhaseExpired(phaseEndsAt, 3_000_000n), true);
 });
 
-test('deriveDifficultyTier maps elapsed progress to five tiers', () => {
+test('deriveDifficultyTier ramps earlier with a non-linear eight-tier curve', () => {
   const startedAt = 1_000_000n;
   const roundSeconds = 100;
 
   assert.equal(deriveDifficultyTier(startedAt, startedAt, roundSeconds), 1);
-  assert.equal(deriveDifficultyTier(startedAt + 19_000_000n, startedAt, roundSeconds), 1);
-  assert.equal(deriveDifficultyTier(startedAt + 20_000_000n, startedAt, roundSeconds), 2);
-  assert.equal(deriveDifficultyTier(startedAt + 45_000_000n, startedAt, roundSeconds), 3);
-  assert.equal(deriveDifficultyTier(startedAt + 79_000_000n, startedAt, roundSeconds), 4);
-  assert.equal(deriveDifficultyTier(startedAt + 80_000_000n, startedAt, roundSeconds), 5);
-  assert.equal(deriveDifficultyTier(startedAt + 150_000_000n, startedAt, roundSeconds), 5);
+  assert.equal(deriveDifficultyTier(startedAt + 5_000_000n, startedAt, roundSeconds), 2);
+  assert.equal(deriveDifficultyTier(startedAt + 12_000_000n, startedAt, roundSeconds), 3);
+  assert.equal(deriveDifficultyTier(startedAt + 23_000_000n, startedAt, roundSeconds), 4);
+  assert.equal(deriveDifficultyTier(startedAt + 35_000_000n, startedAt, roundSeconds), 5);
+  assert.equal(deriveDifficultyTier(startedAt + 49_000_000n, startedAt, roundSeconds), 6);
+  assert.equal(deriveDifficultyTier(startedAt + 65_000_000n, startedAt, roundSeconds), 7);
+  assert.equal(deriveDifficultyTier(startedAt + 82_000_000n, startedAt, roundSeconds), 8);
+  assert.equal(deriveDifficultyTier(startedAt + 150_000_000n, startedAt, roundSeconds), 8);
 });
 
 test('host correct submit increments host score only and keeps host non-eliminable', () => {

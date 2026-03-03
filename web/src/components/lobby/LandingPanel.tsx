@@ -36,25 +36,8 @@ export function LandingPanel({
       <Card>
         <CardContent className="flex h-full min-h-[260px] flex-col justify-between gap-3">
           <div className="space-y-2">
-            <CardTitle className="text-neo-ink">How to Play</CardTitle>
-            <p className="ui-subtext">
-              Your goal is to hype up the dancing dragon and pull it to your side of the floor.
-            </p>
-            <p className="ui-subtext">
-              Type your assigned words as fast as you can. Every correct word adds momentum for your
-              team and drags the dragon toward your side.
-            </p>
-            <p className="ui-subtext">
-              When the timer ends, sudden death begins. Mistakes can eliminate players, and if the
-              dragon lands in the tie zone, teams settle it with rock-paper-scissors.
-            </p>
-            <p className="ui-subtext">Lobbies support up to 50 total players.</p>
-          </div>
-          <div className="space-y-2">
-            <div>
-              <CardTitle className="text-neo-ink">Join a Match</CardTitle>
-              <p className="ui-subtext">Enter a lobby code and jump in.</p>
-            </div>
+            <CardTitle className="text-neo-ink">Join a Lobby</CardTitle>
+            <p className="ui-subtext">Enter a lobby code and jump in.</p>
             <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
               <label className="block space-y-1">
                 <span className="font-display text-xs font-bold uppercase tracking-wide">
@@ -77,12 +60,27 @@ export function LandingPanel({
               </Button>
             </div>
           </div>
+          <div className="space-y-2">
+            <CardTitle className="text-neo-ink">How to Play</CardTitle>
+            <p className="ui-subtext">
+              Your goal is to hype up the dancing dragon and pull it to your side of the floor.
+            </p>
+            <p className="ui-subtext">
+              Type your assigned words as fast as you can. Every correct word adds momentum for your
+              team and drags the dragon toward your side.
+            </p>
+            <p className="ui-subtext">
+              When the timer ends, sudden death begins. Mistakes can eliminate players, and if the
+              dragon lands in the tie zone, teams settle it with rock-paper-scissors.
+            </p>
+            <p className="ui-subtext">Lobbies support up to 50 total players.</p>
+          </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Host a Match</CardTitle>
+          <CardTitle>Host a Lobby</CardTitle>
           <p className="ui-subtext">Configure your lobby and start a new game.</p>
         </CardHeader>
         <CardContent>

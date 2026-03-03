@@ -65,7 +65,8 @@ import {
   deriveSecondsRemaining,
   isPhaseExpired,
 } from './games/tug_of_war/runtime';
-import type {
+import {
+  MAX_WORD_DIFFICULTY_TIER,
   WordDifficultyTier,
   WordEntry,
   WordMode,
@@ -376,6 +377,7 @@ const RPS_STAGE_VOTING = 'Voting';
 const RPS_STAGE_REVEAL = 'Reveal';
 const TIE_ZONE_PERCENT_OPTIONS = new Set([10, 20, 30, 40]);
 const WEBRTC_SIGNAL_TTL_MICROS = msToMicros(30_000);
+const MAX_PERSISTENT_DIFFICULTY_BONUS_TIER = MAX_WORD_DIFFICULTY_TIER - 1;
 
 type HostPowerId =
   | typeof HOST_POWER_TECH_MODE_BURST
@@ -412,7 +414,7 @@ const HOST_POWER_CONFIG: Record<HostPowerId, HostPowerConfig> = {
   [HOST_POWER_DIFFICULTY_UP_BURST]: {
     id: HOST_POWER_DIFFICULTY_UP_BURST,
     cost: 25,
-    durationMs: 20_000,
+    durationMs: 0,
     wordMode: null,
     difficultyBonusTier: 1,
     rerollOnActivate: true,
@@ -439,8 +441,8 @@ function clampTier(value: number): WordDifficultyTier {
   if (value <= 1) {
     return 1;
   }
-  if (value >= 5) {
-    return 5;
+  if (value >= MAX_WORD_DIFFICULTY_TIER) {
+    return MAX_WORD_DIFFICULTY_TIER;
   }
   return value as WordDifficultyTier;
 }
@@ -686,7 +688,7 @@ function deriveBaseDifficultyTier(
   match: MatchRow
 ): WordDifficultyTier {
   if (match.phase === MATCH_PHASE_SUDDEN_DEATH) {
-    return 5;
+    return MAX_WORD_DIFFICULTY_TIER;
   }
   const roundSeconds = getLobbySettingInt(
     ctx,
@@ -1027,7 +1029,7 @@ function purgeClosedLobbyData(ctx: ReducerCtx<any>, lobbyId: string): void {
   clearGameEventsForLobby(ctx, lobbyId);
 }
 
-function closeLobbyAfterPostGame(ctx: ReducerCtx<any>, lobby: LobbyRow, matchId: string): void {
+function closeLobbyAfterPostGame(ctx: ReducerCtx<any>, lobby: LobbyRow): void {
   const closedAt = nowMicros(ctx);
 
   for (const player of listPlayersInLobby(ctx, lobby.lobby_id)) {
@@ -1065,11 +1067,7 @@ function countActiveByTeam(players: PlayerRow[]): { a: number; b: number } {
   return { a, b };
 }
 
-function computeSubmissionForceGain(
-  ctx: ReducerCtx<any>,
-  lobbyId: string,
-  team: string
-): number {
+function computeSubmissionForceGain(ctx: ReducerCtx<any>, lobbyId: string, team: string): number {
   const counts = countActiveByTeam(listPlayersInLobby(ctx, lobbyId));
   const teamActiveCount = team === TEAM_A ? counts.a : team === TEAM_B ? counts.b : 0;
   const totalActiveCount = counts.a + counts.b;
@@ -1089,10 +1087,7 @@ function computeSubmissionForceGain(
       ? 1
       : Math.pow(FORCE_SCALING_LOBBY_REFERENCE / totalActiveCount, FORCE_SCALING_LOBBY_EXPONENT);
 
-  const chance = Math.min(
-    1,
-    Math.max(FORCE_SCALING_MIN_CHANCE, teamScale * lobbyScale)
-  );
+  const chance = Math.min(1, Math.max(FORCE_SCALING_MIN_CHANCE, teamScale * lobbyScale));
   const roll = Number(ctx.random.uint32() % 10_000) / 10_000;
   return roll < chance ? 1 : 0;
 }
@@ -1403,7 +1398,7 @@ function runPostGameCloseTick(ctx: ReducerCtx<any>, matchId: string): void {
     closed_at_micros: now.toString(),
     reason: isManualDue ? 'manual' : 'idle_timeout',
   });
-  closeLobbyAfterPostGame(ctx, lobby, matchId);
+  closeLobbyAfterPostGame(ctx, lobby);
 }
 
 function normalizeRpsChoice(value: string): RpsChoice | '' {
@@ -1412,10 +1407,6 @@ function normalizeRpsChoice(value: string): RpsChoice | '' {
     return normalized;
   }
   return '';
-}
-
-function isValidRpsChoice(value: string): value is RpsChoice {
-  return normalizeRpsChoice(value) !== '';
 }
 
 function randomRpsChoice(ctx: ReducerCtx<any>): RpsChoice {
@@ -1816,7 +1807,6 @@ function maybeExpireTimedPower(
     active_power_id: '',
     power_expires_at_micros: 0n,
     word_mode: WORD_MODE_NORMAL,
-    difficulty_bonus_tier: 0,
   };
   replaceRow(ctx.db.tug_state, tug, tugNext);
 
@@ -2549,6 +2539,10 @@ export const tug_record_miss = spacetimedb.reducer(
 
     const lobby = getLobbyOrThrow(ctx, match.lobby_id);
     if (lobby.host_identity.equals(ctx.sender)) {
+      // Host miss telemetry contributes to host post-game accuracy.
+      emitGameEvent(ctx, lobby.lobby_id, match_id, 'host_submit_bad', {
+        source: 'mistake',
+      });
       return;
     }
 
@@ -2621,13 +2615,25 @@ export const tug_activate_power = spacetimedb.reducer(
     const tiersBefore = computeCurrentTiers(ctx, lobby, match, tug);
     const modeBefore = tug.word_mode;
     const now = nowMicros(ctx);
-    const tugNext: TugStateRow = {
-      ...tug,
-      active_power_id: config.id,
-      power_expires_at_micros: now + msToMicros(config.durationMs),
-      word_mode: config.wordMode ?? WORD_MODE_NORMAL,
-      difficulty_bonus_tier: config.difficultyBonusTier,
-    };
+    const isDifficultyUp = config.id === HOST_POWER_DIFFICULTY_UP_BURST;
+    const difficultyBonusTier = isDifficultyUp
+      ? Math.min(
+          MAX_PERSISTENT_DIFFICULTY_BONUS_TIER,
+          tug.difficulty_bonus_tier + config.difficultyBonusTier
+        )
+      : tug.difficulty_bonus_tier;
+    const tugNext: TugStateRow = isDifficultyUp
+      ? {
+          ...tug,
+          difficulty_bonus_tier: difficultyBonusTier,
+        }
+      : {
+          ...tug,
+          active_power_id: config.id,
+          power_expires_at_micros: now + msToMicros(config.durationMs),
+          word_mode: config.wordMode ?? WORD_MODE_NORMAL,
+          difficulty_bonus_tier: difficultyBonusTier,
+        };
     replaceRow(ctx.db.tug_state, tug, tugNext);
     let tugActive = tugNext;
 
@@ -2657,7 +2663,7 @@ export const tug_activate_power = spacetimedb.reducer(
       word_mode: tugActive.word_mode,
       ramp_tier: tiersAfter.rampTier,
       effective_tier: tiersAfter.effectiveTier,
-      duration_ms: config.durationMs,
+      duration_ms: isDifficultyUp ? 0 : config.durationMs,
     });
 
     if (config.rerollOnActivate) {

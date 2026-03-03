@@ -33,6 +33,7 @@ const DEFAULT_ROUND_SECONDS = 90;
 const DEFAULT_WIN_THRESHOLD = 100;
 const DEFAULT_TIE_ZONE_PERCENT = 10;
 const MATCH_PHASE_TIE_BREAK_RPS = 'TieBreakRps';
+const MAX_WORD_DIFFICULTY_TIER = 8;
 const HOST_POWER_SPECS: Array<{ id: string; label: string; cost: number }> = [
   { id: 'flipper_burst', label: 'Flipper', cost: 20 },
   { id: 'difficulty_up_burst', label: 'Difficulty Up', cost: 25 },
@@ -170,12 +171,22 @@ function buildTeamPlayerViewModel(
   identity: string,
   playerStateByPlayerId: Map<string, NormalizedTugPlayerState>
 ): TeamPlayerViewModel[] {
+  const toDisplayAccuracy = (correctCount: number, submitCount: number): number => {
+    if (submitCount <= 0) {
+      return 0;
+    }
+    if (correctCount >= submitCount) {
+      return 100;
+    }
+    return Math.max(0, Math.min(99, Math.round((correctCount / submitCount) * 100)));
+  };
+
   return players
     .map((player) => {
       const playerState = playerStateByPlayerId.get(player.playerId);
       const correctCount = playerState?.correctCount ?? 0;
       const submitCount = playerState?.submitCount ?? 0;
-      const accuracy = submitCount > 0 ? Math.round((correctCount / submitCount) * 100) : 0;
+      const accuracy = toDisplayAccuracy(correctCount, submitCount);
 
       return {
         playerId: player.playerId,
@@ -624,10 +635,10 @@ function buildMatchHudModel(
   const winThreshold = tug?.winThreshold ?? lobbyWinThreshold;
   const tieZonePercent = Math.max(0, tug?.tieZonePercent ?? lobbyTieZonePercent);
   const tieZoneBounds = normalizeTieZoneBounds(winThreshold, tieZonePercent);
-  const rampTier = Math.max(1, Math.min(5, tug?.rampTier ?? 1));
+  const rampTier = Math.max(1, Math.min(MAX_WORD_DIFFICULTY_TIER, tug?.rampTier ?? 1));
   const effectiveTier = Math.max(
     1,
-    Math.min(5, rampTier + Math.max(0, tug?.difficultyBonusTier ?? 0))
+    Math.min(MAX_WORD_DIFFICULTY_TIER, rampTier + Math.max(0, tug?.difficultyBonusTier ?? 0))
   );
   const activePowerId = tug?.activePowerId ?? '';
   const nowMicros = BigInt(Math.trunc(snapshotGeneratedAt)) * 1000n;

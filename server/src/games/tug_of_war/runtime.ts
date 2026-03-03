@@ -1,6 +1,10 @@
 import { TEAM_A, TEAM_B } from '../../core/constants';
 import { isCorrectWordSubmission } from './gameplay';
-import type { WordDifficultyTier } from './word_catalog';
+import {
+  MAX_WORD_DIFFICULTY_TIER,
+  MIN_WORD_DIFFICULTY_TIER,
+  type WordDifficultyTier,
+} from './word_catalog';
 
 export interface TeamSubmitState {
   teamAForce: number;
@@ -22,6 +26,8 @@ export interface HostSubmitResult {
   nextState: HostSubmitState;
 }
 
+const DIFFICULTY_RAMP_EXPONENT = 0.65;
+
 export function deriveSecondsRemaining(phaseEndsAtMicros: bigint, nowMicros: bigint): number {
   const remainingMicros = phaseEndsAtMicros - nowMicros;
   if (remainingMicros <= 0n) {
@@ -36,33 +42,27 @@ export function deriveDifficultyTier(
   roundSeconds: number
 ): WordDifficultyTier {
   if (roundSeconds <= 0) {
-    return 5;
+    return MAX_WORD_DIFFICULTY_TIER;
   }
   const elapsedMicros = nowMicros - startedAtMicros;
   if (elapsedMicros <= 0n) {
-    return 1;
+    return MIN_WORD_DIFFICULTY_TIER;
   }
 
   const roundMicros = BigInt(roundSeconds) * 1_000_000n;
   if (roundMicros <= 0n) {
-    return 5;
+    return MAX_WORD_DIFFICULTY_TIER;
   }
 
-  const progress =
-    Number(elapsedMicros > roundMicros ? roundMicros : elapsedMicros) / Number(roundMicros);
-  if (progress < 0.2) {
-    return 1;
-  }
-  if (progress < 0.4) {
-    return 2;
-  }
-  if (progress < 0.6) {
-    return 3;
-  }
-  if (progress < 0.8) {
-    return 4;
-  }
-  return 5;
+  const clampedElapsed = elapsedMicros > roundMicros ? roundMicros : elapsedMicros;
+  const progress = Number(clampedElapsed) / Number(roundMicros);
+  const curvedProgress = Math.pow(progress, DIFFICULTY_RAMP_EXPONENT);
+  const rawTier = Math.floor(curvedProgress * MAX_WORD_DIFFICULTY_TIER) + 1;
+  const boundedTier = Math.max(
+    MIN_WORD_DIFFICULTY_TIER,
+    Math.min(MAX_WORD_DIFFICULTY_TIER, rawTier)
+  );
+  return boundedTier as WordDifficultyTier;
 }
 
 export function isPhaseExpired(phaseEndsAtMicros: bigint, nowMicros: bigint): boolean {

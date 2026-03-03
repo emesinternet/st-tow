@@ -1,6 +1,8 @@
 import type { ReducerCtx } from 'spacetimedb/server';
-import { WORD_MODE_NORMAL } from '../../core/constants';
+import { WORD_MODE_NORMAL, WORD_MODE_SYMBOLS } from '../../core/constants';
 import {
+  MAX_WORD_DIFFICULTY_TIER,
+  MIN_WORD_DIFFICULTY_TIER,
   WORD_CATALOG,
   type WordDifficultyTier,
   type WordEntry,
@@ -62,6 +64,110 @@ function selectCandidates(
   );
 }
 
+function minimumSelectableTier(
+  mode: WordMode,
+  maxDifficultyTier: WordDifficultyTier
+): WordDifficultyTier {
+  if (mode === WORD_MODE_NORMAL) {
+    if (maxDifficultyTier <= 2) {
+      return MIN_WORD_DIFFICULTY_TIER;
+    }
+    if (maxDifficultyTier <= 3) {
+      return 2;
+    }
+    if (maxDifficultyTier <= 4) {
+      return 3;
+    }
+    if (maxDifficultyTier <= 5) {
+      return 4;
+    }
+    if (maxDifficultyTier <= 6) {
+      return 5;
+    }
+    if (maxDifficultyTier <= 7) {
+      return 6;
+    }
+    return 7;
+  }
+
+  if (mode === WORD_MODE_SYMBOLS) {
+    if (maxDifficultyTier <= 3) {
+      return MIN_WORD_DIFFICULTY_TIER;
+    }
+    if (maxDifficultyTier <= 5) {
+      return 2;
+    }
+    if (maxDifficultyTier <= 7) {
+      return 3;
+    }
+    return 4;
+  }
+
+  if (maxDifficultyTier <= 2) {
+    return MIN_WORD_DIFFICULTY_TIER;
+  }
+  if (maxDifficultyTier <= 4) {
+    return 2;
+  }
+  if (maxDifficultyTier <= 6) {
+    return 3;
+  }
+  if (maxDifficultyTier <= 7) {
+    return 4;
+  }
+  return 5;
+}
+
+function minimumLengthForDifficulty(mode: WordMode, maxDifficultyTier: WordDifficultyTier): number {
+  if (mode !== WORD_MODE_NORMAL) {
+    return 0;
+  }
+
+  if (maxDifficultyTier >= 8) {
+    return 10;
+  }
+  if (maxDifficultyTier >= 7) {
+    return 9;
+  }
+  if (maxDifficultyTier >= 6) {
+    return 8;
+  }
+  if (maxDifficultyTier >= 5) {
+    return 7;
+  }
+  return 0;
+}
+
+function constrainToDifficultyWindow(
+  mode: WordMode,
+  candidates: readonly WordEntry[],
+  maxDifficultyTier: WordDifficultyTier
+): WordEntry[] {
+  if (maxDifficultyTier >= MAX_WORD_DIFFICULTY_TIER) {
+    const topHalfFloor = mode === WORD_MODE_SYMBOLS ? 4 : 5;
+    const topHalf = candidates.filter((entry) => entry.tier >= topHalfFloor);
+    if (topHalf.length > 0) {
+      candidates = topHalf;
+    }
+  }
+
+  const minTier = minimumSelectableTier(mode, maxDifficultyTier);
+  let constrained = candidates.filter(
+    (entry) => entry.tier >= minTier && entry.tier <= maxDifficultyTier
+  );
+  if (constrained.length === 0) {
+    constrained = [...candidates];
+  }
+
+  const minLength = minimumLengthForDifficulty(mode, maxDifficultyTier);
+  if (minLength <= 0) {
+    return constrained;
+  }
+
+  const lengthFiltered = constrained.filter((entry) => entry.value.length >= minLength);
+  return lengthFiltered.length > 0 ? lengthFiltered : constrained;
+}
+
 export function pickWordForContext(
   ctx: ReducerCtx<any>,
   input: PickWordForContextInput
@@ -88,9 +194,12 @@ export function pickWordForContext(
     candidates = [...WORD_CATALOG];
   }
 
+  const difficultyWindowPool = constrainToDifficultyWindow(mode, candidates, maxDifficultyTier);
   const preferredPool =
-    lastWordType == null ? candidates : candidates.filter((entry) => entry.type !== lastWordType);
-  const mixedPool = preferredPool.length > 0 ? preferredPool : candidates;
+    lastWordType == null
+      ? difficultyWindowPool
+      : difficultyWindowPool.filter((entry) => entry.type !== lastWordType);
+  const mixedPool = preferredPool.length > 0 ? preferredPool : difficultyWindowPool;
 
   const pickedTier = weightedTierChoice(ctx, mixedPool);
   if (pickedTier == null) {

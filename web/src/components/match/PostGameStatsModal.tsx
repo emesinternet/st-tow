@@ -11,6 +11,7 @@ interface PostGameStatsModalProps {
   role: UiRole;
   lobby: LobbyViewModel | null;
   hud: MatchHudViewModel | null;
+  hostAccuracy: number;
   waitingForHostSeconds: number | null;
 }
 
@@ -48,7 +49,7 @@ function playerRows(lobby: LobbyViewModel): TeamPlayerViewModel[] {
 function leaderboardRows(
   lobby: LobbyViewModel,
   hostSuccessful: number,
-  hostAccuracy: number | null
+  hostAccuracy: number
 ): LeaderboardRow[] {
   const hostRow: LeaderboardRow = {
     rowId: '__host__',
@@ -76,6 +77,7 @@ export function PostGameStatsModal({
   role,
   lobby,
   hud,
+  hostAccuracy,
   waitingForHostSeconds,
 }: PostGameStatsModalProps) {
   const titleId = useId();
@@ -87,7 +89,6 @@ export function PostGameStatsModal({
   const teamASuccessful = lobby.teamA.reduce((total, player) => total + player.correctCount, 0);
   const teamBSuccessful = lobby.teamB.reduce((total, player) => total + player.correctCount, 0);
   const hostSuccessful = Math.max(0, hud?.hostSuccessfulWords ?? 0);
-  const hostAccuracy = null;
   const rows = leaderboardRows(lobby, hostSuccessful, hostAccuracy);
   const hasRows = rows.length > 0;
   const visibleRowCount = Math.max(1, Math.min(10, rows.length));
@@ -173,10 +174,10 @@ export function PostGameStatsModal({
                             player.isHost
                               ? 'accent'
                               : player.team === 'A'
-                              ? 'teamA'
-                              : player.team === 'B'
-                                ? 'teamB'
-                                : 'neutral'
+                                ? 'teamA'
+                                : player.team === 'B'
+                                  ? 'teamB'
+                                  : 'neutral'
                           }
                         >
                           {teamLabel(player.team)}

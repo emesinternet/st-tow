@@ -49,3 +49,53 @@ test('pickWordForContext avoids repeating the last word type when alternatives e
 
   assert.notEqual(picked.type, 'brace_pattern');
 });
+
+test('pickWordForContext never returns a tier above maxDifficultyTier up to tier 8', () => {
+  for (const maxDifficultyTier of [1, 2, 3, 4, 5, 6, 7, 8] as const) {
+    const picked = pickWordForContext(makeCtx(), {
+      mode: WORD_MODE_TECH,
+      maxDifficultyTier,
+      excluded: new Set<string>(),
+      lastWordType: null,
+    });
+    assert.ok(
+      picked.tier <= maxDifficultyTier,
+      `picked tier ${picked.tier} exceeds max ${maxDifficultyTier}`
+    );
+  }
+});
+
+test('pickWordForContext keeps higher difficulty away from bottom tiers', () => {
+  const midPicked = pickWordForContext(makeCtx(false), {
+    mode: WORD_MODE_NORMAL,
+    maxDifficultyTier: 3,
+    excluded: new Set<string>(),
+    lastWordType: null,
+  });
+  assert.ok(midPicked.tier >= 2, `expected tier >= 2 for max 3, got ${midPicked.tier}`);
+
+  const topPicked = pickWordForContext(makeCtx(false), {
+    mode: WORD_MODE_NORMAL,
+    maxDifficultyTier: 8,
+    excluded: new Set<string>(),
+    lastWordType: null,
+  });
+  assert.ok(topPicked.tier >= 7, `expected tier >= 7 for max 8, got ${topPicked.tier}`);
+  assert.ok(
+    topPicked.value.length >= 10,
+    `expected length >= 10 for max 8, got ${topPicked.value}`
+  );
+});
+
+test('pickWordForContext keeps symbols mode less aggressive at high tier', () => {
+  const topSymbols = pickWordForContext(makeCtx(false), {
+    mode: WORD_MODE_SYMBOLS,
+    maxDifficultyTier: 8,
+    excluded: new Set<string>(),
+    lastWordType: null,
+  });
+  assert.ok(
+    topSymbols.tier >= 4,
+    `expected symbols tier >= 4 at max 8, got ${topSymbols.tier}`
+  );
+});
