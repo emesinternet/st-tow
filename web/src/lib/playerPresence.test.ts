@@ -82,7 +82,31 @@ test('shape assignment stays stable for each player seed', () => {
   assert.deepEqual(changedShapes, baselineShapes);
 });
 
-test('presence sizes scale up with higher contribution', () => {
+test('shape assignment stays stable even if team changes', () => {
+  const playerA = makePlayer('shared-player', 'A', 5, 10n);
+  const playerB = { ...playerA, team: 'B' as const };
+
+  const shapeInTeamA =
+    derivePlayerPresenceSpecs({
+      players: [playerA],
+      team: 'A',
+      lane: 'left',
+      density: 1,
+      showEliminated: false,
+    })[0]?.shape ?? '';
+  const shapeInTeamB =
+    derivePlayerPresenceSpecs({
+      players: [playerB],
+      team: 'B',
+      lane: 'right',
+      density: 1,
+      showEliminated: false,
+    })[0]?.shape ?? '';
+
+  assert.equal(shapeInTeamA, shapeInTeamB);
+});
+
+test('presence sizes remain uniform across contributions', () => {
   const players = [
     makePlayer('a-low', 'A', 1, 10n),
     makePlayer('a-mid', 'A', 6, 20n),
@@ -97,8 +121,8 @@ test('presence sizes scale up with higher contribution', () => {
   });
   const byId = new Map(specs.map((spec) => [spec.playerId, spec] as const));
 
-  assert.ok((byId.get('a-low')?.sizePx ?? 0) < (byId.get('a-mid')?.sizePx ?? 0));
-  assert.ok((byId.get('a-mid')?.sizePx ?? 0) < (byId.get('a-high')?.sizePx ?? 0));
+  assert.equal(byId.get('a-low')?.sizePx, byId.get('a-mid')?.sizePx);
+  assert.equal(byId.get('a-mid')?.sizePx, byId.get('a-high')?.sizePx);
 });
 
 test('team color variance stays within bounded ranges', () => {
@@ -120,18 +144,18 @@ test('team color variance stays within bounded ranges', () => {
   for (const spec of specsA) {
     const color = parseHsl(spec.fillColor);
     assert.ok(Math.abs(color.hue - 16) <= 8);
-    assert.ok(color.saturation >= 52 && color.saturation <= 92);
-    assert.ok(color.lightness >= 35 && color.lightness <= 64);
+    assert.ok(color.saturation >= 58 && color.saturation <= 92);
+    assert.ok(color.lightness >= 42 && color.lightness <= 68);
   }
   for (const spec of specsB) {
     const color = parseHsl(spec.fillColor);
     assert.ok(Math.abs(color.hue - 208) <= 8);
-    assert.ok(color.saturation >= 52 && color.saturation <= 92);
-    assert.ok(color.lightness >= 35 && color.lightness <= 64);
+    assert.ok(color.saturation >= 58 && color.saturation <= 92);
+    assert.ok(color.lightness >= 42 && color.lightness <= 68);
   }
 });
 
-test('collision pass keeps dense markers separated', () => {
+test('left lane positions span most of the available horizontal space', () => {
   const players = Array.from({ length: 24 }, (_, index) =>
     makePlayer(`a-${index}`, 'A', index % 7, BigInt(index))
   );
@@ -141,11 +165,47 @@ test('collision pass keeps dense markers separated', () => {
     lane: 'left',
     density: players.length,
     showEliminated: false,
-  }).sort((left, right) => left.xPercent - right.xPercent);
+  });
+  const minX = Math.min(...specs.map((spec) => spec.xPercent));
+  const maxX = Math.max(...specs.map((spec) => spec.xPercent));
+  assert.ok(minX <= 10);
+  assert.ok(maxX >= 90);
+  assert.ok(maxX - minX >= 72);
+});
 
-  for (let index = 1; index < specs.length; index += 1) {
-    assert.ok(specs[index].xPercent - specs[index - 1].xPercent >= 1.2);
-  }
+test('right lane positions span most of the available horizontal space', () => {
+  const players = Array.from({ length: 24 }, (_, index) =>
+    makePlayer(`b-${index}`, 'B', index % 7, BigInt(index))
+  );
+  const specs = derivePlayerPresenceSpecs({
+    players,
+    team: 'B',
+    lane: 'right',
+    density: players.length,
+    showEliminated: false,
+  });
+  const minX = Math.min(...specs.map((spec) => spec.xPercent));
+  const maxX = Math.max(...specs.map((spec) => spec.xPercent));
+  assert.ok(minX <= 10);
+  assert.ok(maxX >= 90);
+  assert.ok(maxX - minX >= 72);
+});
+
+test('presence uses a wide vertical spread for dense teams', () => {
+  const players = Array.from({ length: 30 }, (_, index) =>
+    makePlayer(`a-${index}`, 'A', index % 5, BigInt(index))
+  );
+  const specs = derivePlayerPresenceSpecs({
+    players,
+    team: 'A',
+    lane: 'left',
+    density: players.length,
+    showEliminated: false,
+  });
+
+  const minBottom = Math.min(...specs.map((spec) => spec.bottomPx));
+  const maxBottom = Math.max(...specs.map((spec) => spec.bottomPx));
+  assert.ok(maxBottom - minBottom >= 95);
 });
 
 test('deriveTeamLeaderId resolves ties by latest correct timestamp', () => {

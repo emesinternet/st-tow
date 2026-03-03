@@ -72,8 +72,8 @@ function PresenceShape({ spec }: { spec: PlayerPresenceSpec }) {
   const sharedProps = {
     fill: spec.fillColor,
     stroke: spec.strokeColor,
-    strokeWidth: 8,
-    vectorEffect: 'non-scaling-stroke' as const,
+    strokeWidth: 7,
+    strokeLinejoin: 'round' as const,
   };
 
   return (
@@ -120,7 +120,6 @@ function LeaderCrown({ markerSizePx }: { markerSizePx: number }) {
         fill="hsl(var(--accent))"
         stroke="hsl(var(--border))"
         strokeWidth="8"
-        vectorEffect="non-scaling-stroke"
       />
       <rect
         x="12"
@@ -131,7 +130,6 @@ function LeaderCrown({ markerSizePx }: { markerSizePx: number }) {
         fill="hsl(var(--accent))"
         stroke="hsl(var(--border))"
         strokeWidth="8"
-        vectorEffect="non-scaling-stroke"
       />
     </svg>
   );
@@ -167,6 +165,7 @@ function TeamMarkers({
     [connected]
   );
   const density = connected.length;
+  const showNames = true;
   const nameClass =
     density >= 40
       ? 'max-w-[36px] text-[8px]'
@@ -307,11 +306,29 @@ function TeamMarkers({
         if (!player) {
           return null;
         }
+        const renderedMarkerSizePx =
+          density >= 40
+            ? Math.max(8, spec.sizePx - 4)
+            : density >= 30
+              ? Math.max(8, spec.sizePx - 3)
+              : density >= 20
+                ? Math.max(9, spec.sizePx - 3)
+                : density >= 12
+                  ? Math.max(9, spec.sizePx - 2)
+                  : spec.sizePx;
+        const leaderBoostPx = spec.isLeader ? (density >= 30 ? 3 : 4) : 0;
+        const finalMarkerSizePx = renderedMarkerSizePx + leaderBoostPx;
+        const renderedSpec =
+          finalMarkerSizePx === spec.sizePx ? spec : { ...spec, sizePx: finalMarkerSizePx };
         const cheer = cheerByPlayer[player.playerId];
+        const bubbleBottomPx = spec.isLeader
+          ? Math.round(renderedSpec.sizePx * 1.45) + 6
+          : Math.round(renderedSpec.sizePx) + 6;
         const bubble = cheer ? (
           <motion.span
             key={`${player.playerId}:cheer:${cheer.token}`}
-            className="pointer-events-none absolute bottom-[100%] left-1/2 z-10 mb-1 max-w-[92px] -translate-x-1/2 truncate rounded-[9px] border border-neo-ink bg-neo-paper px-1.5 py-0.5 text-[10px] font-black uppercase leading-none text-neo-ink"
+            className="pointer-events-none absolute left-1/2 z-[120] mb-0.5 max-w-[92px] -translate-x-1/2 truncate rounded-[9px] border border-neo-ink bg-neo-paper px-1.5 py-0.5 text-[10px] font-black uppercase leading-none text-neo-ink"
+            style={{ bottom: `${bubbleBottomPx}px` }}
             initial={{ opacity: 0, y: 6, scale: 0.9 }}
             animate={{
               opacity: [0, 1, 1, 0],
@@ -330,26 +347,30 @@ function TeamMarkers({
         ) : null;
 
         const markerContent = (
-          <>
-            {bubble}
-            <span
-              className={`${nameClass} truncate font-bold uppercase leading-tight ${
-                cameraMode ? 'text-white drop-shadow-[0_1px_0_#000]' : 'text-neo-ink/85'
-              }`}
-            >
-              {player.displayName}
-            </span>
+          <div className="flex flex-col items-center text-center">
             <span className="relative mt-0.5 inline-flex items-center justify-center">
-              {spec.isLeader ? <LeaderCrown markerSizePx={spec.sizePx} /> : null}
-              <PresenceShape spec={spec} />
+              {bubble}
+              {spec.isLeader ? <LeaderCrown markerSizePx={renderedSpec.sizePx} /> : null}
+              <PresenceShape spec={renderedSpec} />
             </span>
-          </>
+            {showNames ? (
+              <span
+                className={`${nameClass} mt-0.5 truncate font-bold uppercase leading-tight ${
+                  cameraMode ? 'text-white drop-shadow-[0_1px_0_#000]' : 'text-neo-ink/85'
+                }`}
+              >
+                {player.displayName}
+              </span>
+            ) : null}
+          </div>
         );
 
         return (
           <div
             key={player.playerId}
-            className="absolute z-20 flex flex-col items-center justify-end text-center"
+            className={`absolute flex flex-col items-center justify-end text-center ${
+              cheer ? 'z-[75]' : 'z-40'
+            }`}
             style={{
               left: `${spec.xPercent}%`,
               bottom: `${spec.bottomPx}px`,
@@ -357,7 +378,7 @@ function TeamMarkers({
             }}
           >
             <motion.div
-              className="flex flex-col items-center justify-end text-center"
+              className="flex flex-col items-center justify-end overflow-visible text-center"
               animate={
                 reducedMotion
                   ? undefined
@@ -550,7 +571,7 @@ export function MatchHud({
               </div>
             ) : null}
           </AnimatePresence>
-          <div className="bg-tug-war-gradient relative h-[12.5rem] overflow-hidden rounded-[16px] border-4 border-neo-ink sm:h-[15rem]">
+          <div className="bg-tug-war-gradient relative h-[14rem] overflow-hidden rounded-[16px] border-4 border-neo-ink sm:h-[17rem]">
             {cameraStream ? (
               <video
                 ref={videoRef}
@@ -612,8 +633,8 @@ export function MatchHud({
               className="pointer-events-none absolute inset-y-0 z-20 w-[3px] bg-neo-ink"
               style={{ left: `calc(${tieZoneEndPercent}% - 1.5px)` }}
             />
-            <div className="pointer-events-none absolute inset-1.5 z-20 overflow-visible rounded-[12px] sm:inset-2">
-              <div className="absolute inset-y-0 left-0 w-1/4 pr-1.5 pl-2 pt-16 pb-0 sm:pr-2 sm:pl-3 sm:pt-20">
+            <div className="pointer-events-none absolute inset-1.5 z-[45] isolate overflow-visible rounded-[12px] sm:inset-2">
+              <div className="absolute inset-y-0 left-0 w-[30%] pr-1.5 pl-2 pt-8 pb-1 sm:pr-2 sm:pl-3 sm:pt-10">
                 <TeamMarkers
                   players={teamAPlayers}
                   tone="teamA"
@@ -623,7 +644,7 @@ export function MatchHud({
                   showEliminated={showEliminatedMarkers}
                 />
               </div>
-              <div className="absolute inset-y-0 right-0 w-1/4 pl-1.5 pr-2 pt-16 pb-0 sm:pl-2 sm:pr-3 sm:pt-20">
+              <div className="absolute inset-y-0 right-0 w-[30%] pl-1.5 pr-2 pt-8 pb-1 sm:pl-2 sm:pr-3 sm:pt-10">
                 <TeamMarkers
                   players={teamBPlayers}
                   tone="teamB"

@@ -31,6 +31,7 @@ export interface LobbyViewModel {
   gameType: string;
   isHost: boolean;
   hostIdentity: string;
+  hostDisplayName: string;
   teamA: TeamPlayerViewModel[];
   teamB: TeamPlayerViewModel[];
   teamACounts: TeamCountViewModel;

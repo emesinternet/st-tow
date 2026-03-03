@@ -316,6 +316,33 @@ test('selector exposes host score from tug_host_state when present', () => {
   assert.equal(vm.hostPanel?.canToggleCamera, true);
 });
 
+test('selector exposes host display name when host player row exists', () => {
+  const snapshot = makeBaseSnapshot();
+  snapshot.players.push({
+    playerId: 'player-host',
+    lobbyId: 'lobby-1',
+    identity: 'c200host',
+    lobbyIdentityKey: 'lobby-1:c200host',
+    displayName: 'Captain Host',
+    team: '',
+    status: 'Active',
+    joinedAtMicros: 9n,
+    leftAtMicros: 0n,
+    eliminatedReason: '',
+  });
+
+  const vm = selectUiViewModel({
+    connectionState: 'connected',
+    snapshot,
+    identity: 'c200abcd',
+    selectedLobbyId: '',
+    pendingJoinCode: '',
+    ignoredLobbyId: '',
+  });
+
+  assert.equal(vm.lobby?.hostDisplayName, 'Captain Host');
+});
+
 test('selector clamps ramp and effective tier to 8', () => {
   const snapshot = makeBaseSnapshot();
   snapshot.tugStates[0] = {

@@ -34,10 +34,6 @@ export interface PlayerPresenceSpec {
   idleTiltDeg: number;
 }
 
-interface PositionedSpec extends PlayerPresenceSpec {
-  scoreHash: number;
-}
-
 interface TeamColorBase {
   hue: number;
   saturation: number;
@@ -47,8 +43,8 @@ interface TeamColorBase {
 const SHAPES: PlayerPresenceShape[] = ['circle', 'diamond', 'hex', 'rounded-square', 'starburst'];
 const STROKE_COLOR = 'hsl(221 34% 18%)';
 const TEAM_COLOR_BASE: Record<'A' | 'B', TeamColorBase> = {
-  A: { hue: 16, saturation: 84, lightness: 54 },
-  B: { hue: 208, saturation: 71, lightness: 46 },
+  A: { hue: 16, saturation: 84, lightness: 56 },
+  B: { hue: 208, saturation: 71, lightness: 51 },
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -94,26 +90,20 @@ function byContributionThenId(a: TeamPlayerViewModel, b: TeamPlayerViewModel): n
   return a.playerId.localeCompare(b.playerId);
 }
 
-function sizeBoundsByDensity(density: number): { minSize: number; maxSize: number } {
-  if (density >= 18) {
-    return { minSize: 12, maxSize: 20 };
+function deriveSizePx(density: number): number {
+  if (density >= 40) {
+    return 10;
   }
-  if (density >= 10) {
-    return { minSize: 14, maxSize: 24 };
+  if (density >= 30) {
+    return 11;
   }
-  return { minSize: 16, maxSize: 30 };
-}
-
-function deriveSizePx(
-  playerCorrect: number,
-  minCorrect: number,
-  maxCorrect: number,
-  density: number
-): number {
-  const { minSize, maxSize } = sizeBoundsByDensity(density);
-  const ratio = (playerCorrect - minCorrect) / Math.max(1, maxCorrect - minCorrect);
-  const curved = Math.pow(clamp(ratio, 0, 1), 0.65);
-  return roundTo(minSize + (maxSize - minSize) * curved, 2);
+  if (density >= 20) {
+    return 12;
+  }
+  if (density >= 12) {
+    return 13;
+  }
+  return 14;
 }
 
 function deriveFillColor(team: 'A' | 'B', seed: number): string {
@@ -122,64 +112,9 @@ function deriveFillColor(team: 'A' | 'B', seed: number): string {
   const saturationJitter = Math.round((hashUnit(seed, 2) * 2 - 1) * 6);
   const lightnessJitter = Math.round((hashUnit(seed, 3) * 2 - 1) * 7);
   const hue = base.hue + hueJitter;
-  const saturation = clamp(base.saturation + saturationJitter, 52, 92);
-  const lightness = clamp(base.lightness + lightnessJitter, 35, 64);
+  const saturation = clamp(base.saturation + saturationJitter, 58, 92);
+  const lightness = clamp(base.lightness + lightnessJitter, 42, 68);
   return `hsl(${hue} ${saturation}% ${lightness}%)`;
-}
-
-function minGapPercent(leftSizePx: number, rightSizePx: number, density: number): number {
-  const scale = density >= 18 ? 0.12 : density >= 10 ? 0.16 : 0.2;
-  return clamp(((leftSizePx + rightSizePx) / 2) * scale, 1.6, 7.8);
-}
-
-function collisionPass(specs: PositionedSpec[], density: number): PositionedSpec[] {
-  if (specs.length <= 1) {
-    return specs;
-  }
-
-  const minX = 2.5;
-  const maxX = 97.5;
-  const ordered = [...specs].sort((a, b) => (a.xPercent === b.xPercent ? a.scoreHash - b.scoreHash : a.xPercent - b.xPercent));
-
-  for (let index = 0; index < ordered.length; index += 1) {
-    ordered[index] = { ...ordered[index], xPercent: clamp(ordered[index].xPercent, minX, maxX) };
-  }
-
-  for (let pass = 0; pass < 2; pass += 1) {
-    for (let index = 1; index < ordered.length; index += 1) {
-      const previous = ordered[index - 1];
-      const current = ordered[index];
-      const minimum = previous.xPercent + minGapPercent(previous.sizePx, current.sizePx, density);
-      if (current.xPercent < minimum) {
-        ordered[index] = { ...current, xPercent: minimum };
-      }
-    }
-
-    const overflow = ordered[ordered.length - 1].xPercent - maxX;
-    if (overflow > 0) {
-      for (let index = ordered.length - 1; index >= 0; index -= 1) {
-        ordered[index] = { ...ordered[index], xPercent: ordered[index].xPercent - overflow };
-      }
-    }
-
-    for (let index = ordered.length - 2; index >= 0; index -= 1) {
-      const current = ordered[index];
-      const next = ordered[index + 1];
-      const maximum = next.xPercent - minGapPercent(current.sizePx, next.sizePx, density);
-      if (current.xPercent > maximum) {
-        ordered[index] = { ...current, xPercent: maximum };
-      }
-    }
-
-    const underflow = minX - ordered[0].xPercent;
-    if (underflow > 0) {
-      for (let index = 0; index < ordered.length; index += 1) {
-        ordered[index] = { ...ordered[index], xPercent: ordered[index].xPercent + underflow };
-      }
-    }
-  }
-
-  return ordered.map((spec) => ({ ...spec, xPercent: roundTo(clamp(spec.xPercent, minX, maxX), 2) }));
 }
 
 export function deriveTeamLeaderId(input: DeriveTeamLeaderInput): string | null {
@@ -212,7 +147,14 @@ export function derivePlayerPresenceSpecs(input: DerivePlayerPresenceInput): Pla
   }
 
   const density = Math.max(1, Math.trunc(input.density || candidates.length));
-  const laneDirection = input.lane === 'left' ? -1 : 1;
+  const slotOrdered = [...candidates].sort((left, right) => {
+    const leftSeed = hashString(left.playerId);
+    const rightSeed = hashString(right.playerId);
+    if (leftSeed !== rightSeed) {
+      return leftSeed - rightSeed;
+    }
+    return left.playerId.localeCompare(right.playerId);
+  });
   const minCorrect = Math.min(...candidates.map((player) => player.correctCount));
   const maxCorrect = Math.max(...candidates.map((player) => player.correctCount));
   const leaderId = deriveTeamLeaderId({
@@ -220,18 +162,38 @@ export function derivePlayerPresenceSpecs(input: DerivePlayerPresenceInput): Pla
     team: input.team,
     showEliminated: true,
   });
+  const minX = 3;
+  const maxX = 97;
+  const minBottom = -10;
+  const maxBottom = 138;
+  const columnBias = density >= 28 ? 1.5 : density >= 14 ? 1.35 : 1.2;
+  const columns = Math.max(3, Math.ceil(Math.sqrt(slotOrdered.length * columnBias)));
+  const rows = Math.max(1, Math.ceil(slotOrdered.length / columns));
+  const usableWidth = maxX - minX;
+  const usableHeight = maxBottom - minBottom;
+  const cellWidth = usableWidth / Math.max(1, columns);
+  const cellHeight = usableHeight / Math.max(1, rows);
 
-  const provisional: PositionedSpec[] = candidates.map((player, index) => {
-    const seed = hashString(`${player.playerId}:${input.team}`);
-    const spreadCount = Math.max(1, candidates.length);
-    const baseX = ((index + 0.5) / spreadCount) * 100;
-    const jitterRange = density >= 18 ? 1.2 : density >= 10 ? 2.2 : 3.2;
-    const jitter = (hashUnit(seed, 0) * 2 - 1) * jitterRange * laneDirection;
-    const sizePx = deriveSizePx(player.correctCount, minCorrect, maxCorrect, density);
+  return slotOrdered.map((player, index) => {
+    const seed = hashString(`${player.playerId}:${input.team}:${input.lane}`);
+    const shapeSeed = hashString(player.playerId);
+    const row = Math.floor(index / columns);
+    const col = index % columns;
+    const baseX =
+      columns <= 1 ? minX + usableWidth / 2 : minX + (col / (columns - 1)) * usableWidth;
+    const baseBottom =
+      rows <= 1 ? minBottom + usableHeight / 2 : minBottom + (row / (rows - 1)) * usableHeight;
+    const xJitter = (hashUnit(seed, 0) * 2 - 1) * Math.min(2.6, cellWidth * 0.24);
+    const yJitter = (hashUnit(seed, 4) * 2 - 1) * Math.min(4.1, cellHeight * 0.32);
+    const xPercent = roundTo(clamp(baseX + xJitter, minX, maxX));
+    const sizePx = deriveSizePx(density);
     const contributionRatio =
       (player.correctCount - minCorrect) / Math.max(1, maxCorrect - minCorrect);
-    const rawBottom = (hashUnit(seed, 4) * 2 - 1) * (density >= 18 ? 1.4 : 2.4);
-    const bottomPx = clamp(Math.round(rawBottom + contributionRatio * 2), 0, 6);
+    const bottomPx = clamp(
+      Math.round(baseBottom + yJitter + contributionRatio * (density >= 24 ? 1.2 : 2.1)),
+      0,
+      156
+    );
     const idleBobPx = roundTo(clamp(1 + contributionRatio * 1.7 + hashUnit(seed, 5) * 0.6, 1, 3.2));
     const tiltMagnitude = clamp(
       0.5 + contributionRatio * 0.9 + hashUnit(seed, 6) * 0.3,
@@ -241,8 +203,8 @@ export function derivePlayerPresenceSpecs(input: DerivePlayerPresenceInput): Pla
     const idleTiltDeg = roundTo((hashUnit(seed, 7) > 0.5 ? 1 : -1) * tiltMagnitude);
     return {
       playerId: player.playerId,
-      shape: SHAPES[seed % SHAPES.length] ?? 'circle',
-      xPercent: baseX + jitter,
+      shape: SHAPES[shapeSeed % SHAPES.length] ?? 'circle',
+      xPercent,
       bottomPx,
       sizePx,
       fillColor: deriveFillColor(input.team, seed),
@@ -250,9 +212,6 @@ export function derivePlayerPresenceSpecs(input: DerivePlayerPresenceInput): Pla
       isLeader: player.playerId === leaderId,
       idleBobPx,
       idleTiltDeg,
-      scoreHash: seed,
     };
   });
-
-  return collisionPass(provisional, density).map(({ scoreHash: _scoreHash, ...spec }) => spec);
 }

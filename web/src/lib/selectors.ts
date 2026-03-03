@@ -664,6 +664,9 @@ function buildLobbyModel(
 ): LobbyViewModel {
   const teamAPlayers = players.filter((player) => player.team === 'A');
   const teamBPlayers = players.filter((player) => player.team === 'B');
+  const hostDisplayName =
+    players.find((player) => isSameIdentity(player.identity, lobby.hostIdentity))?.displayName ??
+    'Host';
 
   return {
     lobbyId: lobby.lobbyId,
@@ -672,6 +675,7 @@ function buildLobbyModel(
     gameType: lobby.gameType,
     isHost: isSameIdentity(lobby.hostIdentity, identity),
     hostIdentity: lobby.hostIdentity,
+    hostDisplayName,
     teamA: buildTeamPlayerViewModel(
       teamAPlayers,
       identity,
