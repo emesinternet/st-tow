@@ -4,6 +4,7 @@ import {
   parseHostPowerUsedPayload,
   parsePostGameCloseStartedPayload,
   summarizeHostAccuracy,
+  summarizeMatchEventFacts,
   summarizeLatestHostPowerActivation,
   type EventLike,
 } from '@/lib/events';
@@ -67,6 +68,7 @@ test('summarizeHostAccuracy computes host accuracy and zero-attempt fallback', (
   const events: EventLike[] = [
     {
       eventId: 'e1',
+      lobbyId: 'lobby-1',
       matchId: 'match-1',
       type: 'host_submit_ok',
       payloadJson: '{}',
@@ -74,6 +76,7 @@ test('summarizeHostAccuracy computes host accuracy and zero-attempt fallback', (
     },
     {
       eventId: 'e2',
+      lobbyId: 'lobby-1',
       matchId: 'match-1',
       type: 'host_submit_bad',
       payloadJson: '{}',
@@ -81,6 +84,7 @@ test('summarizeHostAccuracy computes host accuracy and zero-attempt fallback', (
     },
     {
       eventId: 'e3',
+      lobbyId: 'lobby-1',
       matchId: 'match-1',
       type: 'host_submit_ok',
       payloadJson: '{}',
@@ -88,6 +92,7 @@ test('summarizeHostAccuracy computes host accuracy and zero-attempt fallback', (
     },
     {
       eventId: 'e4',
+      lobbyId: 'lobby-1',
       matchId: 'match-2',
       type: 'host_submit_bad',
       payloadJson: '{}',
@@ -111,6 +116,7 @@ test('summarizeHostAccuracy never shows 100 when there are misses', () => {
   for (let index = 0; index < 299; index += 1) {
     events.push({
       eventId: `ok-${index}`,
+      lobbyId: 'lobby-1',
       matchId: 'match-1',
       type: 'host_submit_ok',
       payloadJson: '{}',
@@ -119,6 +125,7 @@ test('summarizeHostAccuracy never shows 100 when there are misses', () => {
   }
   events.push({
     eventId: 'bad-1',
+    lobbyId: 'lobby-1',
     matchId: 'match-1',
     type: 'host_submit_bad',
     payloadJson: '{}',
@@ -135,6 +142,7 @@ test('summarizeLatestHostPowerActivation returns the newest valid host power eve
   const events: EventLike[] = [
     {
       eventId: 'e1',
+      lobbyId: 'lobby-1',
       matchId: 'match-1',
       type: 'host_power_used',
       payloadJson: JSON.stringify({ power_id: 'tech_mode_burst' }),
@@ -142,6 +150,7 @@ test('summarizeLatestHostPowerActivation returns the newest valid host power eve
     },
     {
       eventId: 'e2',
+      lobbyId: 'lobby-1',
       matchId: 'match-1',
       type: 'host_power_used',
       payloadJson: JSON.stringify({ power_id: 'difficulty_up_burst' }),
@@ -149,6 +158,7 @@ test('summarizeLatestHostPowerActivation returns the newest valid host power eve
     },
     {
       eventId: 'e3',
+      lobbyId: 'lobby-1',
       matchId: 'match-1',
       type: 'host_power_used',
       payloadJson: JSON.stringify({ duration_ms: 20000 }),
@@ -156,6 +166,7 @@ test('summarizeLatestHostPowerActivation returns the newest valid host power eve
     },
     {
       eventId: 'e4',
+      lobbyId: 'lobby-2',
       matchId: 'match-2',
       type: 'host_power_used',
       payloadJson: JSON.stringify({ power_id: 'symbols_mode_burst' }),
@@ -168,4 +179,82 @@ test('summarizeLatestHostPowerActivation returns the newest valid host power eve
   assert.equal(latest.powerId, 'difficulty_up_burst');
   assert.equal(latest.eventId, 'e2');
   assert.equal(latest.atMicros, 30n);
+});
+
+test('summarizeMatchEventFacts aggregates host stats and latest events in one pass', () => {
+  const events: EventLike[] = [
+    {
+      eventId: 'e1',
+      lobbyId: 'lobby-1',
+      matchId: 'match-1',
+      type: 'host_submit_ok',
+      payloadJson: '{}',
+      atMicros: 10n,
+    },
+    {
+      eventId: 'e2',
+      lobbyId: 'lobby-1',
+      matchId: 'match-1',
+      type: 'host_submit_bad',
+      payloadJson: '{}',
+      atMicros: 11n,
+    },
+    {
+      eventId: 'e3',
+      lobbyId: 'lobby-1',
+      matchId: 'match-1',
+      type: 'host_power_used',
+      payloadJson: JSON.stringify({ power_id: 'flipper_burst' }),
+      atMicros: 12n,
+    },
+    {
+      eventId: 'e4',
+      lobbyId: 'lobby-1',
+      matchId: 'match-1',
+      type: 'postgame_close_started',
+      payloadJson: JSON.stringify({ dismiss_at_micros: '999000', seconds: 10 }),
+      atMicros: 13n,
+    },
+  ];
+
+  const summary = summarizeMatchEventFacts(events, { matchId: 'match-1', lobbyId: 'lobby-1' });
+  assert.equal(summary.hostAccuracy.attempts, 2);
+  assert.equal(summary.hostAccuracy.correct, 1);
+  assert.equal(summary.hostAccuracy.accuracy, 50);
+  assert.equal(summary.latestHostPowerActivation?.powerId, 'flipper_burst');
+  assert.equal(summary.latestPostGameClose?.dismissAtMicros, 999000n);
+});
+
+test('summarizeMatchEventFacts filters by match/lobby boundaries', () => {
+  const events: EventLike[] = [
+    {
+      eventId: 'e1',
+      lobbyId: 'lobby-1',
+      matchId: 'match-1',
+      type: 'host_submit_ok',
+      payloadJson: '{}',
+      atMicros: 1n,
+    },
+    {
+      eventId: 'e2',
+      lobbyId: 'lobby-2',
+      matchId: 'match-2',
+      type: 'host_submit_ok',
+      payloadJson: '{}',
+      atMicros: 2n,
+    },
+    {
+      eventId: 'e3',
+      lobbyId: 'lobby-2',
+      matchId: 'match-1',
+      type: 'postgame_close_started',
+      payloadJson: JSON.stringify({ dismiss_at_micros: '333', seconds: 3 }),
+      atMicros: 3n,
+    },
+  ];
+
+  const summary = summarizeMatchEventFacts(events, { matchId: 'match-1', lobbyId: 'lobby-1' });
+  assert.equal(summary.hostAccuracy.attempts, 1);
+  assert.equal(summary.hostAccuracy.correct, 1);
+  assert.equal(summary.latestPostGameClose, null);
 });

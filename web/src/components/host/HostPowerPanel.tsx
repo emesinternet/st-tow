@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type CSSProperties } from 'react';
+import { memo, useEffect, useMemo, type CSSProperties } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/shared/ui/card';
 import { Button } from '@/components/shared/ui/button';
 import { Tooltip } from '@/components/shared/ui/tooltip';
@@ -54,7 +54,7 @@ function getHotkeyForIndex(index: number): string {
   return String(index + 1);
 }
 
-export function HostPowerPanel({
+export const HostPowerPanel = memo(function HostPowerPanel({
   hostPowerMeter,
   powers,
   cooldownsByPowerId,
@@ -218,4 +218,4 @@ export function HostPowerPanel({
       </CardContent>
     </Card>
   );
-}
+});

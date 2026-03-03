@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Button } from '@/components/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/shared/ui/card';
 import type { HostPanelViewModel, LobbyViewModel, MatchHudViewModel } from '@/types/ui';
@@ -15,7 +16,7 @@ interface HostControlsPanelProps {
   onSetCameraEnabled: (enabled: boolean) => Promise<void>;
 }
 
-export function HostControlsPanel({
+export const HostControlsPanel = memo(function HostControlsPanel({
   lobby,
   hud,
   hostPanel,
@@ -86,4 +87,4 @@ export function HostControlsPanel({
       </CardContent>
     </Card>
   );
-}
+});

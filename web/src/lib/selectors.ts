@@ -28,6 +28,7 @@ import type {
   UiRole,
   UiViewModel,
 } from '@/types/ui';
+import { buildSnapshotIndex, type SnapshotIndex } from '@/lib/snapshotIndex';
 
 const DEFAULT_ROUND_SECONDS = 90;
 const DEFAULT_WIN_THRESHOLD = 100;
@@ -48,6 +49,8 @@ export interface SelectUiViewModelInput {
   selectedLobbyId: string;
   pendingJoinCode: string;
   ignoredLobbyId: string;
+  includeEventFeed?: boolean;
+  eventFeedLimit?: number;
 }
 
 function normalizeIdentity(identity: string): string {
@@ -95,12 +98,8 @@ function compareBigIntDescending(a: bigint, b: bigint): number {
   return 0;
 }
 
-function byCreatedAtDescending(a: NormalizedLobby, b: NormalizedLobby): number {
-  return compareBigIntDescending(a.createdAtMicros, b.createdAtMicros);
-}
-
 function findLobby(
-  snapshot: SessionSnapshot,
+  index: SnapshotIndex,
   identity: string,
   selectedLobbyId: string,
   pendingJoinCode: string,
@@ -113,30 +112,24 @@ function findLobby(
     if (isSameIdentity(lobby.hostIdentity, identity)) {
       return true;
     }
-    return snapshot.players.some(
-      (player) =>
-        player.lobbyId === lobby.lobbyId &&
-        player.status !== 'Left' &&
-        isSameIdentity(player.identity, identity)
-    );
+    const byIdentity = index.myPlayerByLobbyIdAndIdentity.get(lobby.lobbyId);
+    return Boolean(byIdentity?.get(normalizeIdentity(identity)));
   };
 
   const isIgnoredLobby = (lobby: NormalizedLobby): boolean =>
     !!ignoredLobbyId && lobby.lobbyId === ignoredLobbyId;
 
   if (selectedLobbyId) {
-    const selected = snapshot.lobbies.find(
-      (lobby) => lobby.lobbyId === selectedLobbyId && !isIgnoredLobby(lobby)
-    );
+    const selected = index.lobbyById.get(selectedLobbyId) ?? null;
     if (selected && canAccessLobby(selected)) {
       return selected;
     }
   }
 
   if (pendingJoinCode) {
-    const codeMatch = snapshot.lobbies.find(
-      (lobby) =>
-        lobby.joinCode.toUpperCase() === pendingJoinCode.toUpperCase() && !isIgnoredLobby(lobby)
+    const pendingCode = pendingJoinCode.toUpperCase();
+    const codeMatch = index.lobbiesSortedByCreatedAtDesc.find(
+      (lobby) => lobby.joinCode.toUpperCase() === pendingCode && !isIgnoredLobby(lobby)
     );
     if (codeMatch) {
       return codeMatch;
@@ -144,19 +137,17 @@ function findLobby(
   }
 
   if (identity) {
-    const hostLobby = [...snapshot.lobbies]
-      .filter((lobby) => isSameIdentity(lobby.hostIdentity, identity) && !isIgnoredLobby(lobby))
-      .sort(byCreatedAtDescending)[0];
+    const hostLobby = (index.hostLobbiesByIdentity.get(normalizeIdentity(identity)) ?? []).find(
+      (lobby) => !isIgnoredLobby(lobby)
+    );
     if (hostLobby) {
       return hostLobby;
     }
 
-    const memberships = snapshot.players
-      .filter((player) => player.status !== 'Left' && isSameIdentity(player.identity, identity))
-      .sort((a, b) => compareBigIntDescending(a.joinedAtMicros, b.joinedAtMicros));
+    const memberships = index.nonLeftMembershipsByIdentity.get(normalizeIdentity(identity)) ?? [];
 
     for (const membership of memberships) {
-      const memberLobby = snapshot.lobbies.find((lobby) => lobby.lobbyId === membership.lobbyId);
+      const memberLobby = index.lobbyById.get(membership.lobbyId) ?? null;
       if (memberLobby && !isIgnoredLobby(memberLobby)) {
         return memberLobby;
       }
@@ -639,11 +630,11 @@ function buildRpsTieBreakModel(
 }
 
 function buildEventFeed(
-  snapshot: SessionSnapshot,
+  events: SessionSnapshot['events'],
   lobbyId: string,
   limit = 25
 ): EventFeedItemViewModel[] {
-  return snapshot.events
+  return events
     .filter((event) => event.lobbyId === lobbyId)
     .sort((a, b) => compareBigIntDescending(a.atMicros, b.atMicros))
     .slice(0, limit)
@@ -820,10 +811,19 @@ function buildPreMatchHudModel(
 }
 
 export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
-  const { connectionState, snapshot, identity, selectedLobbyId, pendingJoinCode, ignoredLobbyId } =
-    input;
+  const {
+    connectionState,
+    snapshot,
+    identity,
+    selectedLobbyId,
+    pendingJoinCode,
+    ignoredLobbyId,
+    includeEventFeed = false,
+    eventFeedLimit = 25,
+  } = input;
+  const index = buildSnapshotIndex(snapshot);
 
-  const lobby = findLobby(snapshot, identity, selectedLobbyId, pendingJoinCode, ignoredLobbyId);
+  const lobby = findLobby(index, identity, selectedLobbyId, pendingJoinCode, ignoredLobbyId);
   if (!lobby) {
     return {
       connectionState,
@@ -841,59 +841,47 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
   }
 
   const preMatchSecondsRemaining = getLobbySettingInt(
-    snapshot.lobbySettings,
+    index.lobbySettingsByLobbyId.get(lobby.lobbyId) ?? [],
     lobby.lobbyId,
     'round_seconds',
     DEFAULT_ROUND_SECONDS
   );
   const preMatchWinThreshold = getLobbySettingInt(
-    snapshot.lobbySettings,
+    index.lobbySettingsByLobbyId.get(lobby.lobbyId) ?? [],
     lobby.lobbyId,
     'win_threshold',
     DEFAULT_WIN_THRESHOLD
   );
   const preMatchTieZonePercent = getLobbySettingInt(
-    snapshot.lobbySettings,
+    index.lobbySettingsByLobbyId.get(lobby.lobbyId) ?? [],
     lobby.lobbyId,
     'tie_zone_percent',
     DEFAULT_TIE_ZONE_PERCENT
   );
 
-  const lobbyPlayers = snapshot.players.filter((player) => player.lobbyId === lobby.lobbyId);
-  const myPlayer = lobbyPlayers.find((player) => isSameIdentity(player.identity, identity)) ?? null;
+  const lobbyPlayers = index.playersByLobbyId.get(lobby.lobbyId) ?? [];
+  const myPlayer =
+    index.myPlayerByLobbyIdAndIdentity.get(lobby.lobbyId)?.get(normalizeIdentity(identity)) ??
+    null;
 
   const match = lobby.activeMatchId
-    ? (snapshot.matches.find((item) => item.matchId === lobby.activeMatchId) ?? null)
+    ? (index.matchById.get(lobby.activeMatchId) ?? null)
     : null;
 
-  const clock = match
-    ? (snapshot.clocks.find((item) => item.matchId === match.matchId) ?? null)
-    : null;
+  const clock = match ? (index.clockByMatchId.get(match.matchId) ?? null) : null;
 
-  const tug = match
-    ? (snapshot.tugStates.find((item) => item.matchId === match.matchId) ?? null)
-    : null;
-  const rpsState = match
-    ? (snapshot.tugRpsStates.find((item) => item.matchId === match.matchId) ?? null)
-    : null;
-  const rpsVotes = match
-    ? snapshot.tugRpsVotes.filter((item) => item.matchId === match.matchId)
-    : [];
-  const matchPlayerStates = match
-    ? snapshot.tugPlayerStates.filter((item) => item.matchId === match.matchId)
-    : [];
+  const tug = match ? (index.tugStateByMatchId.get(match.matchId) ?? null) : null;
+  const rpsState = match ? (index.tugRpsStateByMatchId.get(match.matchId) ?? null) : null;
+  const rpsVotes = match ? (index.tugRpsVotesByMatchId.get(match.matchId) ?? []) : [];
+  const matchPlayerStates = match ? (index.tugPlayerStatesByMatchId.get(match.matchId) ?? []) : [];
   const latestCorrectAtByPlayerId = match
     ? deriveLatestCorrectAtByPlayerId(snapshot.events, match.matchId)
     : new Map<string, bigint>();
   const playerStateByPlayerId = new Map(
     matchPlayerStates.map((playerState) => [playerState.playerId, playerState] as const)
   );
-  const hostState = match
-    ? (snapshot.tugHostStates.find((item) => item.matchId === match.matchId) ?? null)
-    : null;
-  const cameraState = match
-    ? (snapshot.tugCameraStates.find((item) => item.matchId === match.matchId) ?? null)
-    : null;
+  const hostState = match ? (index.tugHostStateByMatchId.get(match.matchId) ?? null) : null;
+  const cameraState = match ? (index.tugCameraStateByMatchId.get(match.matchId) ?? null) : null;
 
   const myTugState =
     match && myPlayer
@@ -960,6 +948,6 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
       cameraState
     ),
     playerInput: buildPlayerInputModel(role, myPlayer, match, myTugState, hostState),
-    events: buildEventFeed(snapshot, lobby.lobbyId),
+    events: includeEventFeed ? buildEventFeed(snapshot.events, lobby.lobbyId, eventFeedLimit) : [],
   };
 }

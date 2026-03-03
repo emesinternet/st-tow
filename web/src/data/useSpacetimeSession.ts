@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DbConnection, tables } from '@/module_bindings';
 import { buildActions, type GameActions } from '@/data/actions';
 import { EMPTY_SNAPSHOT, extractSnapshot, type SessionSnapshot } from '@/data/selectors';
+import { createSnapshotScheduler } from '@/data/snapshotScheduler';
 import { buildScopedQueries, deriveScope } from '@/data/subscriptionScope';
 import type { ConnectionState } from '@/types/ui';
 
@@ -48,12 +49,18 @@ export function useSpacetimeSession(): SpacetimeSession {
     let baseSubscription: SubscriptionHandle | null = null;
     let scopedSubscription: SubscriptionHandle | null = null;
     let scopedKey = '';
+    const snapshotScheduler = createSnapshotScheduler(
+      window.requestAnimationFrame.bind(window),
+      window.cancelAnimationFrame.bind(window)
+    );
 
-    const pullSnapshot = () => {
+    const applySnapshot = () => {
       if (!isMounted || !liveConnection) {
         return;
       }
-      refreshFromConnection(liveConnection);
+      const nextSnapshot = extractSnapshot(liveConnection);
+      setSnapshot(nextSnapshot);
+      refreshScopedSubscription(nextSnapshot);
     };
 
     const unsubscribeScoped = () => {
@@ -65,12 +72,11 @@ export function useSpacetimeSession(): SpacetimeSession {
       scopedKey = '';
     };
 
-    const refreshScopedSubscription = () => {
+    const refreshScopedSubscription = (nextSnapshot: SessionSnapshot) => {
       if (!isMounted || !liveConnection || !ENABLE_SCOPED_SUBSCRIPTIONS) {
         return;
       }
 
-      const nextSnapshot = extractSnapshot(liveConnection);
       const nextScope = deriveScope(nextSnapshot, sessionIdentity);
       const nextKey = `${nextScope.lobbyId}:${nextScope.matchId}`;
       if (nextKey === scopedKey) {
@@ -86,7 +92,7 @@ export function useSpacetimeSession(): SpacetimeSession {
 
       scopedSubscription = liveConnection
         .subscriptionBuilder()
-        .onApplied(() => pullSnapshot())
+        .onApplied(() => snapshotScheduler.schedule(applySnapshot))
         .subscribe(queries);
       scopedKey = nextKey;
     };
@@ -120,15 +126,12 @@ export function useSpacetimeSession(): SpacetimeSession {
         if (ENABLE_SCOPED_SUBSCRIPTIONS) {
           baseSubscription = ctx
             .subscriptionBuilder()
-            .onApplied(() => {
-              pullSnapshot();
-              refreshScopedSubscription();
-            })
+            .onApplied(() => snapshotScheduler.schedule(applySnapshot))
             .subscribe(['SELECT * FROM lobby', 'SELECT * FROM player', 'SELECT * FROM match']);
         } else {
           baseSubscription = ctx
             .subscriptionBuilder()
-            .onApplied(() => pullSnapshot())
+            .onApplied(() => snapshotScheduler.schedule(applySnapshot))
             .subscribe([
               tables.lobby,
               tables.lobby_settings,
@@ -148,18 +151,18 @@ export function useSpacetimeSession(): SpacetimeSession {
 
         for (const table of Object.values(ctx.db as Record<string, unknown>)) {
           const listeners = table as TableWithListeners;
-          listeners.onInsert?.(() => pullSnapshot());
-          listeners.onUpdate?.(() => pullSnapshot());
-          listeners.onDelete?.(() => pullSnapshot());
+          listeners.onInsert?.(() => snapshotScheduler.schedule(applySnapshot));
+          listeners.onUpdate?.(() => snapshotScheduler.schedule(applySnapshot));
+          listeners.onDelete?.(() => snapshotScheduler.schedule(applySnapshot));
         }
 
-        pullSnapshot();
-        refreshScopedSubscription();
+        snapshotScheduler.flushNow(applySnapshot);
       })
       .onDisconnect(() => {
         if (!isMounted) {
           return;
         }
+        snapshotScheduler.cancel();
         unsubscribeScoped();
         if (baseSubscription) {
           baseSubscription.unsubscribe();
@@ -179,6 +182,7 @@ export function useSpacetimeSession(): SpacetimeSession {
 
     return () => {
       isMounted = false;
+      snapshotScheduler.cancel();
       unsubscribeScoped();
       if (baseSubscription) {
         baseSubscription.unsubscribe();

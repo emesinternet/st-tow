@@ -26,11 +26,7 @@ import discoTrack from '@/assets/music/disco.mp3';
 import eurobeatTrack from '@/assets/music/eurobeat.mp3';
 import funkyTrack from '@/assets/music/funky.mp3';
 import { useSpacetimeSession } from '@/data/useSpacetimeSession';
-import {
-  parsePostGameCloseStartedPayload,
-  summarizeHostAccuracy,
-  summarizeLatestHostPowerActivation,
-} from '@/lib/events';
+import { summarizeMatchEventFacts } from '@/lib/events';
 import { evaluateHostPowerActivationGuard, getCooldownRemainingMs } from '@/lib/hostPowerCooldown';
 import { selectUiViewModel } from '@/lib/selectors';
 import { useHostPowerCooldowns } from '@/lib/useHostPowerCooldowns';
@@ -61,6 +57,8 @@ function makeToastId(): string {
 
 const MUSIC_TRACK_STORAGE_KEY = 'sttow_music_track';
 const MUSIC_MUTED_STORAGE_KEY = 'sttow_music_muted';
+const MUSIC_VOLUME_STORAGE_KEY = 'sttow_music_volume';
+const GREENSCREEN_STORAGE_KEY = 'sttow_greenscreen_enabled';
 
 function loadStoredTrackId(): MusicTrackId {
   try {
@@ -77,6 +75,30 @@ function loadStoredTrackId(): MusicTrackId {
 function loadStoredMuted(): boolean {
   try {
     return localStorage.getItem(MUSIC_MUTED_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function loadStoredVolume(): number {
+  try {
+    const stored = localStorage.getItem(MUSIC_VOLUME_STORAGE_KEY);
+    if (!stored) {
+      return 0.2;
+    }
+    const parsed = Number(stored);
+    if (!Number.isFinite(parsed)) {
+      return 0.2;
+    }
+    return Math.max(0, Math.min(1, parsed));
+  } catch {
+    return 0.2;
+  }
+}
+
+function loadStoredGreenScreenEnabled(): boolean {
+  try {
+    return localStorage.getItem(GREENSCREEN_STORAGE_KEY) === '1';
   } catch {
     return false;
   }
@@ -131,10 +153,12 @@ export default function App() {
     loadStoredTrackId()
   );
   const [musicMuted, setMusicMuted] = useState<boolean>(() => loadStoredMuted());
+  const [musicVolume, setMusicVolume] = useState<number>(() => loadStoredVolume());
+  const [greenScreenEnabled, setGreenScreenEnabled] = useState<boolean>(() =>
+    loadStoredGreenScreenEnabled()
+  );
   const confettiTimeoutRef = useRef<number | null>(null);
   const musicAudioRef = useRef<HTMLAudioElement | null>(null);
-  const musicVolumeRampFrameRef = useRef<number | null>(null);
-  const currentMusicVolumeRef = useRef(0.05);
   const currentMusicTrackIdRef = useRef<MusicTrackId | ''>('');
 
   const ui = useMemo(
@@ -146,6 +170,7 @@ export default function App() {
         selectedLobbyId,
         pendingJoinCode,
         ignoredLobbyId: dismissedLobbyId,
+        includeEventFeed: false,
       }),
     [dismissedLobbyId, identity, pendingJoinCode, selectedLobbyId, snapshot, state]
   );
@@ -216,20 +241,28 @@ export default function App() {
     const audio = new Audio();
     audio.loop = true;
     audio.preload = 'auto';
-    audio.volume = currentMusicVolumeRef.current;
+    audio.volume = loadStoredVolume();
     musicAudioRef.current = audio;
 
     return () => {
-      if (musicVolumeRampFrameRef.current != null) {
-        window.cancelAnimationFrame(musicVolumeRampFrameRef.current);
-        musicVolumeRampFrameRef.current = null;
-      }
       audio.pause();
       audio.src = '';
       musicAudioRef.current = null;
       currentMusicTrackIdRef.current = '';
     };
   }, []);
+
+  useEffect(() => {
+    const audio = musicAudioRef.current;
+    if (!audio) {
+      return;
+    }
+    audio.volume = musicVolume;
+    audio.muted = musicMuted;
+    if (!musicMuted) {
+      attemptPlayMusic();
+    }
+  }, [attemptPlayMusic, musicMuted, musicVolume]);
 
   useEffect(() => {
     const audio = musicAudioRef.current;
@@ -248,68 +281,15 @@ export default function App() {
   }, [attemptPlayMusic, musicMuted, selectedMusicTrack]);
 
   useEffect(() => {
-    const audio = musicAudioRef.current;
-    if (!audio) {
-      return;
-    }
-    const targetVolume = ui.phase === 'landing' ? 0.05 : 0.2;
-    if (musicVolumeRampFrameRef.current != null) {
-      window.cancelAnimationFrame(musicVolumeRampFrameRef.current);
-      musicVolumeRampFrameRef.current = null;
-    }
-
-    if (musicMuted) {
-      audio.muted = true;
-      currentMusicVolumeRef.current = audio.volume;
-      return;
-    }
-
-    audio.muted = false;
-    attemptPlayMusic();
-
-    const startVolume = audio.volume;
-    if (Math.abs(startVolume - targetVolume) < 0.001) {
-      audio.volume = targetVolume;
-      currentMusicVolumeRef.current = targetVolume;
-      return;
-    }
-
-    const rampDurationMs = 2000;
-    const rampStart = performance.now();
-    const easeOut = (t: number) => 1 - (1 - t) ** 3;
-    const animateVolume = (now: number) => {
-      const elapsed = now - rampStart;
-      const progress = Math.max(0, Math.min(1, elapsed / rampDurationMs));
-      const nextVolume = startVolume + (targetVolume - startVolume) * easeOut(progress);
-      audio.volume = nextVolume;
-      currentMusicVolumeRef.current = nextVolume;
-      if (progress < 1) {
-        musicVolumeRampFrameRef.current = window.requestAnimationFrame(animateVolume);
-        return;
-      }
-      musicVolumeRampFrameRef.current = null;
-      audio.volume = targetVolume;
-      currentMusicVolumeRef.current = targetVolume;
-    };
-
-    musicVolumeRampFrameRef.current = window.requestAnimationFrame(animateVolume);
-
-    return () => {
-      if (musicVolumeRampFrameRef.current != null) {
-        window.cancelAnimationFrame(musicVolumeRampFrameRef.current);
-        musicVolumeRampFrameRef.current = null;
-      }
-    };
-  }, [attemptPlayMusic, musicMuted, ui.phase]);
-
-  useEffect(() => {
     try {
       localStorage.setItem(MUSIC_TRACK_STORAGE_KEY, selectedMusicTrackId);
       localStorage.setItem(MUSIC_MUTED_STORAGE_KEY, musicMuted ? '1' : '0');
+      localStorage.setItem(MUSIC_VOLUME_STORAGE_KEY, musicVolume.toString());
+      localStorage.setItem(GREENSCREEN_STORAGE_KEY, greenScreenEnabled ? '1' : '0');
     } catch {
       // Ignore localStorage failures.
     }
-  }, [musicMuted, selectedMusicTrackId]);
+  }, [greenScreenEnabled, musicMuted, musicVolume, selectedMusicTrackId]);
 
   useEffect(() => {
     if (musicMuted) {
@@ -668,6 +648,17 @@ export default function App() {
     }
     return '';
   }, [ui.lobby]);
+  const matchEventFacts = useMemo(() => {
+    const matchId = ui.matchHud?.matchId ?? '';
+    const lobbyId = ui.lobby?.lobbyId ?? '';
+    if (!matchId || !lobbyId) {
+      return null;
+    }
+    return summarizeMatchEventFacts(snapshot.events, {
+      matchId,
+      lobbyId,
+    });
+  }, [snapshot.events, ui.lobby?.lobbyId, ui.matchHud?.matchId]);
   const hostAccuracy = useMemo(() => {
     const matchId = ui.matchHud?.matchId ?? '';
     if (!matchId) {
@@ -677,40 +668,16 @@ export default function App() {
     if (hostState) {
       return toDisplayCharacterAccuracy(hostState.correctCharCount, hostState.missCharCount);
     }
-    return summarizeHostAccuracy(snapshot.events, matchId).accuracy;
-  }, [snapshot.events, snapshot.tugHostStates, ui.matchHud?.matchId]);
+    return matchEventFacts?.hostAccuracy.accuracy ?? 0;
+  }, [matchEventFacts?.hostAccuracy.accuracy, snapshot.tugHostStates, ui.matchHud?.matchId]);
   const latestHostPowerActivation = useMemo(() => {
-    const matchId = ui.matchHud?.matchId ?? '';
-    if (!matchId) {
-      return null;
-    }
-    return summarizeLatestHostPowerActivation(snapshot.events, matchId);
-  }, [snapshot.events, ui.matchHud?.matchId]);
+    return matchEventFacts?.latestHostPowerActivation ?? null;
+  }, [matchEventFacts?.latestHostPowerActivation]);
   const postGameCloseSecondsRemaining = useMemo(() => {
     if (ui.phase !== 'post' || !ui.lobby) {
       return null;
     }
-    const matchId = ui.matchHud?.matchId ?? '';
-    let latestAtMicros = 0n;
-    let dismissAtMicros: bigint | null = null;
-
-    for (const event of snapshot.events) {
-      if (event.lobbyId !== ui.lobby.lobbyId || event.type !== 'postgame_close_started') {
-        continue;
-      }
-      if (matchId && event.matchId && event.matchId !== matchId) {
-        continue;
-      }
-      if (event.atMicros < latestAtMicros) {
-        continue;
-      }
-      const payload = parsePostGameCloseStartedPayload(event.payloadJson);
-      if (!payload) {
-        continue;
-      }
-      latestAtMicros = event.atMicros;
-      dismissAtMicros = payload.dismissAtMicros;
-    }
+    const dismissAtMicros = matchEventFacts?.latestPostGameClose?.dismissAtMicros ?? null;
 
     if (dismissAtMicros == null) {
       return null;
@@ -719,7 +686,15 @@ export default function App() {
     const nowMicros = BigInt(Math.trunc(nowMillis)) * 1000n;
     const remainingMicros = dismissAtMicros > nowMicros ? dismissAtMicros - nowMicros : 0n;
     return Math.max(0, Math.ceil(Number(remainingMicros) / 1_000_000));
-  }, [nowMillis, snapshot.events, ui.lobby, ui.matchHud?.matchId, ui.phase]);
+  }, [matchEventFacts?.latestPostGameClose?.dismissAtMicros, nowMillis, ui.lobby, ui.phase]);
+  const hostPowerCooldownStatesByPowerId = useMemo(() => {
+    if (!ui.hostPanel) {
+      return {};
+    }
+    return Object.fromEntries(
+      ui.hostPanel.powers.map((power) => [power.id, getCooldownState(power.id)])
+    );
+  }, [getCooldownState, ui.hostPanel]);
 
   useEffect(() => {
     if (ui.phase !== 'post' || !ui.matchHud?.matchId) {
@@ -738,37 +713,78 @@ export default function App() {
   }, [fireConfettiBurst, lastConfettiMatchId, myTeam, ui.matchHud, ui.phase]);
 
   const teamTone = ui.lobby ? resolveTeamTone(ui.lobby) : 'neutral';
-  const backgroundClassName =
-    teamTone === 'teamA' ? 'team-bg-a' : teamTone === 'teamB' ? 'team-bg-b' : '';
+  const backgroundClassName = greenScreenEnabled
+    ? 'bg-[#7fff00]'
+    : teamTone === 'teamA'
+      ? 'team-bg-a'
+      : teamTone === 'teamB'
+        ? 'team-bg-b'
+        : '';
 
-  const headerMusicControls = (
-    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-      <select
-        value={selectedMusicTrackId}
-        onChange={(event) => setSelectedMusicTrackId(event.target.value as MusicTrackId)}
-        className="neo-focus h-9 rounded-[var(--ui-radius-md)] border-4 border-neo-ink bg-neo-paper px-2 font-display text-xs font-bold uppercase tracking-wide text-neo-ink shadow-neo"
-        aria-label="Music track"
-      >
-        {MUSIC_TRACKS.map((track) => (
-          <option key={track.id} value={track.id}>
-            {track.label}
-          </option>
-        ))}
-      </select>
-      <Button
-        type="button"
-        size="icon"
-        variant="neutral"
-        className="h-9 w-9"
-        onClick={() => {
-          setMusicMuted((current) => !current);
-        }}
-        aria-label={musicMuted ? 'Unmute music' : 'Mute music'}
-        title={musicMuted ? 'Unmute music' : 'Mute music'}
-      >
-        {musicMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-      </Button>
-    </div>
+  const headerMusicControls = useMemo(
+    () => (
+      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+        <select
+          value={selectedMusicTrackId}
+          onChange={(event) => setSelectedMusicTrackId(event.target.value as MusicTrackId)}
+          className="neo-focus h-9 rounded-[var(--ui-radius-md)] border-4 border-neo-ink bg-neo-paper px-2 font-display text-xs font-bold uppercase tracking-wide text-neo-ink shadow-neo"
+          aria-label="Music track"
+        >
+          {MUSIC_TRACKS.map((track) => (
+            <option key={track.id} value={track.id}>
+              {track.label}
+            </option>
+          ))}
+        </select>
+        <div className="group relative">
+          <Button
+            type="button"
+            size="icon"
+            variant="neutral"
+            className="h-9 w-9"
+            onClick={() => {
+              setMusicMuted((current) => !current);
+            }}
+            aria-label={musicMuted ? 'Unmute music' : 'Mute music'}
+            title={musicMuted ? 'Unmute music' : 'Mute music'}
+          >
+            {musicMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+          </Button>
+          <div className="pointer-events-none absolute left-1/2 top-full z-[92] -translate-x-1/2 pt-2 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+            <div className="flex h-28 w-12 items-center justify-center rounded-[var(--ui-radius-md)] border-4 border-neo-ink bg-neo-paper shadow-neo">
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(musicVolume * 100)}
+                onChange={(event) => {
+                  const nextVolume = Math.max(
+                    0,
+                    Math.min(1, Number(event.target.value) / 100)
+                  );
+                  setMusicVolume(nextVolume);
+                }}
+                className="-rotate-90 w-20 m-0"
+                aria-label="Music volume"
+              />
+            </div>
+          </div>
+        </div>
+        <Button
+          type="button"
+          size="icon"
+          variant="neutral"
+          className={`h-9 w-9 ${greenScreenEnabled ? 'bg-[#7fff00]' : 'bg-[#adff2f]'} p-0`}
+          onClick={() => {
+            setGreenScreenEnabled((current) => !current);
+          }}
+          aria-label={greenScreenEnabled ? 'Disable greenscreen mode' : 'Enable greenscreen mode'}
+          title={greenScreenEnabled ? 'Disable greenscreen mode' : 'Enable greenscreen mode'}
+        />
+      </div>
+    ),
+    [greenScreenEnabled, musicMuted, musicVolume, selectedMusicTrackId]
   );
 
   const primary =
@@ -811,28 +827,28 @@ export default function App() {
           <HostPowerPanel
             hostPowerMeter={ui.matchHud?.hostPowerMeter ?? 0}
             powers={ui.hostPanel.powers}
-            cooldownsByPowerId={Object.fromEntries(
-              ui.hostPanel.powers.map((power) => [power.id, getCooldownState(power.id)])
-            )}
+            cooldownsByPowerId={hostPowerCooldownStatesByPowerId}
             onActivatePower={handleActivatePower}
-          />
-        ) : null}
-        {ui.role === 'host' && ui.lobby ? (
-          <HostControlsPanel
-            lobby={ui.lobby}
-            hud={ui.matchHud}
-            hostPanel={ui.hostPanel}
-            cameraEnabled={webcamMesh.cameraEnabled}
-            cameraToggleEnabled={webcamMesh.cameraToggleEnabled}
-            cameraBusy={webcamMesh.cameraBusy}
-            onStartMatch={handleStartMatch}
-            onResetLobby={handleResetLobby}
-            onEndMatch={handleEndMatch}
-            onSetCameraEnabled={webcamMesh.toggleCamera}
           />
         ) : null}
       </>
     );
+
+  const secondary =
+    ui.phase !== 'landing' && ui.role === 'host' && ui.lobby ? (
+      <HostControlsPanel
+        lobby={ui.lobby}
+        hud={ui.matchHud}
+        hostPanel={ui.hostPanel}
+        cameraEnabled={webcamMesh.cameraEnabled}
+        cameraToggleEnabled={webcamMesh.cameraToggleEnabled}
+        cameraBusy={webcamMesh.cameraBusy}
+        onStartMatch={handleStartMatch}
+        onResetLobby={handleResetLobby}
+        onEndMatch={handleEndMatch}
+        onSetCameraEnabled={webcamMesh.toggleCamera}
+      />
+    ) : null;
 
   const showCountdownOverlay =
     ui.matchHud?.phase === 'PreGame' &&
@@ -857,7 +873,7 @@ export default function App() {
           />
         }
         primary={primary}
-        secondary={null}
+        secondary={secondary}
       />
       <CountdownOverlay
         visible={showCountdownOverlay}

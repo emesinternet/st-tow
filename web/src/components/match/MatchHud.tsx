@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import dragonGif from '@/assets/dragon.gif';
 import { Badge } from '@/components/shared/ui/badge';
 import { Card, CardContent } from '@/components/shared/ui/card';
@@ -135,21 +135,36 @@ function LeaderCrown({ markerSizePx }: { markerSizePx: number }) {
   );
 }
 
-function TeamMarkers({
-  players,
-  tone,
-  lane,
-  cameraMode = false,
-  reducedMotion = false,
-  showEliminated = false,
-}: {
+function buildTeamMarkersSignature(players: TeamPlayerViewModel[], showEliminated: boolean): string {
+  return players
+    .filter(
+      (player) =>
+        player.status !== 'Left' && (showEliminated || player.status !== 'Eliminated')
+    )
+    .map(
+      (player) =>
+        `${player.playerId}:${player.displayName}:${player.status}:${player.correctCount}:${player.lastCorrectAtMicros.toString()}`
+    )
+    .join('|');
+}
+
+type TeamMarkersProps = {
   players: TeamPlayerViewModel[];
   tone: 'teamA' | 'teamB';
   lane: 'left' | 'right';
   cameraMode?: boolean;
   reducedMotion?: boolean;
   showEliminated?: boolean;
-}) {
+};
+
+function TeamMarkersImpl({
+  players,
+  tone,
+  lane,
+  cameraMode = false,
+  reducedMotion = false,
+  showEliminated = false,
+}: TeamMarkersProps) {
   const connected = players.filter(
     (player) =>
       player.status !== 'Left' && (showEliminated || player.status !== 'Eliminated')
@@ -417,7 +432,24 @@ function TeamMarkers({
   );
 }
 
-export function MatchHud({
+const TeamMarkers = memo(
+  TeamMarkersImpl,
+  (previous, next) => {
+    const previousShowEliminated = previous.showEliminated ?? false;
+    const nextShowEliminated = next.showEliminated ?? false;
+    return (
+    previous.tone === next.tone &&
+    previous.lane === next.lane &&
+    previous.cameraMode === next.cameraMode &&
+    previous.reducedMotion === next.reducedMotion &&
+      previousShowEliminated === nextShowEliminated &&
+      buildTeamMarkersSignature(previous.players, previousShowEliminated) ===
+        buildTeamMarkersSignature(next.players, nextShowEliminated)
+    );
+  }
+);
+
+export const MatchHud = memo(function MatchHud({
   hud,
   teamAPlayers,
   teamBPlayers,
@@ -667,4 +699,4 @@ export function MatchHud({
       </CardContent>
     </Card>
   );
-}
+});

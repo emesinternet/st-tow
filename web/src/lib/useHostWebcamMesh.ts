@@ -68,6 +68,7 @@ export function useHostWebcamMesh({
   const processedSignalIdsRef = useRef(new Set<string>());
   const viewerReadyKeyRef = useRef('');
   const streamKeyRef = useRef('');
+  const desiredCameraEnabledRef = useRef<boolean | null>(null);
 
   const closePeer = useCallback((peerId: string) => {
     const peer = peersRef.current.get(peerId);
@@ -399,11 +400,12 @@ export function useHostWebcamMesh({
       if (!isHost) {
         return;
       }
+      desiredCameraEnabledRef.current = enabled;
       setCameraBusy(true);
 
       if (!enabled) {
         try {
-          if (hasLiveMatch && cameraEnabledFromServer) {
+          if (hasLiveMatch && isActivePhase) {
             await actions.setCameraEnabled(matchId, false);
           }
         } catch (error) {
@@ -440,7 +442,6 @@ export function useHostWebcamMesh({
     },
     [
       actions,
-      cameraEnabledFromServer,
       clearRemoteStream,
       closeAllPeers,
       ensureLocalPreviewStream,
@@ -455,11 +456,26 @@ export function useHostWebcamMesh({
 
   useEffect(() => {
     if (
+      desiredCameraEnabledRef.current === false &&
+      !cameraEnabledFromServer &&
+      !cameraBusy &&
+      !preArmed
+    ) {
+      desiredCameraEnabledRef.current = null;
+    }
+    if (desiredCameraEnabledRef.current === true && cameraEnabledFromServer && !cameraBusy) {
+      desiredCameraEnabledRef.current = null;
+    }
+  }, [cameraBusy, cameraEnabledFromServer, preArmed]);
+
+  useEffect(() => {
+    if (
       !isHost ||
       !isActivePhase ||
       !cameraEnabledFromServer ||
       cameraBusy ||
-      localStreamRef.current
+      localStreamRef.current ||
+      desiredCameraEnabledRef.current === false
     ) {
       return;
     }
@@ -473,7 +489,8 @@ export function useHostWebcamMesh({
       !isActivePhase ||
       !preArmed ||
       cameraEnabledFromServer ||
-      cameraBusy
+      cameraBusy ||
+      desiredCameraEnabledRef.current === false
     ) {
       return;
     }

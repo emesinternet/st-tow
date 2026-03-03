@@ -10,6 +10,7 @@ export interface HostPowerUsedPayload {
 
 export interface EventLike {
   eventId: string;
+  lobbyId: string;
   matchId: string;
   type: string;
   payloadJson: string;
@@ -26,6 +27,19 @@ export interface HostPowerActivationSummary {
   eventId: string;
   powerId: string;
   atMicros: bigint;
+}
+
+export interface LatestPostGameCloseSummary {
+  eventId: string;
+  atMicros: bigint;
+  dismissAtMicros: bigint;
+  seconds: number | null;
+}
+
+export interface MatchEventFactsSummary {
+  hostAccuracy: HostAccuracySummary;
+  latestHostPowerActivation: HostPowerActivationSummary | null;
+  latestPostGameClose: LatestPostGameCloseSummary | null;
 }
 
 function toDisplayAccuracy(correct: number, attempts: number): number {
@@ -168,4 +182,83 @@ export function summarizeLatestHostPowerActivation(
     }
   }
   return latest;
+}
+
+function isNewerEvent(
+  event: Pick<EventLike, 'atMicros' | 'eventId'>,
+  current: Pick<EventLike, 'atMicros' | 'eventId'> | null
+): boolean {
+  if (!current) {
+    return true;
+  }
+  if (event.atMicros > current.atMicros) {
+    return true;
+  }
+  return event.atMicros === current.atMicros && event.eventId > current.eventId;
+}
+
+export function summarizeMatchEventFacts(
+  events: EventLike[],
+  options: {
+    matchId: string;
+    lobbyId: string;
+  }
+): MatchEventFactsSummary {
+  const { matchId, lobbyId } = options;
+  let hostAttempts = 0;
+  let hostCorrect = 0;
+  let latestHostPowerActivation: HostPowerActivationSummary | null = null;
+  let latestPostGameClose: LatestPostGameCloseSummary | null = null;
+
+  for (const event of events) {
+    if (event.matchId === matchId) {
+      if (event.type === 'host_submit_ok') {
+        hostAttempts += 1;
+        hostCorrect += 1;
+      } else if (event.type === 'host_submit_bad') {
+        hostAttempts += 1;
+      } else if (event.type === 'host_power_used') {
+        const payload = parseHostPowerUsedPayload(event.payloadJson);
+        if (!payload) {
+          continue;
+        }
+        if (isNewerEvent(event, latestHostPowerActivation)) {
+          latestHostPowerActivation = {
+            eventId: event.eventId,
+            powerId: payload.powerId,
+            atMicros: event.atMicros,
+          };
+        }
+      }
+    }
+
+    if (event.lobbyId !== lobbyId || event.type !== 'postgame_close_started') {
+      continue;
+    }
+    if (matchId && event.matchId && event.matchId !== matchId) {
+      continue;
+    }
+    const payload = parsePostGameCloseStartedPayload(event.payloadJson);
+    if (!payload) {
+      continue;
+    }
+    if (isNewerEvent(event, latestPostGameClose)) {
+      latestPostGameClose = {
+        eventId: event.eventId,
+        atMicros: event.atMicros,
+        dismissAtMicros: payload.dismissAtMicros,
+        seconds: payload.seconds,
+      };
+    }
+  }
+
+  return {
+    hostAccuracy: {
+      attempts: hostAttempts,
+      correct: hostCorrect,
+      accuracy: toDisplayAccuracy(hostCorrect, hostAttempts),
+    },
+    latestHostPowerActivation,
+    latestPostGameClose,
+  };
 }

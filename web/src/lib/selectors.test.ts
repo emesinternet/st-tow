@@ -614,3 +614,64 @@ test('selector does not resolve lobby from Left membership', () => {
   assert.equal(vm.lobby, null);
   assert.equal(vm.role, 'observer');
 });
+
+test('selector skips event feed work by default', () => {
+  const snapshot = makeBaseSnapshot();
+  snapshot.events = [
+    {
+      eventId: 'event-1',
+      lobbyId: 'lobby-1',
+      matchId: 'match-1',
+      type: 'submit_ok',
+      payloadJson: '{}',
+      atMicros: 100n,
+    },
+  ];
+
+  const vm = selectUiViewModel({
+    connectionState: 'connected',
+    snapshot,
+    identity: 'c200abcd',
+    selectedLobbyId: '',
+    pendingJoinCode: '',
+    ignoredLobbyId: '',
+  });
+
+  assert.deepEqual(vm.events, []);
+});
+
+test('selector returns event feed when explicitly enabled', () => {
+  const snapshot = makeBaseSnapshot();
+  snapshot.events = [
+    {
+      eventId: 'event-1',
+      lobbyId: 'lobby-1',
+      matchId: 'match-1',
+      type: 'submit_ok',
+      payloadJson: '{}',
+      atMicros: 100n,
+    },
+    {
+      eventId: 'event-2',
+      lobbyId: 'lobby-1',
+      matchId: 'match-1',
+      type: 'submit_bad',
+      payloadJson: '{}',
+      atMicros: 200n,
+    },
+  ];
+
+  const vm = selectUiViewModel({
+    connectionState: 'connected',
+    snapshot,
+    identity: 'c200abcd',
+    selectedLobbyId: '',
+    pendingJoinCode: '',
+    ignoredLobbyId: '',
+    includeEventFeed: true,
+    eventFeedLimit: 1,
+  });
+
+  assert.equal(vm.events.length, 1);
+  assert.equal(vm.events[0]?.eventId, 'event-2');
+});

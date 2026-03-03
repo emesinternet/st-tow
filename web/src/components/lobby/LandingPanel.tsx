@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/shared/ui/card';
 import { Button } from '@/components/shared/ui/button';
 import { Input } from '@/components/shared/ui/input';
@@ -17,7 +18,7 @@ interface LandingPanelProps {
   onCreateLobby: () => Promise<void>;
 }
 
-export function LandingPanel({
+export const LandingPanel = memo(function LandingPanel({
   displayName,
   joinCode,
   roundMinutes,
@@ -77,7 +78,7 @@ export function LandingPanel({
               Type your words fast to pull the dragon to your side.
             </p>
             <p className="ui-subtext">
-              Every correct word adds team momentum. In sudden death, mistakes can eliminate players.
+              Every correct word adds team momentum. In sudden death, any mistake eliminates players.
             </p>
             <p className="ui-subtext">Lobbies support up to 50 total players.</p>
           </div>
@@ -87,7 +88,7 @@ export function LandingPanel({
       <Card className="flex min-h-[280px] flex-col">
         <CardHeader>
           <CardTitle>Host a Lobby</CardTitle>
-          <p className="ui-subtext">Configure your lobby and start a new game.</p>
+          <p className="ui-subtext">Start a new game.</p>
         </CardHeader>
         <CardContent className="flex flex-1 flex-col gap-3">
           <div className="space-y-3">
@@ -162,4 +163,4 @@ export function LandingPanel({
       </Card>
     </div>
   );
-}
+});

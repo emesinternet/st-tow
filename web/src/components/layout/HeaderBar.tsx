@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import { Card } from '@/components/shared/ui/card';
 import { Button } from '@/components/shared/ui/button';
 
@@ -9,7 +9,7 @@ interface HeaderBarProps {
   musicControls?: ReactNode;
 }
 
-export function HeaderBar({
+export const HeaderBar = memo(function HeaderBar({
   lobbyCode,
   onCopyLobbyCode,
   onLeaveLobby,
@@ -65,4 +65,4 @@ export function HeaderBar({
       </div>
     </Card>
   );
-}
+});

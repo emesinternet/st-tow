@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent } from '@/components/shared/ui/card';
 import { cn } from '@/lib/utils';
 import type { PlayerInputViewModel } from '@/types/ui';
@@ -63,7 +63,7 @@ function isTypingBlockedTarget(target: EventTarget | null): boolean {
   return target.closest('button, a, select, [role="button"], [role="textbox"]') != null;
 }
 
-export function PlayerInputPanel({
+export const PlayerInputPanel = memo(function PlayerInputPanel({
   model,
   onSubmitWord,
   onRecordMistake,
@@ -411,4 +411,4 @@ export function PlayerInputPanel({
       </CardContent>
     </Card>
   );
-}
+});
