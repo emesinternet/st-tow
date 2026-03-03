@@ -15,6 +15,8 @@ export default __t.row({
   hostIdentity: __t.identity().name("host_identity"),
   score: __t.i32(),
   correctCount: __t.i32().name("correct_count"),
+  correctCharCount: __t.i32().name("correct_char_count"),
+  missCharCount: __t.i32().name("miss_char_count"),
   powerMeter: __t.i32().name("power_meter"),
   currentWord: __t.string().name("current_word"),
   lastWordType: __t.string().name("last_word_type"),

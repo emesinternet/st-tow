@@ -11,6 +11,7 @@ export interface TeamPlayerViewModel {
   status: string;
   correctCount: number;
   submitCount: number;
+  lastCorrectAtMicros: bigint;
   accuracy: number;
   eliminatedReason: string;
   isYou: boolean;

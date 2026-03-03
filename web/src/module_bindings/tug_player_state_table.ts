@@ -17,6 +17,8 @@ export default __t.row({
   currentWord: __t.string().name("current_word"),
   lastWordType: __t.string().name("last_word_type"),
   correctCount: __t.i32().name("correct_count"),
+  correctCharCount: __t.i32().name("correct_char_count"),
+  missCharCount: __t.i32().name("miss_char_count"),
   submitCount: __t.i32().name("submit_count"),
   lastSubmitAtMicros: __t.i64().name("last_submit_at_micros"),
   deadlineAtMicros: __t.i64().name("deadline_at_micros"),

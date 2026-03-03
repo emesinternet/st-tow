@@ -94,6 +94,19 @@ function resolveTeamTone(
   return 'neutral';
 }
 
+function toDisplayCharacterAccuracy(correctChars: number, missChars: number): number {
+  const boundedCorrectChars = Math.max(0, Math.trunc(correctChars));
+  const boundedMissChars = Math.max(0, Math.trunc(missChars));
+  const attempts = boundedCorrectChars + boundedMissChars;
+  if (attempts <= 0) {
+    return 0;
+  }
+  if (boundedMissChars <= 0) {
+    return 100;
+  }
+  return Math.max(0, Math.min(99, Math.round((boundedCorrectChars / attempts) * 100)));
+}
+
 export default function App() {
   const { state, identity, errorMessage, snapshot, actions } = useSpacetimeSession();
 
@@ -660,8 +673,12 @@ export default function App() {
     if (!matchId) {
       return 0;
     }
+    const hostState = snapshot.tugHostStates.find((row) => row.matchId === matchId);
+    if (hostState) {
+      return toDisplayCharacterAccuracy(hostState.correctCharCount, hostState.missCharCount);
+    }
     return summarizeHostAccuracy(snapshot.events, matchId).accuracy;
-  }, [snapshot.events, ui.matchHud?.matchId]);
+  }, [snapshot.events, snapshot.tugHostStates, ui.matchHud?.matchId]);
   const latestHostPowerActivation = useMemo(() => {
     const matchId = ui.matchHud?.matchId ?? '';
     if (!matchId) {

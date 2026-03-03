@@ -106,6 +106,8 @@ function makeBaseSnapshot(): SessionSnapshot {
         currentWord: 'anchor',
         lastWordType: 'object',
         correctCount: 3,
+        correctCharCount: 9,
+        missCharCount: 3,
         submitCount: 4,
         lastSubmitAtMicros: 0n,
         deadlineAtMicros: 0n,
@@ -117,6 +119,8 @@ function makeBaseSnapshot(): SessionSnapshot {
         currentWord: 'bridge',
         lastWordType: 'object',
         correctCount: 5,
+        correctCharCount: 10,
+        missCharCount: 2,
         submitCount: 6,
         lastSubmitAtMicros: 0n,
         deadlineAtMicros: 0n,
@@ -128,6 +132,8 @@ function makeBaseSnapshot(): SessionSnapshot {
         hostIdentity: 'c200host',
         score: 9,
         correctCount: 9,
+        correctCharCount: 54,
+        missCharCount: 6,
         powerMeter: 42,
         currentWord: 'captain',
         lastWordType: 'command',
@@ -171,6 +177,66 @@ test('selector keeps force fields physical and pull fields cumulative', () => {
   assert.equal(vm.matchHud?.teamBPulls, 5);
   assert.equal(vm.lobby?.teamA[0]?.accuracy, 75);
   assert.equal(vm.lobby?.teamB[0]?.accuracy, 83);
+  assert.equal(vm.lobby?.teamA[0]?.lastCorrectAtMicros, 0n);
+  assert.equal(vm.lobby?.teamB[0]?.lastCorrectAtMicros, 0n);
+});
+
+test('selector derives lastCorrectAtMicros from submit_ok events', () => {
+  const snapshot = makeBaseSnapshot();
+  snapshot.events = [
+    {
+      eventId: 'event-1',
+      lobbyId: 'lobby-1',
+      matchId: 'match-1',
+      type: 'submit_ok',
+      payloadJson: '{"player_id":"player-a"}',
+      atMicros: 101n,
+    },
+    {
+      eventId: 'event-2',
+      lobbyId: 'lobby-1',
+      matchId: 'match-1',
+      type: 'submit_ok',
+      payloadJson: '{"playerId":"player-b"}',
+      atMicros: 250n,
+    },
+    {
+      eventId: 'event-3',
+      lobbyId: 'lobby-1',
+      matchId: 'match-1',
+      type: 'submit_ok',
+      payloadJson: '{"player_id":"player-a"}',
+      atMicros: 320n,
+    },
+    {
+      eventId: 'event-4',
+      lobbyId: 'lobby-1',
+      matchId: 'match-1',
+      type: 'submit_bad',
+      payloadJson: '{"player_id":"player-a"}',
+      atMicros: 999n,
+    },
+    {
+      eventId: 'event-5',
+      lobbyId: 'lobby-1',
+      matchId: 'match-other',
+      type: 'submit_ok',
+      payloadJson: '{"player_id":"player-a"}',
+      atMicros: 9999n,
+    },
+  ];
+
+  const vm = selectUiViewModel({
+    connectionState: 'connected',
+    snapshot,
+    identity: 'c200abcd',
+    selectedLobbyId: '',
+    pendingJoinCode: '',
+    ignoredLobbyId: '',
+  });
+
+  assert.equal(vm.lobby?.teamA[0]?.lastCorrectAtMicros, 320n);
+  assert.equal(vm.lobby?.teamB[0]?.lastCorrectAtMicros, 250n);
 });
 
 test('selector keeps player accuracy in post-game states', () => {
@@ -199,12 +265,14 @@ test('selector keeps player accuracy in post-game states', () => {
   assert.equal(vm.lobby?.teamB[0]?.accuracy, 83);
 });
 
-test('selector never shows 100 accuracy when submit count has misses', () => {
+test('selector never shows 100 accuracy when character misses exist', () => {
   const snapshot = makeBaseSnapshot();
   snapshot.tugPlayerStates[0] = {
     ...snapshot.tugPlayerStates[0],
     correctCount: 299,
     submitCount: 300,
+    correctCharCount: 299,
+    missCharCount: 1,
   };
 
   const vm = selectUiViewModel({

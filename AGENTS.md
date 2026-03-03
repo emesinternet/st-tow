@@ -181,62 +181,22 @@ Generated bindings:
 - Post-game modal includes team totals, host successful words, per-player table, and host/player-specific close behavior.
 - Event feed/debug panel is not rendered in the main app shell.
 
-## Environment Model (Windows launcher, WSL runtime)
+## Environment Model
 
-Use this split consistently:
+Use a consistent local workflow:
 
-- Windows PowerShell: launch orchestration only
-- WSL: runtime commands (`spacetime`, `publish`, `generate`, `vite`, `npm`)
+- run SpacetimeDB server locally
+- publish server module and generate bindings after server changes
+- run web dev server for UI iteration
 
-Never run publish/generate through Windows UNC working directories.
+Keep server publish and web runtime commands in separate terminals.
 
 ## Canonical Local Run Sequence
 
-### 1) Launch from Windows
-
-```powershell
-cd C:\Users\emesi\Desktop\scripts
-.\launch-local-windows.ps1
-```
-
-This launches 3 windows:
-
-- `st-tow: server`
-- `st-tow: publish+generate`
-- `st-tow: web`
-
-### 2) Optional helper modes
-
-```powershell
-cd C:\Users\emesi\Desktop\scripts
-.\launch-local-windows.ps1 -FirstRunChecks
-.\launch-local-windows.ps1 -StopOnly
-.\launch-local-windows.ps1 -DatabaseName st-tow-dev-20260228010101
-```
-
-### 3) Linux-side scripts used by launcher
-
-- `scripts/local/doctor.sh`
-- `scripts/local/start_server.sh`
-- `scripts/local/publish_and_generate.sh`
-- `scripts/local/start_web.sh`
-
-Notes:
-
-- `start_server.sh` uses `C:/temp/stdb-local/data` by default to avoid lock errors when WSL invokes the Windows Spacetime binary.
-- `publish_and_generate.sh` publishes via `--js-path server/dist/bundle.js`.
-
-### 4) Flags and logs for each run
-
-Given DB name `<db>`, launcher writes under:
-
-- `/tmp/sttow/<db>/ready.flag`
-- `/tmp/sttow/<db>/fail.flag`
-- `/tmp/sttow/<db>/stage.log`
-- `/tmp/sttow/<db>/build.log`
-- `/tmp/sttow/<db>/publish.log`
-- `/tmp/sttow/<db>/generate.log`
-- `/tmp/sttow/<db>/web.log`
+1. Start the local SpacetimeDB server.
+2. Publish the server module and regenerate web bindings.
+3. Start the web app in dev mode.
+4. Refresh the browser after publish/generate completes.
 
 ## Hot Reload Expectations
 
@@ -248,25 +208,25 @@ After server changes:
 1. rerun publish flow
 2. refresh browser
 
-## Build / Check Commands (WSL)
+## Build / Check Commands
 
 ```bash
-cd ~/repos/st-tow/server && npm run format:check
-cd ~/repos/st-tow/server && npm run lint
-cd ~/repos/st-tow/server && npm run typecheck
-cd ~/repos/st-tow/server && npm run test
-cd ~/repos/st-tow/web && npm run format:check
-cd ~/repos/st-tow/web && npm run lint
-cd ~/repos/st-tow/web && npm run check:module-bindings
-cd ~/repos/st-tow/web && npm run typecheck
-cd ~/repos/st-tow/web && npm run test
-cd ~/repos/st-tow/web && npm run build
+(cd server && npm run format:check)
+(cd server && npm run lint)
+(cd server && npm run typecheck)
+(cd server && npm run test)
+(cd web && npm run format:check)
+(cd web && npm run lint)
+(cd web && npm run check:module-bindings)
+(cd web && npm run typecheck)
+(cd web && npm run test)
+(cd web && npm run build)
 ```
 
 ## Quality Guardrails
 
 - `web/src/module_bindings/*` is generated; do not edit manually.
-- Run `cd ~/repos/st-tow/web && npm run check:module-bindings` before opening PRs that touch data bindings.
+- Run `(cd web && npm run check:module-bindings)` before opening PRs that touch data bindings.
 - Prefer tokenized sizing and spacing variables from `web/src/styles/globals.css` over one-off numeric values.
 - Keep accessibility semantics intact on overlays/modals (`role=\"dialog\"`, `aria-modal`, labels/descriptions).
 
@@ -289,8 +249,8 @@ Cause:
 
 Fix:
 
-- inspect `/tmp/sttow/<db>/publish.log`
-- confirm server window is running on `127.0.0.1:3000`
+- inspect publish output logs from your local run
+- confirm SpacetimeDB is running on `127.0.0.1:3000`
 - republish with a fresh DB name
 - if log shows `missing bundle`, ensure `server/dist/bundle.js` exists
 
@@ -302,14 +262,14 @@ Cause:
 
 Fix:
 
-- inspect `/tmp/sttow/<db>/generate.log`
+- inspect generate output logs from your local run
 - rerun after fixing schema/reducer issues
 
 ### C) Web window exits with publish/generate failure
 
 Cause:
 
-- `fail.flag` created by publish step
+- publish or binding generation failed
 
 Fix:
 
@@ -324,8 +284,8 @@ Cause:
 
 Fix:
 
-- keep server window running
-- verify `VITE_SPACETIMEDB_DB_NAME` matches published DB (launcher sets this automatically)
+- keep the server process running
+- verify `VITE_SPACETIMEDB_DB_NAME` matches the published DB
 
 ### E) Landing/join screen missing unexpectedly
 

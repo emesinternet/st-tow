@@ -116,6 +116,8 @@ export interface NormalizedTugPlayerState {
   currentWord: string;
   lastWordType: string;
   correctCount: number;
+  correctCharCount: number;
+  missCharCount: number;
   submitCount: number;
   lastSubmitAtMicros: bigint;
   deadlineAtMicros: bigint;
@@ -126,6 +128,8 @@ export interface NormalizedTugHostState {
   hostIdentity: string;
   score: number;
   correctCount: number;
+  correctCharCount: number;
+  missCharCount: number;
   powerMeter: number;
   currentWord: string;
   lastWordType: string;
@@ -393,6 +397,8 @@ function normalizeTugPlayerState(row: GenericRow): NormalizedTugPlayerState {
     currentWord: field<string>(row, 'currentWord', 'current_word') ?? '',
     lastWordType: field<string>(row, 'lastWordType', 'last_word_type') ?? '',
     correctCount: toNumber(field(row, 'correctCount', 'correct_count')),
+    correctCharCount: toNumber(field(row, 'correctCharCount', 'correct_char_count')),
+    missCharCount: toNumber(field(row, 'missCharCount', 'miss_char_count')),
     submitCount: toNumber(field(row, 'submitCount', 'submit_count')),
     lastSubmitAtMicros: toBigInt(field(row, 'lastSubmitAtMicros', 'last_submit_at_micros')),
     deadlineAtMicros: toBigInt(field(row, 'deadlineAtMicros', 'deadline_at_micros')),
@@ -405,6 +411,8 @@ function normalizeTugHostState(row: GenericRow): NormalizedTugHostState {
     hostIdentity: toIdentityHex(field(row, 'hostIdentity', 'host_identity')),
     score: toNumber(field(row, 'score', 'score')),
     correctCount: toNumber(field(row, 'correctCount', 'correct_count')),
+    correctCharCount: toNumber(field(row, 'correctCharCount', 'correct_char_count')),
+    missCharCount: toNumber(field(row, 'missCharCount', 'miss_char_count')),
     powerMeter: toNumber(field(row, 'powerMeter', 'power_meter')),
     currentWord: field<string>(row, 'currentWord', 'current_word') ?? '',
     lastWordType: field<string>(row, 'lastWordType', 'last_word_type') ?? '',

@@ -169,9 +169,25 @@ function findLobby(
 function buildTeamPlayerViewModel(
   players: NormalizedPlayer[],
   identity: string,
-  playerStateByPlayerId: Map<string, NormalizedTugPlayerState>
+  playerStateByPlayerId: Map<string, NormalizedTugPlayerState>,
+  latestCorrectAtByPlayerId: Map<string, bigint>
 ): TeamPlayerViewModel[] {
-  const toDisplayAccuracy = (correctCount: number, submitCount: number): number => {
+  const toDisplayAccuracy = (
+    correctChars: number,
+    missChars: number,
+    correctCount: number,
+    submitCount: number
+  ): number => {
+    const boundedCorrectChars = Math.max(0, Math.trunc(correctChars));
+    const boundedMissChars = Math.max(0, Math.trunc(missChars));
+    const charAttempts = boundedCorrectChars + boundedMissChars;
+    if (charAttempts > 0) {
+      if (boundedMissChars <= 0) {
+        return 100;
+      }
+      return Math.max(0, Math.min(99, Math.round((boundedCorrectChars / charAttempts) * 100)));
+    }
+
     if (submitCount <= 0) {
       return 0;
     }
@@ -186,7 +202,12 @@ function buildTeamPlayerViewModel(
       const playerState = playerStateByPlayerId.get(player.playerId);
       const correctCount = playerState?.correctCount ?? 0;
       const submitCount = playerState?.submitCount ?? 0;
-      const accuracy = toDisplayAccuracy(correctCount, submitCount);
+      const accuracy = toDisplayAccuracy(
+        playerState?.correctCharCount ?? 0,
+        playerState?.missCharCount ?? 0,
+        correctCount,
+        submitCount
+      );
 
       return {
         playerId: player.playerId,
@@ -195,12 +216,52 @@ function buildTeamPlayerViewModel(
         status: player.status,
         correctCount,
         submitCount,
+        lastCorrectAtMicros: latestCorrectAtByPlayerId.get(player.playerId) ?? 0n,
         accuracy,
         eliminatedReason: player.eliminatedReason,
         isYou: isSameIdentity(player.identity, identity),
       };
     })
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
+}
+
+function parseSubmitOkPlayerId(payloadJson: string): string | null {
+  try {
+    const parsed = JSON.parse(payloadJson) as unknown;
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+    const payload = parsed as Record<string, unknown>;
+    const raw = payload.player_id ?? payload.playerId;
+    if (typeof raw !== 'string') {
+      return null;
+    }
+    const value = raw.trim();
+    return value.length > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function deriveLatestCorrectAtByPlayerId(
+  events: SessionSnapshot['events'],
+  matchId: string
+): Map<string, bigint> {
+  const latestByPlayerId = new Map<string, bigint>();
+  for (const event of events) {
+    if (event.matchId !== matchId || event.type !== 'submit_ok') {
+      continue;
+    }
+    const playerId = parseSubmitOkPlayerId(event.payloadJson);
+    if (!playerId) {
+      continue;
+    }
+    const previous = latestByPlayerId.get(playerId) ?? 0n;
+    if (event.atMicros > previous) {
+      latestByPlayerId.set(playerId, event.atMicros);
+    }
+  }
+  return latestByPlayerId;
 }
 
 function buildTeamCounts(players: NormalizedPlayer[]): TeamCountViewModel {
@@ -598,7 +659,8 @@ function buildLobbyModel(
   lobby: NormalizedLobby,
   players: NormalizedPlayer[],
   identity: string,
-  playerStateByPlayerId: Map<string, NormalizedTugPlayerState>
+  playerStateByPlayerId: Map<string, NormalizedTugPlayerState>,
+  latestCorrectAtByPlayerId: Map<string, bigint>
 ): LobbyViewModel {
   const teamAPlayers = players.filter((player) => player.team === 'A');
   const teamBPlayers = players.filter((player) => player.team === 'B');
@@ -610,8 +672,18 @@ function buildLobbyModel(
     gameType: lobby.gameType,
     isHost: isSameIdentity(lobby.hostIdentity, identity),
     hostIdentity: lobby.hostIdentity,
-    teamA: buildTeamPlayerViewModel(teamAPlayers, identity, playerStateByPlayerId),
-    teamB: buildTeamPlayerViewModel(teamBPlayers, identity, playerStateByPlayerId),
+    teamA: buildTeamPlayerViewModel(
+      teamAPlayers,
+      identity,
+      playerStateByPlayerId,
+      latestCorrectAtByPlayerId
+    ),
+    teamB: buildTeamPlayerViewModel(
+      teamBPlayers,
+      identity,
+      playerStateByPlayerId,
+      latestCorrectAtByPlayerId
+    ),
     teamACounts: buildTeamCounts(teamAPlayers),
     teamBCounts: buildTeamCounts(teamBPlayers),
   };
@@ -806,6 +878,9 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
   const matchPlayerStates = match
     ? snapshot.tugPlayerStates.filter((item) => item.matchId === match.matchId)
     : [];
+  const latestCorrectAtByPlayerId = match
+    ? deriveLatestCorrectAtByPlayerId(snapshot.events, match.matchId)
+    : new Map<string, bigint>();
   const playerStateByPlayerId = new Map(
     matchPlayerStates.map((playerState) => [playerState.playerId, playerState] as const)
   );
@@ -833,7 +908,13 @@ export function selectUiViewModel(input: SelectUiViewModelInput): UiViewModel {
     connectionState,
     role,
     phase,
-    lobby: buildLobbyModel(lobby, lobbyPlayers, identity, playerStateByPlayerId),
+    lobby: buildLobbyModel(
+      lobby,
+      lobbyPlayers,
+      identity,
+      playerStateByPlayerId,
+      latestCorrectAtByPlayerId
+    ),
     matchHud: match
       ? buildMatchHudModel(
           match,

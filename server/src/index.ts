@@ -168,6 +168,8 @@ const tugPlayerStateRow = {
   current_word: t.string(),
   last_word_type: t.string(),
   correct_count: t.i32(),
+  correct_char_count: t.i32(),
+  miss_char_count: t.i32(),
   submit_count: t.i32(),
   last_submit_at_micros: t.i64(),
   deadline_at_micros: t.i64(),
@@ -178,6 +180,8 @@ const tugHostStateRow = {
   host_identity: t.identity().index(),
   score: t.i32(),
   correct_count: t.i32(),
+  correct_char_count: t.i32(),
+  miss_char_count: t.i32(),
   power_meter: t.i32(),
   current_word: t.string(),
   last_word_type: t.string(),
@@ -816,6 +820,8 @@ function ensureTugPlayerStateForActiveMatch(
     current_word: firstWord.value,
     last_word_type: firstWord.type,
     correct_count: 0,
+    correct_char_count: 0,
+    miss_char_count: 0,
     submit_count: 0,
     last_submit_at_micros: 0n,
     deadline_at_micros: deadline,
@@ -1248,6 +1254,8 @@ function initializeTugState(ctx: ReducerCtx<any>, lobby: LobbyRow, match: MatchR
       current_word: firstWord.value,
       last_word_type: firstWord.type,
       correct_count: 0,
+      correct_char_count: 0,
+      miss_char_count: 0,
       submit_count: 0,
       last_submit_at_micros: 0n,
       deadline_at_micros: 0n,
@@ -1261,6 +1269,8 @@ function initializeTugState(ctx: ReducerCtx<any>, lobby: LobbyRow, match: MatchR
     host_identity: lobby.host_identity,
     score: 0,
     correct_count: 0,
+    correct_char_count: 0,
+    miss_char_count: 0,
     power_meter: 0,
     current_word: firstHostWord.value,
     last_word_type: firstHostWord.type,
@@ -2482,6 +2492,8 @@ export const reset_lobby = spacetimedb.reducer({ lobby_id: t.string() }, (ctx, {
         ...hostState,
         score: 0,
         correct_count: 0,
+        correct_char_count: 0,
+        miss_char_count: 0,
         power_meter: 0,
         last_word_type: '',
       });
@@ -2490,6 +2502,8 @@ export const reset_lobby = spacetimedb.reducer({ lobby_id: t.string() }, (ctx, {
     for (const playerState of listTugPlayerStatesByMatch(ctx, lobby.active_match_id)) {
       replaceRow(ctx.db.tug_player_state, playerState, {
         ...playerState,
+        correct_char_count: 0,
+        miss_char_count: 0,
         last_word_type: '',
         deadline_at_micros: 0n,
       });
@@ -2539,6 +2553,13 @@ export const tug_record_miss = spacetimedb.reducer(
 
     const lobby = getLobbyOrThrow(ctx, match.lobby_id);
     if (lobby.host_identity.equals(ctx.sender)) {
+      const hostState = getTugHostStateByMatchId(ctx, match_id);
+      if (hostState) {
+        replaceRow(ctx.db.tug_host_state, hostState, {
+          ...hostState,
+          miss_char_count: hostState.miss_char_count + 1,
+        });
+      }
       // Host miss telemetry contributes to host post-game accuracy.
       emitGameEvent(ctx, lobby.lobby_id, match_id, 'host_submit_bad', {
         source: 'mistake',
@@ -2559,6 +2580,7 @@ export const tug_record_miss = spacetimedb.reducer(
 
     replaceRow(ctx.db.tug_player_state, playerState, {
       ...playerState,
+      miss_char_count: playerState.miss_char_count + 1,
       submit_count: playerState.submit_count + 1,
     });
   }
@@ -2928,6 +2950,7 @@ export const tug_submit = spacetimedb.reducer(
 
       if (hostResult.correct) {
         hostStateNext.correct_count += 1;
+        hostStateNext.correct_char_count += hostState.current_word.length;
         hostStateNext.power_meter = Math.min(
           HOST_POWER_METER_MAX,
           hostStateNext.power_meter + HOST_POWER_GAIN_PER_CORRECT
@@ -2938,6 +2961,7 @@ export const tug_submit = spacetimedb.reducer(
           power_meter: hostStateNext.power_meter,
         });
       } else {
+        hostStateNext.miss_char_count += 1;
         emitGameEvent(ctx, lobby.lobby_id, match_id, 'host_submit_bad', {});
       }
 
@@ -2969,6 +2993,7 @@ export const tug_submit = spacetimedb.reducer(
     };
 
     if (!correct && shouldEliminateOnWrongSubmission(tug.mode)) {
+      playerStateNext.miss_char_count += 1;
       replaceRow(ctx.db.tug_player_state, playerState, playerStateNext);
       eliminatePlayer(ctx, lobby.lobby_id, match_id, player, 'misspelling');
       return;
@@ -2985,6 +3010,7 @@ export const tug_submit = spacetimedb.reducer(
         true
       );
       playerStateNext.correct_count += 1;
+      playerStateNext.correct_char_count += playerState.current_word.length;
       playerStateNext.current_word = nextWord.value;
       playerStateNext.last_word_type = nextWord.type;
       if (tug.mode === TUG_MODE_ELIMINATION) {
@@ -3013,6 +3039,7 @@ export const tug_submit = spacetimedb.reducer(
         team: player.team,
       });
     } else {
+      playerStateNext.miss_char_count += 1;
       emitGameEvent(ctx, lobby.lobby_id, match_id, 'submit_bad', {
         player_id: player.player_id,
       });
